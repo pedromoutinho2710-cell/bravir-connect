@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,37 +6,42 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_HOME, type AppRole } from "@/lib/roles";
 import { supabase } from "@/integrations/supabase/client";
+import type { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
-const TEST_ACCOUNTS: { email: string; password: string; role: AppRole; full_name: string }[] = [
-  { email: "admin@bravir.com.br", password: "Bravir2026", role: "admin", full_name: "Administrador Bravir" },
-  { email: "vendedor@bravir.com.br", password: "Bravir2026", role: "vendedor", full_name: "Vendedor Bravir" },
-  { email: "faturamento@bravir.com.br", password: "Bravir2026", role: "faturamento", full_name: "Faturamento Bravir" },
-  { email: "logistica@bravir.com.br", password: "Bravir2026", role: "logistica", full_name: "Logística Bravir" },
-];
+const MAX_LOGIN_ATTEMPTS = 3;
 
-const SEED_KEY = "bravir_seed_v1";
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
-async function seedTestAccountsIfNeeded() {
-  if (localStorage.getItem(SEED_KEY)) return;
-  for (const acc of TEST_ACCOUNTS) {
-    const { data, error } = await supabase.auth.signUp({
-      email: acc.email,
-      password: acc.password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/`,
-        data: { full_name: acc.full_name },
-      },
-    });
-    if (!error && data.user) {
-      // Insert role; ignore duplicates / RLS issues silently
-      await supabase.from("user_roles").insert({ user_id: data.user.id, role: acc.role });
-    }
+const isTransientLoginError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /500|PGRST|Database error querying schema|schema cache|connection|unexpected_failure/i.test(message);
+};
+
+const getRoleFromUser = (currentUser: User | null) => {
+  const appMetadata = currentUser?.app_metadata as { role?: unknown } | undefined;
+  const metadataRole = appMetadata?.role;
+  return typeof metadataRole === "string" ? (metadataRole as AppRole) : null;
+};
+
+async function fetchRoleWithRetry(userId: string) {
+  let lastError: unknown = null;
+  for (let currentAttempt = 1; currentAttempt <= MAX_LOGIN_ATTEMPTS; currentAttempt += 1) {
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!error) return (data?.role as AppRole) ?? null;
+    lastError = error;
+    if (!isTransientLoginError(error) || currentAttempt === MAX_LOGIN_ATTEMPTS) break;
+    await wait(750 * currentAttempt);
   }
-  // Logout the last seeded session so user lands on a fresh login screen
-  await supabase.auth.signOut();
-  localStorage.setItem(SEED_KEY, "1");
+
+  const message = lastError instanceof Error ? lastError.message : "Não foi possível carregar o perfil do usuário.";
+  throw new Error(message);
 }
 
 export default function Login() {
@@ -44,12 +49,8 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [seeding, setSeeding] = useState(true);
+  const [attempt, setAttempt] = useState(0);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    seedTestAccountsIfNeeded().finally(() => setSeeding(false));
-  }, []);
 
   if (!loading && user && role) {
     return <Navigate to={ROLE_HOME[role]} replace />;
@@ -58,8 +59,19 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
-    const { error } = await signIn(email.trim(), password);
+    setAttempt(1);
+
+    let error: Error | null = null;
+    for (let currentAttempt = 1; currentAttempt <= MAX_LOGIN_ATTEMPTS; currentAttempt += 1) {
+      setAttempt(currentAttempt);
+      const result = await signIn(email.trim(), password);
+      error = result.error;
+      if (!error || !isTransientLoginError(error) || currentAttempt === MAX_LOGIN_ATTEMPTS) break;
+      await wait(750 * currentAttempt);
+    }
+
     setSubmitting(false);
+    setAttempt(0);
     if (error) {
       toast.error("Não foi possível entrar", { description: "E-mail ou senha inválidos." });
       return;
@@ -67,12 +79,7 @@ export default function Login() {
     // Fetch role and redirect
     const { data: { user: u } } = await supabase.auth.getUser();
     if (u) {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", u.id)
-        .maybeSingle();
-      const r = (data?.role as AppRole) ?? null;
+      const r = (await fetchRoleWithRetry(u.id).catch(() => null)) ?? getRoleFromUser(u);
       if (r) navigate(ROLE_HOME[r], { replace: true });
       else toast.error("Usuário sem perfil atribuído.");
     }
@@ -105,7 +112,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="seu@bravir.com.br"
-              disabled={submitting || seeding}
+              disabled={submitting}
             />
           </div>
 
@@ -119,17 +126,17 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
-              disabled={submitting || seeding}
+              disabled={submitting}
             />
           </div>
 
           <Button
             type="submit"
             className="w-full bg-primary text-primary-foreground hover:bg-[hsl(var(--primary-hover))]"
-            disabled={submitting || seeding}
+            disabled={submitting}
           >
-            {(submitting || seeding) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {seeding ? "Preparando..." : "Entrar"}
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {submitting && attempt > 1 ? `Tentando novamente (${attempt}/${MAX_LOGIN_ATTEMPTS})` : "Entrar"}
           </Button>
 
           <button
