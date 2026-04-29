@@ -9,6 +9,7 @@ import AppLayout from "@/components/AppLayout";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import PlaceholderPage from "@/components/PlaceholderPage";
+import NovoPedido from "./pages/NovoPedido";
 
 const queryClient = new QueryClient();
 
@@ -35,7 +36,7 @@ const App = () => (
             {/* Vendedor */}
             <Route element={<ProtectedRoute allow={["vendedor"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/meu-painel" element={<PlaceholderPage title="Meu Painel" />} />
-              <Route path="/novo-pedido" element={<PlaceholderPage title="Novo Pedido" />} />
+              <Route path="/novo-pedido" element={<NovoPedido />} />
               <Route path="/meus-pedidos" element={<PlaceholderPage title="Meus Pedidos" />} />
             </Route>
 
