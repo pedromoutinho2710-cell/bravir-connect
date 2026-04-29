@@ -23,18 +23,24 @@ const isTransientRoleError = (error: unknown) => {
   return /500|PGRST|Database error querying schema|schema cache|connection|unexpected_failure/i.test(message);
 };
 
+const getRoleFromUser = (currentUser: User | null) => {
+  const metadataRole = currentUser?.app_metadata?.role;
+  return typeof metadataRole === "string" ? (metadataRole as AppRole) : null;
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchRole = async (userId: string) => {
+  const fetchRole = async (currentUser: User) => {
+    const fallbackRole = getRoleFromUser(currentUser);
     for (let attempt = 1; attempt <= MAX_ROLE_ATTEMPTS; attempt += 1) {
       const { data, error } = await supabase
         .from("user_roles")
         .select("role")
-        .eq("user_id", userId)
+        .eq("user_id", currentUser.id)
         .limit(1)
         .maybeSingle();
 
@@ -44,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (!isTransientRoleError(error) || attempt === MAX_ROLE_ATTEMPTS) {
-        setRole(null);
+        setRole(fallbackRole);
         return;
       }
 
@@ -57,7 +63,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
-        setTimeout(() => fetchRole(newSession.user.id), 0);
+        setRole(getRoleFromUser(newSession.user));
+        setTimeout(() => fetchRole(newSession.user), 0);
       } else {
         setRole(null);
       }
@@ -66,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session: existing } }) => {
       setSession(existing);
       setUser(existing?.user ?? null);
-      if (existing?.user) fetchRole(existing.user.id).finally(() => setLoading(false));
+      if (existing?.user) fetchRole(existing.user).finally(() => setLoading(false));
       else setLoading(false);
     });
 
