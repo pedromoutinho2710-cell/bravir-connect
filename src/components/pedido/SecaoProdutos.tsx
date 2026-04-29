@@ -1,0 +1,279 @@
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Plus, Trash2, Search } from "lucide-react";
+import { formatBRL } from "@/lib/format";
+import { MARCAS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+
+export type Produto = {
+  id: string;
+  codigo_jiva: string;
+  nome: string;
+  marca: string;
+  cx_embarque: number;
+  peso_unitario: number;
+};
+
+export type ItemPedido = {
+  produto_id: string;
+  codigo: string;
+  nome: string;
+  marca: string;
+  cx_embarque: number;
+  peso_unitario: number;
+  quantidade: number;
+  preco_bruto: number;
+  desconto_pct: number;
+  preco_liquido: number;
+  total: number;
+};
+
+type Props = {
+  produtos: Produto[];
+  precos: Record<string, Record<string, number>>; // produto_id -> tabela -> preco
+  descontos: Record<string, Record<string, number>>; // produto_id -> perfil -> pct
+  tabelaPreco: string;
+  perfilCliente: string;
+  itens: ItemPedido[];
+  onChange: (itens: ItemPedido[]) => void;
+};
+
+export function SecaoProdutos({
+  produtos,
+  precos,
+  descontos,
+  tabelaPreco,
+  perfilCliente,
+  itens,
+  onChange,
+}: Props) {
+  const [busca, setBusca] = useState("");
+  const [filtroMarca, setFiltroMarca] = useState<string>("Todas");
+
+  const calcItem = (p: Produto, qtd: number): ItemPedido => {
+    const bruto = precos[p.id]?.[tabelaPreco] ?? 0;
+    const desc = descontos[p.id]?.[perfilCliente] ?? 0;
+    const liquido = bruto * (1 - desc / 100);
+    return {
+      produto_id: p.id,
+      codigo: p.codigo_jiva,
+      nome: p.nome,
+      marca: p.marca,
+      cx_embarque: p.cx_embarque,
+      peso_unitario: Number(p.peso_unitario),
+      quantidade: qtd,
+      preco_bruto: bruto,
+      desconto_pct: desc,
+      preco_liquido: liquido,
+      total: liquido * qtd,
+    };
+  };
+
+  const adicionar = (p: Produto) => {
+    if (!tabelaPreco || !perfilCliente) {
+      toast.error("Selecione perfil do cliente e tabela de preço primeiro");
+      return;
+    }
+    if (itens.some((i) => i.produto_id === p.id)) {
+      toast.warning("Produto já adicionado");
+      return;
+    }
+    onChange([...itens, calcItem(p, p.cx_embarque)]);
+  };
+
+  const atualizarQtd = (produto_id: string, qtd: number) => {
+    onChange(
+      itens.map((i) => {
+        if (i.produto_id !== produto_id) return i;
+        const liquido = i.preco_bruto * (1 - i.desconto_pct / 100);
+        return { ...i, quantidade: qtd, preco_liquido: liquido, total: liquido * qtd };
+      }),
+    );
+  };
+
+  const remover = (produto_id: string) =>
+    onChange(itens.filter((i) => i.produto_id !== produto_id));
+
+  // Recalcula tudo se mudar tabela/perfil
+  const itensRecalculados = useMemo(() => {
+    return itens.map((i) => {
+      const bruto = precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto;
+      const desc = descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_pct;
+      const liquido = bruto * (1 - desc / 100);
+      return { ...i, preco_bruto: bruto, desconto_pct: desc, preco_liquido: liquido, total: liquido * i.quantidade };
+    });
+  }, [itens, precos, descontos, tabelaPreco, perfilCliente]);
+
+  // Sincroniza recálculo (apenas quando os números efetivamente mudam)
+  useMemoEffect(itensRecalculados, itens, onChange);
+
+  const produtosFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return produtos.filter((p) => {
+      if (filtroMarca !== "Todas" && p.marca !== filtroMarca) return false;
+      if (!q) return true;
+      return (
+        p.codigo_jiva.toLowerCase().includes(q) ||
+        p.nome.toLowerCase().includes(q)
+      );
+    });
+  }, [produtos, busca, filtroMarca]);
+
+  const porMarca = useMemo(() => {
+    return produtosFiltrados.reduce<Record<string, Produto[]>>((acc, p) => {
+      (acc[p.marca] ||= []).push(p);
+      return acc;
+    }, {});
+  }, [produtosFiltrados]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Produtos</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por SKU ou nome…"
+              className="pl-9"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["Todas", ...MARCAS] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setFiltroMarca(m)}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  filtroMarca === m
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background hover:bg-muted",
+                )}
+              >
+                {m}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-4 max-h-96 overflow-y-auto rounded-md border p-3 bg-muted/20">
+          {Object.keys(porMarca).length === 0 && (
+            <div className="text-center text-sm text-muted-foreground py-6">Nenhum produto encontrado</div>
+          )}
+          {Object.entries(porMarca).map(([marca, lista]) => (
+            <div key={marca}>
+              <div className="mb-2 text-xs font-bold uppercase tracking-wider text-primary">{marca}</div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {lista.map((p) => {
+                  const ja = itens.some((i) => i.produto_id === p.id);
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between gap-2 rounded-md border bg-card p-2 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-mono text-xs text-muted-foreground">{p.codigo_jiva}</div>
+                        <div className="truncate">{p.nome}</div>
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={ja ? "secondary" : "default"}
+                        disabled={ja}
+                        onClick={() => adicionar(p)}
+                      >
+                        <Plus className="h-3 w-3" />
+                        {ja ? "Adicionado" : "Adicionar"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {itensRecalculados.length > 0 && (
+          <div className="rounded-md border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Produto</TableHead>
+                  <TableHead className="text-right">Cx</TableHead>
+                  <TableHead className="text-right">Qtd</TableHead>
+                  <TableHead className="text-right">P. Bruto</TableHead>
+                  <TableHead className="text-right">Desc.</TableHead>
+                  <TableHead className="text-right">P. Líq.</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {itensRecalculados.map((i) => {
+                  const multiplo = i.quantidade % i.cx_embarque === 0;
+                  return (
+                    <TableRow key={i.produto_id}>
+                      <TableCell>
+                        <div className="font-mono text-xs text-muted-foreground">{i.codigo}</div>
+                        <div className="text-sm">{i.nome}</div>
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">{i.cx_embarque}</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min={1}
+                          value={i.quantidade}
+                          onChange={(e) => atualizarQtd(i.produto_id, Math.max(1, Number(e.target.value) || 1))}
+                          className={cn("w-20 ml-auto", !multiplo && "border-destructive")}
+                        />
+                        {!multiplo && (
+                          <div className="text-[10px] text-destructive mt-0.5">não múltiplo</div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">{formatBRL(i.preco_bruto)}</TableCell>
+                      <TableCell className="text-right">{i.desconto_pct}%</TableCell>
+                      <TableCell className="text-right">{formatBRL(i.preco_liquido)}</TableCell>
+                      <TableCell className="text-right font-semibold">{formatBRL(i.total)}</TableCell>
+                      <TableCell>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => remover(i.produto_id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// helper: aplica recálculo apenas se houve mudança real
+function useMemoEffect(novos: ItemPedido[], atuais: ItemPedido[], onChange: (i: ItemPedido[]) => void) {
+  const ref = useRef<string>("");
+  useEffect(() => {
+    const sig = novos.map((i) => `${i.produto_id}:${i.preco_bruto}:${i.desconto_pct}:${i.quantidade}`).join("|");
+    const sigAtual = atuais.map((i) => `${i.produto_id}:${i.preco_bruto}:${i.desconto_pct}:${i.quantidade}`).join("|");
+    if (sig !== sigAtual && sig !== ref.current) {
+      ref.current = sig;
+      onChange(novos);
+    }
+  }, [novos, atuais, onChange]);
+}
