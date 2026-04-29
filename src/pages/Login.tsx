@@ -19,7 +19,7 @@ const isTransientLoginError = (error: unknown) => {
 };
 
 async function fetchRoleWithRetry(userId: string) {
-  let lastError: Error | null = null;
+  let lastError: unknown = null;
   for (let currentAttempt = 1; currentAttempt <= MAX_LOGIN_ATTEMPTS; currentAttempt += 1) {
     const { data, error } = await supabase
       .from("user_roles")
@@ -33,7 +33,8 @@ async function fetchRoleWithRetry(userId: string) {
     await wait(750 * currentAttempt);
   }
 
-  throw lastError ?? new Error("Não foi possível carregar o perfil do usuário.");
+  const message = lastError instanceof Error ? lastError.message : "Não foi possível carregar o perfil do usuário.";
+  throw new Error(message);
 }
 
 export default function Login() {
@@ -71,7 +72,7 @@ export default function Login() {
     // Fetch role and redirect
     const { data: { user: u } } = await supabase.auth.getUser();
     if (u) {
-      const r = await fetchRoleWithRetry(u.id);
+      const r = await fetchRoleWithRetry(u.id).catch(() => null);
       if (r) navigate(ROLE_HOME[r], { replace: true });
       else toast.error("Usuário sem perfil atribuído.");
     }
