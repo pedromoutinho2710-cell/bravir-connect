@@ -18,6 +18,11 @@ const isTransientLoginError = (error: unknown) => {
   return /500|PGRST|Database error querying schema|schema cache|connection|unexpected_failure/i.test(message);
 };
 
+const getRoleFromUser = (currentUser: { app_metadata?: { role?: unknown } } | null) => {
+  const metadataRole = currentUser?.app_metadata?.role;
+  return typeof metadataRole === "string" ? (metadataRole as AppRole) : null;
+};
+
 async function fetchRoleWithRetry(userId: string) {
   let lastError: unknown = null;
   for (let currentAttempt = 1; currentAttempt <= MAX_LOGIN_ATTEMPTS; currentAttempt += 1) {
@@ -72,7 +77,7 @@ export default function Login() {
     // Fetch role and redirect
     const { data: { user: u } } = await supabase.auth.getUser();
     if (u) {
-      const r = await fetchRoleWithRetry(u.id).catch(() => null);
+      const r = (await fetchRoleWithRetry(u.id).catch(() => null)) ?? getRoleFromUser(u);
       if (r) navigate(ROLE_HOME[r], { replace: true });
       else toast.error("Usuário sem perfil atribuído.");
     }
