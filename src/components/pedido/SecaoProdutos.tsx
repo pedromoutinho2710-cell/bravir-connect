@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -266,7 +266,6 @@ export function SecaoProdutos({
 }
 
 // helper: aplica recálculo apenas se houve mudança real
-import { useEffect, useRef } from "react";
 function useMemoEffect(novos: ItemPedido[], atuais: ItemPedido[], onChange: (i: ItemPedido[]) => void) {
   const ref = useRef<string>("");
   useEffect(() => {
