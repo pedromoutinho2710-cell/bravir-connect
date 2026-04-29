@@ -14,6 +14,15 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const MAX_ROLE_ATTEMPTS = 3;
+
+const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const isTransientRoleError = (error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /500|PGRST|Database error querying schema|schema cache|connection|unexpected_failure/i.test(message);
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -21,13 +30,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const fetchRole = async (userId: string) => {
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .limit(1)
-      .maybeSingle();
-    setRole((data?.role as AppRole) ?? null);
+    for (let attempt = 1; attempt <= MAX_ROLE_ATTEMPTS; attempt += 1) {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .limit(1)
+        .maybeSingle();
+
+      if (!error) {
+        setRole((data?.role as AppRole) ?? null);
+        return;
+      }
+
+      if (!isTransientRoleError(error) || attempt === MAX_ROLE_ATTEMPTS) {
+        setRole(null);
+        return;
+      }
+
+      await wait(750 * attempt);
+    }
   };
 
   useEffect(() => {
