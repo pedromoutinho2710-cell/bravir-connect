@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,24 @@ const isTransientLoginError = (error: unknown) => {
   const message = error instanceof Error ? error.message : String(error ?? "");
   return /500|PGRST|Database error querying schema|schema cache|connection|unexpected_failure/i.test(message);
 };
+
+async function fetchRoleWithRetry(userId: string) {
+  let lastError: Error | null = null;
+  for (let currentAttempt = 1; currentAttempt <= MAX_LOGIN_ATTEMPTS; currentAttempt += 1) {
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!error) return (data?.role as AppRole) ?? null;
+    lastError = error;
+    if (!isTransientLoginError(error) || currentAttempt === MAX_LOGIN_ATTEMPTS) break;
+    await wait(750 * currentAttempt);
+  }
+
+  throw lastError ?? new Error("Não foi possível carregar o perfil do usuário.");
+}
 
 export default function Login() {
   const { user, role, signIn, loading } = useAuth();
@@ -53,12 +71,7 @@ export default function Login() {
     // Fetch role and redirect
     const { data: { user: u } } = await supabase.auth.getUser();
     if (u) {
-      const { data } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", u.id)
-        .maybeSingle();
-      const r = (data?.role as AppRole) ?? null;
+      const r = await fetchRoleWithRetry(u.id);
       if (r) navigate(ROLE_HOME[r], { replace: true });
       else toast.error("Usuário sem perfil atribuído.");
     }
