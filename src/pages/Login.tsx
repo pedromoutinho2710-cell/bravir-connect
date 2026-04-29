@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_HOME, type AppRole } from "@/lib/roles";
 import { supabase } from "@/integrations/supabase/client";
+import type { User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 
@@ -18,8 +19,9 @@ const isTransientLoginError = (error: unknown) => {
   return /500|PGRST|Database error querying schema|schema cache|connection|unexpected_failure/i.test(message);
 };
 
-const getRoleFromUser = (currentUser: { app_metadata?: { role?: unknown } } | null) => {
-  const metadataRole = currentUser?.app_metadata?.role;
+const getRoleFromUser = (currentUser: User | null) => {
+  const appMetadata = currentUser?.app_metadata as { role?: unknown } | undefined;
+  const metadataRole = appMetadata?.role;
   return typeof metadataRole === "string" ? (metadataRole as AppRole) : null;
 };
 
