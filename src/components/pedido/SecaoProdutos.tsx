@@ -34,6 +34,7 @@ export type ItemPedido = {
   preco_apos_comercial: number;
   preco_final: number;
   total: number;
+  bolsao: number;
 };
 
 /**
@@ -102,6 +103,7 @@ export function SecaoProdutos({
       preco_apos_comercial: precos_calc.preco_apos_comercial,
       preco_final: precos_calc.preco_final,
       total: precos_calc.total,
+      bolsao: 0,
     };
   };
 
@@ -167,6 +169,10 @@ export function SecaoProdutos({
     );
   };
 
+  const atualizarBolsao = (produto_id: string, bolsao: number) => {
+    onChange(itens.map((i) => i.produto_id !== produto_id ? i : { ...i, bolsao }));
+  };
+
   const remover = (produto_id: string) =>
     onChange(itens.filter((i) => i.produto_id !== produto_id));
 
@@ -212,7 +218,7 @@ export function SecaoProdutos({
   }, [produtosFiltrados]);
 
   return (
-    <Card>
+    <Card className="bg-[#F0FDF4] border-green-200">
       <CardHeader>
         <CardTitle>Produtos</CardTitle>
       </CardHeader>
@@ -298,6 +304,7 @@ export function SecaoProdutos({
                   <TableHead className="text-right">P. Após Comercial</TableHead>
                   <TableHead className="text-right">Desc. Trade %</TableHead>
                   <TableHead className="text-right">P. Final</TableHead>
+                  <TableHead className="text-right">Bolsão</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
@@ -349,6 +356,16 @@ export function SecaoProdutos({
                         />
                       </TableCell>
                       <TableCell className="text-right font-semibold text-sm">{formatBRL(i.preco_final)}</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={i.bolsao}
+                          onChange={(e) => atualizarBolsao(i.produto_id, Math.max(0, Number(e.target.value) || 0))}
+                          className={cn("w-20 ml-auto")}
+                          placeholder="0"
+                        />
+                      </TableCell>
                       <TableCell className="text-right font-semibold">{formatBRL(i.total)}</TableCell>
                       <TableCell>
                         <Button

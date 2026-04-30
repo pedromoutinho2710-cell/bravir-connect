@@ -7,7 +7,9 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { Loader2 } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -52,6 +54,10 @@ type PedidoDetalhe = {
   cidade: string | null;
   uf: string | null;
   comprador: string | null;
+  nota_fiscal: string | null;
+  nf_pdf_url: string | null;
+  rastreio: string | null;
+  obs_faturamento: string | null;
   itens: ItemDetalhe[];
   historico: HistoricoItem[];
 };
@@ -90,6 +96,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
           .select(`
             numero_pedido, tipo, data_pedido, status, perfil_cliente, tabela_preco,
             cond_pagamento, agendamento, observacoes,
+            nota_fiscal, nf_pdf_url, rastreio, obs_faturamento,
             clientes(razao_social, cnpj, cidade, uf, comprador),
             itens_pedido(
               quantidade, preco_unitario_bruto, preco_unitario_liquido,
@@ -127,6 +134,10 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
           cidade: cl?.cidade ?? null,
           uf: cl?.uf ?? null,
           comprador: cl?.comprador ?? null,
+          nota_fiscal: d.nota_fiscal ?? null,
+          nf_pdf_url: d.nf_pdf_url ?? null,
+          rastreio: d.rastreio ?? null,
+          obs_faturamento: d.obs_faturamento ?? null,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           itens: (d.itens_pedido ?? []).map((i: any) => ({
             nome: i.produtos?.nome ?? "—",
@@ -183,6 +194,43 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
                 <div className="col-span-2"><span className="text-muted-foreground">Obs: </span>{pedido.observacoes}</div>
               )}
             </div>
+
+            {/* Informações de faturamento */}
+            {pedido.status === "faturado" && (pedido.nota_fiscal || pedido.rastreio || pedido.obs_faturamento) && (
+              <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm space-y-1.5">
+                <div className="font-semibold text-green-800 mb-2">Informações de Faturamento</div>
+                {pedido.nota_fiscal && (
+                  <div className="flex items-center justify-between">
+                    <span>
+                      <span className="text-muted-foreground">NF: </span>
+                      <span className="font-medium">{pedido.nota_fiscal}</span>
+                    </span>
+                    {pedido.nf_pdf_url && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        onClick={async () => {
+                          const { data } = await supabase.storage
+                            .from("notas_fiscais")
+                            .createSignedUrl(pedido.nf_pdf_url!, 3600);
+                          if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+                        }}
+                      >
+                        <Download className="h-3 w-3 mr-1" />
+                        Baixar NF
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {pedido.rastreio && (
+                  <div><span className="text-muted-foreground">Rastreio: </span><span className="font-medium">{pedido.rastreio}</span></div>
+                )}
+                {pedido.obs_faturamento && (
+                  <div><span className="text-muted-foreground">Obs faturamento: </span>{pedido.obs_faturamento}</div>
+                )}
+              </div>
+            )}
 
             {/* Itens */}
             <div>

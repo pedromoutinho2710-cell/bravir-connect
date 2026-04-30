@@ -18,7 +18,7 @@ export function ResumoFinanceiro({ itens }: Props) {
   const totalImp = totalLiquido + icms + pis + cofins;
 
   return (
-    <Card>
+    <Card className="bg-[#FFF7ED] border-orange-200">
       <CardHeader>
         <CardTitle>Resumo financeiro</CardTitle>
       </CardHeader>

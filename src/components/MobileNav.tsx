@@ -31,6 +31,7 @@ const MENU: Record<AppRole, Item[]> = {
     { title: "Meu Painel", url: "/meu-painel", icon: LayoutDashboard },
     { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
     { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
+    { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
   ],
   faturamento: [
     { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },

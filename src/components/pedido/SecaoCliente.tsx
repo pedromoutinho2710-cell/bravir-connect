@@ -24,6 +24,8 @@ export type DadosCliente = {
   cond_pagamento: string;
   agendamento: boolean;
   observacoes: string;
+  codigo_cliente: string;
+  aceita_saldo: boolean;
 };
 
 type UltimoPedido = { id: string; numero_pedido: number; data_pedido: string; status: string; total: number };
@@ -66,6 +68,8 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       if (cancel) return;
       if (cliente) {
         setCnpjStatus("encontrado");
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const cl = cliente as any;
         onChange({
           ...value,
           cliente_id: cliente.id,
@@ -75,6 +79,8 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           uf: cliente.uf ?? "",
           cep: cliente.cep ? formatCEP(cliente.cep) : "",
           comprador: cliente.comprador ?? "",
+          codigo_cliente: cl.codigo_cliente ?? "",
+          aceita_saldo: cl.aceita_saldo ?? false,
         });
         const { data: peds } = await supabase
           .from("pedidos")
@@ -120,7 +126,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
   }, [value.cnpj, vendedorId]);
 
   return (
-    <Card>
+    <Card className="bg-[#EFF6FF] border-blue-200">
       <CardHeader>
         <CardTitle className="text-xl">Dados do cliente</CardTitle>
       </CardHeader>
@@ -279,7 +285,27 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           </div>
         </div>
 
-        {/* Linha 6: Agendamento */}
+        {/* Linha 6: Código do cliente + Aceita saldo */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">Código do cliente</Label>
+            <Input
+              value={value.codigo_cliente}
+              onChange={(e) => set("codigo_cliente", e.target.value)}
+              placeholder="Ex: 00123"
+              className="h-11 text-base"
+            />
+          </div>
+          <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-3">
+            <Switch checked={value.aceita_saldo} onCheckedChange={(c) => set("aceita_saldo", c)} />
+            <div>
+              <div className="text-base font-semibold leading-none">Aceita saldo</div>
+              <div className="text-sm text-muted-foreground mt-0.5">{value.aceita_saldo ? "Sim" : "Não"}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Linha 7: Agendamento */}
         <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-3">
           <Switch checked={value.agendamento} onCheckedChange={(c) => set("agendamento", c)} />
           <div>

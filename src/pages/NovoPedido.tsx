@@ -11,10 +11,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FileDown, Eye, Send, Loader2, FileText } from "lucide-react";
+import { FileDown, Eye, Send, Loader2, FileText, Save } from "lucide-react";
 import { toast } from "sonner";
 import { onlyDigits, formatBRL, formatDate, formatCNPJ, formatCEP } from "@/lib/format";
 import { gerarPedidoPDF, type PdfItem } from "@/lib/pdf";
+import { gerarPedidoDocx } from "@/lib/docx";
 import { SecaoCliente, type DadosCliente } from "@/components/pedido/SecaoCliente";
 import { SecaoProdutos, type ItemPedido, type Produto } from "@/components/pedido/SecaoProdutos";
 import { ResumoFinanceiro } from "@/components/pedido/ResumoFinanceiro";
@@ -34,6 +35,8 @@ const initialCliente: DadosCliente = {
   cond_pagamento: "",
   agendamento: false,
   observacoes: "",
+  codigo_cliente: "",
+  aceita_saldo: false,
 };
 
 type DraftInfo = {
@@ -55,6 +58,7 @@ export default function NovoPedido() {
   const [descontos, setDescontos] = useState<Record<string, Record<string, number>>>({});
   const [loading, setLoading] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [salvandoRascunho, setSalvandoRascunho] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pedidoId, setPedidoId] = useState<string | null>(null);
 
@@ -170,6 +174,8 @@ export default function NovoPedido() {
           uf: cliente.uf || null,
           cep: onlyDigits(cliente.cep) || null,
           comprador: cliente.comprador || null,
+          codigo_cliente: cliente.codigo_cliente || null,
+          aceita_saldo: cliente.aceita_saldo,
         },
         { onConflict: "cnpj" },
       )
@@ -323,6 +329,8 @@ export default function NovoPedido() {
       cond_pagamento: data.cond_pagamento ?? "",
       agendamento: data.agendamento,
       observacoes: data.observacoes ?? "",
+      codigo_cliente: cl.codigo_cliente ?? "",
+      aceita_saldo: cl.aceita_saldo ?? false,
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -352,6 +360,7 @@ export default function NovoPedido() {
         preco_apos_comercial: apos_comercial,
         preco_final: preco_final,
         total: preco_final * item.quantidade,
+        bolsao: 0,
       };
     }));
 
@@ -374,6 +383,18 @@ export default function NovoPedido() {
     setShowDraftModal(false);
   };
 
+  // ── Salvar rascunho manualmente ────────────────────────────────────────────
+  const salvarRascunhoManual = async () => {
+    if (!podeSalvar) {
+      toast.error("Preencha CNPJ, razão social, perfil e tabela de preço.");
+      return;
+    }
+    setSalvandoRascunho(true);
+    const id = await salvarPedido("rascunho");
+    setSalvandoRascunho(false);
+    if (id) toast.success("Rascunho salvo!");
+  };
+
   // ── Enviar para faturamento ────────────────────────────────────────────────
   const onEnviarFaturamento = async () => {
     if (!podeEnviar) {
@@ -382,12 +403,65 @@ export default function NovoPedido() {
     }
     setEnviando(true);
     const id = await salvarPedido("aguardando_faturamento");
-    setEnviando(false);
     if (id) {
+      // Gera docx e envia email (best-effort)
+      try {
+        const { data: pedData } = await supabase
+          .from("pedidos")
+          .select("numero_pedido")
+          .eq("id", id)
+          .single();
+
+        if (pedData) {
+          const docxBlob = await gerarPedidoDocx({
+            numero_pedido: pedData.numero_pedido,
+            data_pedido: formatDate(new Date()),
+            cliente: {
+              razao_social: cliente.razao_social,
+              cnpj: cliente.cnpj,
+              comprador: cliente.comprador,
+              cidade: cliente.cidade,
+              uf: cliente.uf,
+            },
+            vendedor: user?.email ?? "",
+            cond_pagamento: cliente.cond_pagamento,
+            observacoes: cliente.observacoes,
+            itens: itens.map((i, idx) => ({
+              numero: idx + 1,
+              codigo_jiva: i.codigo,
+              cx_embarque: i.cx_embarque,
+              quantidade: i.quantidade,
+              nome: i.nome,
+              preco_bruto: i.preco_bruto,
+              desconto_pct: i.desconto_perfil + i.desconto_comercial + i.desconto_trade,
+              preco_liquido: i.preco_final,
+              bolsao: i.bolsao,
+              total: i.total,
+              peso: i.peso_unitario,
+              total_peso: i.peso_unitario * i.quantidade,
+            })),
+          });
+          const docxBuffer = await docxBlob.arrayBuffer();
+          const uint8 = new Uint8Array(docxBuffer);
+          let binary = "";
+          for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
+          const docx_base64 = btoa(binary);
+          const filename = `Pedido_${pedData.numero_pedido}.docx`;
+
+          await supabase.functions.invoke("enviar-pedido-email", {
+            body: { pedido_id: id, docx_base64, filename },
+          });
+        }
+      } catch (err) {
+        console.warn("Falha ao enviar email:", err);
+        toast.warning("Pedido salvo, mas houve falha ao enviar o email de notificação.");
+      }
+
       toast.success("Pedido enviado para faturamento!");
       localStorage.removeItem(RASCUNHO_KEY);
       navigate("/meus-pedidos");
     }
+    setEnviando(false);
   };
 
   // ── PDF ────────────────────────────────────────────────────────────────────
@@ -439,29 +513,30 @@ export default function NovoPedido() {
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho + ações */}
-      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Novo Pedido</h1>
-          <p className="text-sm text-muted-foreground">
-            Preencha os dados do cliente, adicione produtos e envie para faturamento
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => setPreviewOpen(true)} disabled={itens.length === 0}>
-            <Eye className="h-4 w-4" />
-            Visualizar resumo
-          </Button>
-          <Button variant="outline" onClick={baixarPDF} disabled={itens.length === 0}>
-            <FileDown className="h-4 w-4" />
-            Baixar PDF
-          </Button>
-          <Button onClick={onEnviarFaturamento} disabled={!podeEnviar || enviando}>
-            {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            Enviar para faturamento
-          </Button>
-        </div>
+      {/* Cabeçalho */}
+      <div>
+        <h1 className="text-2xl font-bold">Novo Pedido</h1>
+        <p className="text-sm text-muted-foreground">
+          Preencha os dados do cliente, adicione produtos e envie para faturamento
+        </p>
       </div>
+
+      {/* Banner: rascunho abandonado (> 24 h) */}
+      {draftInfo && Date.now() - new Date(draftInfo.dataAtualizada).getTime() > 86_400_000 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-md p-4 flex items-center justify-between gap-4">
+          <span className="text-sm text-amber-900">
+            Você tem um rascunho abandonado de {formatDate(draftInfo.dataAtualizada)}. Deseja continuar ou descartar?
+          </span>
+          <div className="flex gap-2 shrink-0">
+            <Button variant="outline" size="sm" onClick={descartarRascunho}>
+              Descartar
+            </Button>
+            <Button size="sm" onClick={() => continuarRascunho(draftInfo.id)}>
+              Continuar
+            </Button>
+          </div>
+        </div>
+      )}
 
       <SecaoCliente value={cliente} onChange={setCliente} vendedorId={user?.id ?? ""} />
 
@@ -476,6 +551,26 @@ export default function NovoPedido() {
       />
 
       <ResumoFinanceiro itens={itens} />
+
+      {/* Ações abaixo do resumo */}
+      <div className="flex flex-wrap gap-2 justify-end">
+        <Button variant="outline" onClick={() => setPreviewOpen(true)} disabled={itens.length === 0}>
+          <Eye className="h-4 w-4" />
+          Visualizar resumo
+        </Button>
+        <Button variant="outline" onClick={baixarPDF} disabled={itens.length === 0}>
+          <FileDown className="h-4 w-4" />
+          Baixar PDF
+        </Button>
+        <Button variant="outline" onClick={salvarRascunhoManual} disabled={!podeSalvar || salvandoRascunho}>
+          {salvandoRascunho ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Salvar Rascunho
+        </Button>
+        <Button onClick={onEnviarFaturamento} disabled={!podeEnviar || enviando}>
+          {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          Enviar para faturamento
+        </Button>
+      </div>
 
       {/* Modal: rascunho encontrado no banco */}
       <Dialog open={showDraftModal}>

@@ -273,6 +273,83 @@ export async function exportarPedidoExcel(pedido: PedidoParaExcel): Promise<void
   window.URL.revokeObjectURL(url);
 }
 
+export interface ProdutoTabela {
+  codigo_jiva: string;
+  nome: string;
+  marca: string;
+  preco_7: number;
+  preco_12: number;
+  preco_18: number;
+  preco_suframa: number;
+}
+
+export async function exportarTabelaPrecosExcel(produtos: ProdutoTabela[]): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet("Tabela de Preços");
+
+  ws.columns = [
+    { key: "marca", width: 20 },
+    { key: "codigo", width: 18 },
+    { key: "nome", width: 50 },
+    { key: "p7", width: 14 },
+    { key: "p12", width: 14 },
+    { key: "p18", width: 14 },
+    { key: "psuframa", width: 14 },
+  ];
+
+  const headers = ["Marca", "COD. JIVA", "Descrição", "7%", "12%", "18%", "Suframa"];
+  const cols = ["A", "B", "C", "D", "E", "F", "G"];
+
+  ws.mergeCells("A1:G1");
+  const title = ws.getCell("A1");
+  title.value = "TABELA DE PREÇOS BRAVIR";
+  title.font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+  title.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREEN_FILL } };
+  title.alignment = { horizontal: "center", vertical: "center" };
+  ws.getRow(1).height = 28;
+
+  cols.forEach((col, idx) => {
+    const cell = ws.getCell(`${col}2`);
+    cell.value = headers[idx];
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREEN_FILL } };
+    cell.alignment = { horizontal: "center" };
+  });
+  ws.getRow(2).height = 20;
+
+  produtos.forEach((p, idx) => {
+    const row = idx + 3;
+    ws.getCell(`A${row}`).value = p.marca;
+    ws.getCell(`B${row}`).value = p.codigo_jiva;
+    ws.getCell(`C${row}`).value = p.nome;
+    ws.getCell(`D${row}`).value = p.preco_7;
+    ws.getCell(`E${row}`).value = p.preco_12;
+    ws.getCell(`F${row}`).value = p.preco_18;
+    ws.getCell(`G${row}`).value = p.preco_suframa;
+
+    if (idx % 2 === 0) {
+      cols.forEach((col) => {
+        ws.getCell(`${col}${row}`).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF5F5F5" } };
+      });
+    }
+    ["D", "E", "F", "G"].forEach((col) => {
+      ws.getCell(`${col}${row}`).numFmt = "#,##0.00";
+      ws.getCell(`${col}${row}`).alignment = { horizontal: "right" };
+    });
+  });
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `Tabela_Precos_Bravir.xlsx`;
+  link.click();
+  window.URL.revokeObjectURL(url);
+}
+
 /**
  * Lê arquivo XLSX e extrai codigos JIVA da coluna COD. JIVA
  */

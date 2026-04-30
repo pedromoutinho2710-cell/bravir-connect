@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { AppSidebar } from "./AppSidebar";
 import { MobileNav } from "./MobileNav";
+import { NotificationsBadge } from "./NotificationsBadge";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function AppLayout() {
@@ -53,6 +54,8 @@ export default function AppLayout() {
                 {displayName}
               </span>
             )}
+
+            <NotificationsBadge />
           </header>
 
           <main className="flex-1 p-4 md:p-6">
