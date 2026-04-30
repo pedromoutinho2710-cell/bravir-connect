@@ -45,7 +45,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
   useEffect(() => {
     const cnpjLimpo = onlyDigits(value.cnpj);
     if (cnpjLimpo.length !== 14) {
-      setCnpjStatus(cnpjLimpo.length > 0 ? "idle" : "idle");
+      setCnpjStatus("idle");
       setUltimosPedidos([]);
       setAlertaMesmoDia(false);
       return;
@@ -76,7 +76,6 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           cep: cliente.cep ? formatCEP(cliente.cep) : "",
           comprador: cliente.comprador ?? "",
         });
-        // últimos 3 pedidos
         const { data: peds } = await supabase
           .from("pedidos")
           .select("id, numero_pedido, data_pedido, status, itens_pedido(total_item)")
@@ -97,7 +96,6 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
             })),
           );
         }
-        // alerta mesmo dia
         const hoje = new Date().toISOString().slice(0, 10);
         const { data: hojePed } = await supabase
           .from("pedidos")
@@ -124,20 +122,22 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Dados do cliente</CardTitle>
+        <CardTitle className="text-xl">Dados do cliente</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <Label htmlFor="cnpj">CNPJ *</Label>
+      <CardContent className="space-y-5">
+
+        {/* Linha 1: CNPJ + Razão Social */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">CNPJ *</Label>
             <Input
-              id="cnpj"
               value={value.cnpj}
               onChange={(e) => set("cnpj", formatCNPJ(e.target.value))}
               placeholder="00.000.000/0000-00"
               maxLength={18}
+              className="h-11 text-base"
             />
-            <div className="mt-1 text-xs">
+            <div className="text-xs">
               {cnpjStatus === "invalido" && (
                 <span className="flex items-center gap-1 text-destructive">
                   <AlertCircle className="h-3 w-3" /> CNPJ inválido
@@ -154,20 +154,20 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
               {cnpjStatus === "buscando" && <span className="text-muted-foreground">Buscando…</span>}
             </div>
           </div>
-          <div>
-            <Label htmlFor="razao">Razão social *</Label>
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">Razão social *</Label>
             <Input
-              id="razao"
               value={value.razao_social}
               onChange={(e) => set("razao_social", e.target.value)}
               placeholder="Nome empresarial"
+              className="h-11 text-base"
             />
           </div>
         </div>
 
         {alertaMesmoDia && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
-            <AlertCircle className="h-4 w-4" />
+            <AlertCircle className="h-4 w-4 shrink-0" />
             Atenção: este cliente já tem pedido enviado hoje por você.
           </div>
         )}
@@ -191,50 +191,21 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <Label>Cidade</Label>
-            <Input value={value.cidade} onChange={(e) => set("cidade", e.target.value)} />
-          </div>
-          <div>
-            <Label>UF</Label>
-            <Select value={value.uf} onValueChange={(v) => set("uf", v)}>
-              <SelectTrigger><SelectValue placeholder="UF" /></SelectTrigger>
-              <SelectContent>
-                {UFS.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label>CEP</Label>
-            <Input
-              value={value.cep}
-              onChange={(e) => set("cep", formatCEP(e.target.value))}
-              placeholder="00000-000"
-              maxLength={9}
-            />
-          </div>
-        </div>
-
-        <div>
-          <Label>Comprador</Label>
-          <Input value={value.comprador} onChange={(e) => set("comprador", e.target.value)} />
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div>
-            <Label>Perfil do cliente *</Label>
+        {/* Linha 2: Perfil + Tabela */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">Perfil do cliente *</Label>
             <Select value={value.perfil_cliente} onValueChange={(v) => set("perfil_cliente", v)}>
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectTrigger className="h-11 text-base"><SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>
                 {PERFIS_CLIENTE.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>Tabela de preço *</Label>
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">Tabela de preço *</Label>
             <Select value={value.tabela_preco} onValueChange={(v) => set("tabela_preco", v)}>
-              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectTrigger className="h-11 text-base"><SelectValue placeholder="Selecione" /></SelectTrigger>
               <SelectContent>
                 {TABELAS_PRECO.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
               </SelectContent>
@@ -242,43 +213,93 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <div>
-            <Label>Tipo *</Label>
+        {/* Linha 3: Cidade + UF */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">Cidade</Label>
+            <Input
+              value={value.cidade}
+              onChange={(e) => set("cidade", e.target.value)}
+              className="h-11 text-base"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">UF</Label>
+            <Select value={value.uf} onValueChange={(v) => set("uf", v)}>
+              <SelectTrigger className="h-11 text-base"><SelectValue placeholder="UF" /></SelectTrigger>
+              <SelectContent>
+                {UFS.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Linha 4: CEP + Comprador */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">CEP</Label>
+            <Input
+              value={value.cep}
+              onChange={(e) => set("cep", formatCEP(e.target.value))}
+              placeholder="00000-000"
+              maxLength={9}
+              className="h-11 text-base"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">Comprador</Label>
+            <Input
+              value={value.comprador}
+              onChange={(e) => set("comprador", e.target.value)}
+              className="h-11 text-base"
+            />
+          </div>
+        </div>
+
+        {/* Linha 5: Tipo + Condição de pagamento */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">Tipo *</Label>
             <Select value={value.tipo} onValueChange={(v) => set("tipo", v)}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-11 text-base"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Pedido">Pedido</SelectItem>
                 <SelectItem value="Bonificação">Bonificação</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <Label>Condição de pagamento</Label>
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">Condição de pagamento</Label>
             <Input
               value={value.cond_pagamento}
               onChange={(e) => set("cond_pagamento", e.target.value)}
               placeholder="Ex: 30/60/90 dias"
+              className="h-11 text-base"
             />
-          </div>
-          <div className="flex flex-col">
-            <Label className="mb-2">Agendamento</Label>
-            <div className="flex h-10 items-center gap-2">
-              <Switch checked={value.agendamento} onCheckedChange={(c) => set("agendamento", c)} />
-              <span className="text-sm text-muted-foreground">{value.agendamento ? "Sim" : "Não"}</span>
-            </div>
           </div>
         </div>
 
-        <div>
-          <Label>Observações</Label>
+        {/* Linha 6: Agendamento */}
+        <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-3">
+          <Switch checked={value.agendamento} onCheckedChange={(c) => set("agendamento", c)} />
+          <div>
+            <div className="text-base font-semibold leading-none">Agendamento</div>
+            <div className="text-sm text-muted-foreground mt-0.5">{value.agendamento ? "Sim — entrega agendada" : "Não"}</div>
+          </div>
+        </div>
+
+        {/* Observações */}
+        <div className="space-y-1.5">
+          <Label className="text-base font-semibold">Observações</Label>
           <Textarea
             rows={3}
             value={value.observacoes}
             onChange={(e) => set("observacoes", e.target.value)}
             placeholder="Informações adicionais do pedido…"
+            className="text-base"
           />
         </div>
+
       </CardContent>
     </Card>
   );

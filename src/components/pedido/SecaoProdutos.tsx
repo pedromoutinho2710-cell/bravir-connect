@@ -27,10 +27,37 @@ export type ItemPedido = {
   peso_unitario: number;
   quantidade: number;
   preco_bruto: number;
-  desconto_pct: number;
-  preco_liquido: number;
+  desconto_perfil: number;
+  desconto_comercial: number;
+  desconto_trade: number;
+  preco_apos_perfil: number;
+  preco_apos_comercial: number;
+  preco_final: number;
   total: number;
 };
+
+/**
+ * Calcula precos com cascata de descontos (nunca soma)
+ * Fluxo: bruto -> aplica desconto perfil -> aplica desc comercial -> aplica desc trade
+ */
+export function calcularPrecos(
+  bruto: number,
+  dPerfil: number = 0,
+  dCom: number = 0,
+  dTrade: number = 0,
+  qtd: number = 1
+) {
+  const apos_perfil = bruto * (1 - dPerfil / 100);
+  const apos_comercial = apos_perfil * (1 - dCom / 100);
+  const preco_final = apos_comercial * (1 - dTrade / 100);
+
+  return {
+    preco_apos_perfil: apos_perfil,
+    preco_apos_comercial: apos_comercial,
+    preco_final: preco_final,
+    total: preco_final * qtd,
+  };
+}
 
 type Props = {
   produtos: Produto[];
@@ -56,8 +83,9 @@ export function SecaoProdutos({
 
   const calcItem = (p: Produto, qtd: number): ItemPedido => {
     const bruto = precos[p.id]?.[tabelaPreco] ?? 0;
-    const desc = descontos[p.id]?.[perfilCliente] ?? 0;
-    const liquido = bruto * (1 - desc / 100);
+    const dPerfil = descontos[p.id]?.[perfilCliente] ?? 0;
+    const precos_calc = calcularPrecos(bruto, dPerfil, 0, 0, qtd);
+    
     return {
       produto_id: p.id,
       codigo: p.codigo_jiva,
@@ -67,9 +95,13 @@ export function SecaoProdutos({
       peso_unitario: Number(p.peso_unitario),
       quantidade: qtd,
       preco_bruto: bruto,
-      desconto_pct: desc,
-      preco_liquido: liquido,
-      total: liquido * qtd,
+      desconto_perfil: dPerfil,
+      desconto_comercial: 0,
+      desconto_trade: 0,
+      preco_apos_perfil: precos_calc.preco_apos_perfil,
+      preco_apos_comercial: precos_calc.preco_apos_comercial,
+      preco_final: precos_calc.preco_final,
+      total: precos_calc.total,
     };
   };
 
@@ -89,8 +121,48 @@ export function SecaoProdutos({
     onChange(
       itens.map((i) => {
         if (i.produto_id !== produto_id) return i;
-        const liquido = i.preco_bruto * (1 - i.desconto_pct / 100);
-        return { ...i, quantidade: qtd, preco_liquido: liquido, total: liquido * qtd };
+        const precos_calc = calcularPrecos(
+          i.preco_bruto,
+          i.desconto_perfil,
+          i.desconto_comercial,
+          i.desconto_trade,
+          qtd
+        );
+        return {
+          ...i,
+          quantidade: qtd,
+          preco_final: precos_calc.preco_final,
+          total: precos_calc.total,
+        };
+      }),
+    );
+  };
+
+  const atualizarDesconto = (produto_id: string, tipo: "comercial" | "trade", valor: number) => {
+    onChange(
+      itens.map((i) => {
+        if (i.produto_id !== produto_id) return i;
+        
+        const novo_desc_com = tipo === "comercial" ? valor : i.desconto_comercial;
+        const novo_desc_trade = tipo === "trade" ? valor : i.desconto_trade;
+        
+        const precos_calc = calcularPrecos(
+          i.preco_bruto,
+          i.desconto_perfil,
+          novo_desc_com,
+          novo_desc_trade,
+          i.quantidade
+        );
+        
+        return {
+          ...i,
+          desconto_comercial: novo_desc_com,
+          desconto_trade: novo_desc_trade,
+          preco_apos_perfil: precos_calc.preco_apos_perfil,
+          preco_apos_comercial: precos_calc.preco_apos_comercial,
+          preco_final: precos_calc.preco_final,
+          total: precos_calc.total,
+        };
       }),
     );
   };
@@ -102,9 +174,18 @@ export function SecaoProdutos({
   const itensRecalculados = useMemo(() => {
     return itens.map((i) => {
       const bruto = precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto;
-      const desc = descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_pct;
-      const liquido = bruto * (1 - desc / 100);
-      return { ...i, preco_bruto: bruto, desconto_pct: desc, preco_liquido: liquido, total: liquido * i.quantidade };
+      const dPerfil = descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_perfil;
+      const precos_calc = calcularPrecos(bruto, dPerfil, i.desconto_comercial, i.desconto_trade, i.quantidade);
+      
+      return {
+        ...i,
+        preco_bruto: bruto,
+        desconto_perfil: dPerfil,
+        preco_apos_perfil: precos_calc.preco_apos_perfil,
+        preco_apos_comercial: precos_calc.preco_apos_comercial,
+        preco_final: precos_calc.preco_final,
+        total: precos_calc.total,
+      };
     });
   }, [itens, precos, descontos, tabelaPreco, perfilCliente]);
 
@@ -211,15 +292,18 @@ export function SecaoProdutos({
                   <TableHead className="text-right">Cx</TableHead>
                   <TableHead className="text-right">Qtd</TableHead>
                   <TableHead className="text-right">P. Bruto</TableHead>
-                  <TableHead className="text-right">Desc.</TableHead>
-                  <TableHead className="text-right">P. Líq.</TableHead>
+                  <TableHead className="text-right">Desc. Perfil %</TableHead>
+                  <TableHead className="text-right">P. Após Perfil</TableHead>
+                  <TableHead className="text-right">Desc. Comercial %</TableHead>
+                  <TableHead className="text-right">P. Após Comercial</TableHead>
+                  <TableHead className="text-right">Desc. Trade %</TableHead>
+                  <TableHead className="text-right">P. Final</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {itensRecalculados.map((i) => {
-                  const multiplo = i.quantidade % i.cx_embarque === 0;
                   return (
                     <TableRow key={i.produto_id}>
                       <TableCell>
@@ -233,15 +317,38 @@ export function SecaoProdutos({
                           min={1}
                           value={i.quantidade}
                           onChange={(e) => atualizarQtd(i.produto_id, Math.max(1, Number(e.target.value) || 1))}
-                          className={cn("w-20 ml-auto", !multiplo && "border-destructive")}
+                          className={cn("w-20 ml-auto")}
                         />
-                        {!multiplo && (
-                          <div className="text-[10px] text-destructive mt-0.5">não múltiplo</div>
-                        )}
                       </TableCell>
-                      <TableCell className="text-right">{formatBRL(i.preco_bruto)}</TableCell>
-                      <TableCell className="text-right">{i.desconto_pct}%</TableCell>
-                      <TableCell className="text-right">{formatBRL(i.preco_liquido)}</TableCell>
+                      <TableCell className="text-right text-sm">{formatBRL(i.preco_bruto)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground text-sm">{i.desconto_perfil}%</TableCell>
+                      <TableCell className="text-right text-sm">{formatBRL(i.preco_apos_perfil)}</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.1}
+                          value={i.desconto_comercial}
+                          onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.max(0, Number(e.target.value) || 0))}
+                          className={cn("w-20 ml-auto")}
+                          placeholder="0"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right text-sm">{formatBRL(i.preco_apos_comercial)}</TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={0.1}
+                          value={i.desconto_trade}
+                          onChange={(e) => atualizarDesconto(i.produto_id, "trade", Math.max(0, Number(e.target.value) || 0))}
+                          className={cn("w-20 ml-auto")}
+                          placeholder="0"
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-semibold text-sm">{formatBRL(i.preco_final)}</TableCell>
                       <TableCell className="text-right font-semibold">{formatBRL(i.total)}</TableCell>
                       <TableCell>
                         <Button
@@ -269,8 +376,12 @@ export function SecaoProdutos({
 function useMemoEffect(novos: ItemPedido[], atuais: ItemPedido[], onChange: (i: ItemPedido[]) => void) {
   const ref = useRef<string>("");
   useEffect(() => {
-    const sig = novos.map((i) => `${i.produto_id}:${i.preco_bruto}:${i.desconto_pct}:${i.quantidade}`).join("|");
-    const sigAtual = atuais.map((i) => `${i.produto_id}:${i.preco_bruto}:${i.desconto_pct}:${i.quantidade}`).join("|");
+    const sig = novos
+      .map((i) => `${i.produto_id}:${i.preco_bruto}:${i.desconto_perfil}:${i.desconto_comercial}:${i.desconto_trade}:${i.quantidade}`)
+      .join("|");
+    const sigAtual = atuais
+      .map((i) => `${i.produto_id}:${i.preco_bruto}:${i.desconto_perfil}:${i.desconto_comercial}:${i.desconto_trade}:${i.quantidade}`)
+      .join("|");
     if (sig !== sigAtual && sig !== ref.current) {
       ref.current = sig;
       onChange(novos);

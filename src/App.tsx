@@ -10,6 +10,9 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import PlaceholderPage from "@/components/PlaceholderPage";
 import NovoPedido from "./pages/NovoPedido";
+import MeusPedidos from "./pages/MeusPedidos";
+import Faturamento from "./pages/Faturamento";
+import Formularios from "./pages/admin/Formularios";
 
 const queryClient = new QueryClient();
 
@@ -31,19 +34,20 @@ const App = () => (
               <Route path="/vendedores" element={<PlaceholderPage title="Vendedores" />} />
               <Route path="/produtos" element={<PlaceholderPage title="Produtos" />} />
               <Route path="/metas" element={<PlaceholderPage title="Metas" />} />
+              <Route path="/admin/formularios" element={<Formularios />} />
             </Route>
 
             {/* Vendedor */}
             <Route element={<ProtectedRoute allow={["vendedor"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/meu-painel" element={<PlaceholderPage title="Meu Painel" />} />
               <Route path="/novo-pedido" element={<NovoPedido />} />
-              <Route path="/meus-pedidos" element={<PlaceholderPage title="Meus Pedidos" />} />
+              <Route path="/meus-pedidos" element={<MeusPedidos />} />
             </Route>
 
             {/* Faturamento */}
             <Route element={<ProtectedRoute allow={["faturamento"]}><AppLayout /></ProtectedRoute>}>
-              <Route path="/faturamento" element={<PlaceholderPage title="Fila de Pedidos" />} />
-              <Route path="/faturamento/todos" element={<PlaceholderPage title="Todos os Pedidos" />} />
+              <Route path="/faturamento" element={<Faturamento />} />
+              <Route path="/faturamento/todos" element={<Faturamento />} />
             </Route>
 
             {/* Logistica */}

@@ -10,6 +10,7 @@ import {
   ListChecks,
   Truck,
   LogOut,
+  FileStack,
 } from "lucide-react";
 import {
   Sidebar,
@@ -36,6 +37,7 @@ const MENU: Record<AppRole, Item[]> = {
     { title: "Vendedores", url: "/vendedores", icon: Users },
     { title: "Produtos", url: "/produtos", icon: Package },
     { title: "Metas", url: "/metas", icon: Target },
+    { title: "Formulários", url: "/admin/formularios", icon: FileStack },
   ],
   vendedor: [
     { title: "Meu Painel", url: "/meu-painel", icon: LayoutDashboard },

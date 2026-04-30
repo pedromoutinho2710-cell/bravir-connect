@@ -78,28 +78,43 @@ export type Database = {
       }
       itens_pedido: {
         Row: {
+          desconto_comercial: number | null
+          desconto_trade: number | null
           id: string
           pedido_id: string
+          preco_apos_comercial: number | null
+          preco_apos_perfil: number | null
+          preco_final: number | null
           preco_unitario_bruto: number
-          preco_unitario_liquido: number
+          preco_unitario_liquido: number | null
           produto_id: string
           quantidade: number
           total_item: number
         }
         Insert: {
+          desconto_comercial?: number | null
+          desconto_trade?: number | null
           id?: string
           pedido_id: string
+          preco_apos_comercial?: number | null
+          preco_apos_perfil?: number | null
+          preco_final?: number | null
           preco_unitario_bruto: number
-          preco_unitario_liquido: number
+          preco_unitario_liquido?: number | null
           produto_id: string
           quantidade: number
           total_item: number
         }
         Update: {
+          desconto_comercial?: number | null
+          desconto_trade?: number | null
           id?: string
           pedido_id?: string
+          preco_apos_comercial?: number | null
+          preco_apos_perfil?: number | null
+          preco_final?: number | null
           preco_unitario_bruto?: number
-          preco_unitario_liquido?: number
+          preco_unitario_liquido?: number | null
           produto_id?: string
           quantidade?: number
           total_item?: number
@@ -129,9 +144,11 @@ export type Database = {
           created_at: string
           data_pedido: string
           id: string
+          motivo: string | null
           numero_pedido: number
           observacoes: string | null
           perfil_cliente: string
+          responsavel_id: string | null
           status: string
           tabela_preco: string
           tipo: string
@@ -144,9 +161,11 @@ export type Database = {
           created_at?: string
           data_pedido?: string
           id?: string
+          motivo?: string | null
           numero_pedido?: number
           observacoes?: string | null
           perfil_cliente: string
+          responsavel_id?: string | null
           status?: string
           tabela_preco: string
           tipo?: string
@@ -159,9 +178,11 @@ export type Database = {
           created_at?: string
           data_pedido?: string
           id?: string
+          motivo?: string | null
           numero_pedido?: number
           observacoes?: string | null
           perfil_cliente?: string
+          responsavel_id?: string | null
           status?: string
           tabela_preco?: string
           tipo?: string

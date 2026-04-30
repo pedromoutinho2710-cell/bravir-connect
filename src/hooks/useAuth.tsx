@@ -7,6 +7,7 @@ interface AuthContextValue {
   user: User | null;
   session: Session | null;
   role: AppRole | null;
+  fullName: string | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -32,6 +33,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
+  const [fullName, setFullName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchRole = async (currentUser: User) => {
@@ -58,23 +60,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const fetchFullName = async (currentUser: User) => {
+    const { data } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", currentUser.id)
+      .maybeSingle();
+    
+    if (data) {
+      setFullName(data.full_name);
+    }
+  };
+
   useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
         setRole(getRoleFromUser(newSession.user));
-        setTimeout(() => fetchRole(newSession.user), 0);
+        setTimeout(() => {
+          fetchRole(newSession.user);
+          fetchFullName(newSession.user);
+        }, 0);
       } else {
         setRole(null);
+        setFullName(null);
       }
     });
 
     supabase.auth.getSession().then(({ data: { session: existing } }) => {
       setSession(existing);
       setUser(existing?.user ?? null);
-      if (existing?.user) fetchRole(existing.user).finally(() => setLoading(false));
-      else setLoading(false);
+      if (existing?.user) {
+        fetchRole(existing.user);
+        fetchFullName(existing.user);
+        setLoading(false);
+      } else setLoading(false);
     });
 
     return () => sub.subscription.unsubscribe();
@@ -90,7 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, fullName, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

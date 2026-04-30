@@ -8,8 +8,10 @@ export type PdfItem = {
   nome: string;
   quantidade: number;
   preco_bruto: number;
-  desconto_pct: number;
-  preco_liquido: number;
+  desconto_perfil: number;
+  desconto_comercial: number;
+  desconto_trade: number;
+  preco_final: number;
   total: number;
 };
 
@@ -32,12 +34,12 @@ export function gerarPedidoPDF(d: PdfData): jsPDF {
   const pageW = doc.internal.pageSize.getWidth();
 
   // Cabeçalho
-  doc.setFillColor(26, 107, 58); // #1A6B3A
+  doc.setFillColor(26, 107, 58);
   doc.rect(0, 0, pageW, 22, "F");
   doc.setTextColor(255, 255, 255);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(16);
-  doc.text("Bravir CRM", 14, 14);
+  doc.text("Bravir Group", 14, 14);
   doc.setFontSize(10);
   doc.setFont("helvetica", "normal");
   doc.text(
@@ -62,7 +64,6 @@ export function gerarPedidoPDF(d: PdfData): jsPDF {
     `Razão Social: ${d.cliente.razao_social}`,
     `Cidade/UF: ${d.cliente.cidade ?? "-"}/${d.cliente.uf ?? "-"}`,
     `Comprador: ${d.cliente.comprador ?? "-"}`,
-    `Perfil: ${d.perfil_cliente} • Tabela: ${d.tabela_preco}`,
     `Pagamento: ${d.cond_pagamento || "-"} • Agendamento: ${d.agendamento ? "Sim" : "Não"}`,
   ];
   clienteLinhas.forEach((l) => {
@@ -95,34 +96,36 @@ export function gerarPedidoPDF(d: PdfData): jsPDF {
 
     autoTable(doc, {
       startY: y,
-      head: [[marca, "Qtd", "P. Bruto", "Desc.", "P. Líq.", "Total"]],
+      head: [["Produto", "Qtd", "Desc. Perfil %", "Desc. Comercial %", "Desc. Trade %", "P. Final", "Total"]],
       body: itens.map((i) => [
         `${i.codigo} — ${i.nome}`,
         String(i.quantidade),
-        formatBRL(i.preco_bruto),
-        `${i.desconto_pct}%`,
-        formatBRL(i.preco_liquido),
+        `${i.desconto_perfil}%`,
+        `${i.desconto_comercial}%`,
+        `${i.desconto_trade}%`,
+        formatBRL(i.preco_final),
         formatBRL(i.total),
       ]),
-      foot: [["Subtotal " + marca, "", "", "", "", formatBRL(subtotal)]],
+      foot: [["Subtotal " + marca, "", "", "", "", "", formatBRL(subtotal)]],
       theme: "grid",
       headStyles: { fillColor: [26, 107, 58], textColor: 255, fontStyle: "bold" },
       footStyles: { fillColor: [240, 240, 235], textColor: 30, fontStyle: "bold" },
       styles: { fontSize: 8, cellPadding: 1.5 },
       columnStyles: {
-        0: { cellWidth: 80 },
-        1: { halign: "right", cellWidth: 14 },
-        2: { halign: "right", cellWidth: 22 },
-        3: { halign: "right", cellWidth: 16 },
-        4: { halign: "right", cellWidth: 22 },
-        5: { halign: "right", cellWidth: 26 },
+        0: { cellWidth: 85 },
+        1: { halign: "right", cellWidth: 12 },
+        2: { halign: "right", cellWidth: 18 },
+        3: { halign: "right", cellWidth: 18 },
+        4: { halign: "right", cellWidth: 18 },
+        5: { halign: "right", cellWidth: 20 },
+        6: { halign: "right", cellWidth: 20 },
       },
     });
     // @ts-expect-error lastAutoTable
     y = doc.lastAutoTable.finalY + 4;
   });
 
-  // Total
+  // Total geral
   doc.setFont("helvetica", "bold");
   doc.setFontSize(12);
   doc.setFillColor(26, 107, 58);
@@ -138,7 +141,7 @@ export function gerarPedidoPDF(d: PdfData): jsPDF {
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
     doc.text(
-      `Bravir CRM • ${d.vendedor_email ?? ""} • Página ${i}/${pages}`,
+      `Bravir Group • ${d.vendedor_email ?? ""} • Página ${i}/${pages}`,
       pageW / 2,
       doc.internal.pageSize.getHeight() - 8,
       { align: "center" },
