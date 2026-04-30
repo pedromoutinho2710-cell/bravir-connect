@@ -16,9 +16,11 @@ export type Database = {
     Tables: {
       clientes: {
         Row: {
+          aceita_saldo: boolean
           cep: string | null
           cidade: string | null
           cnpj: string
+          codigo_cliente: string | null
           comprador: string | null
           created_at: string
           id: string
@@ -26,9 +28,11 @@ export type Database = {
           uf: string | null
         }
         Insert: {
+          aceita_saldo?: boolean
           cep?: string | null
           cidade?: string | null
           cnpj: string
+          codigo_cliente?: string | null
           comprador?: string | null
           created_at?: string
           id?: string
@@ -36,9 +40,11 @@ export type Database = {
           uf?: string | null
         }
         Update: {
+          aceita_saldo?: boolean
           cep?: string | null
           cidade?: string | null
           cnpj?: string
+          codigo_cliente?: string | null
           comprador?: string | null
           created_at?: string
           id?: string
@@ -78,6 +84,7 @@ export type Database = {
       }
       itens_pedido: {
         Row: {
+          bolsao: number
           desconto_comercial: number | null
           desconto_trade: number | null
           id: string
@@ -92,6 +99,7 @@ export type Database = {
           total_item: number
         }
         Insert: {
+          bolsao?: number
           desconto_comercial?: number | null
           desconto_trade?: number | null
           id?: string
@@ -106,6 +114,7 @@ export type Database = {
           total_item: number
         }
         Update: {
+          bolsao?: number
           desconto_comercial?: number | null
           desconto_trade?: number | null
           id?: string
@@ -136,6 +145,74 @@ export type Database = {
           },
         ]
       }
+      metas: {
+        Row: {
+          ano: number
+          created_at: string
+          id: string
+          mes: number
+          valor_meta_reais: number
+          vendedor_id: string | null
+        }
+        Insert: {
+          ano: number
+          created_at?: string
+          id?: string
+          mes: number
+          valor_meta_reais?: number
+          vendedor_id?: string | null
+        }
+        Update: {
+          ano?: number
+          created_at?: string
+          id?: string
+          mes?: number
+          valor_meta_reais?: number
+          vendedor_id?: string | null
+        }
+        Relationships: []
+      }
+      notificacoes: {
+        Row: {
+          created_at: string
+          destinatario_id: string | null
+          destinatario_role: string
+          id: string
+          lida: boolean
+          mensagem: string | null
+          pedido_id: string | null
+          tipo: string | null
+        }
+        Insert: {
+          created_at?: string
+          destinatario_id?: string | null
+          destinatario_role: string
+          id?: string
+          lida?: boolean
+          mensagem?: string | null
+          pedido_id?: string | null
+          tipo?: string | null
+        }
+        Update: {
+          created_at?: string
+          destinatario_id?: string | null
+          destinatario_role?: string
+          id?: string
+          lida?: boolean
+          mensagem?: string | null
+          pedido_id?: string | null
+          tipo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notificacoes_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pedidos: {
         Row: {
           agendamento: boolean
@@ -143,11 +220,16 @@ export type Database = {
           cond_pagamento: string | null
           created_at: string
           data_pedido: string
+          faturado_em: string | null
           id: string
           motivo: string | null
+          nf_pdf_url: string | null
+          nota_fiscal: string | null
           numero_pedido: number
+          obs_faturamento: string | null
           observacoes: string | null
           perfil_cliente: string
+          rastreio: string | null
           responsavel_id: string | null
           status: string
           tabela_preco: string
@@ -160,11 +242,16 @@ export type Database = {
           cond_pagamento?: string | null
           created_at?: string
           data_pedido?: string
+          faturado_em?: string | null
           id?: string
           motivo?: string | null
+          nf_pdf_url?: string | null
+          nota_fiscal?: string | null
           numero_pedido?: number
+          obs_faturamento?: string | null
           observacoes?: string | null
           perfil_cliente: string
+          rastreio?: string | null
           responsavel_id?: string | null
           status?: string
           tabela_preco: string
@@ -177,11 +264,16 @@ export type Database = {
           cond_pagamento?: string | null
           created_at?: string
           data_pedido?: string
+          faturado_em?: string | null
           id?: string
           motivo?: string | null
+          nf_pdf_url?: string | null
+          nota_fiscal?: string | null
           numero_pedido?: number
+          obs_faturamento?: string | null
           observacoes?: string | null
           perfil_cliente?: string
+          rastreio?: string | null
           responsavel_id?: string | null
           status?: string
           tabela_preco?: string
