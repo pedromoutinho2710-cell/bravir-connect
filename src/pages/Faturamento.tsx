@@ -7,12 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/format";
-import { Loader2, FileSpreadsheet, Eye } from "lucide-react";
+import { Loader2, FileSpreadsheet, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle } from "lucide-react";
 import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { exportarPedidoExcel } from "@/lib/excel";
@@ -96,6 +96,8 @@ export default function Faturamento() {
   const [filtroDataFim, setFiltroDataFim] = useState("");
   const [filtroMarca, setFiltroMarca] = useState("todas");
 
+  const [kpis, setKpis] = useState({ aguardando: 0, faturadosHoje: 0, tempoMedio: 0, comProblema: 0 });
+
   // Dialog motivo
   const [motivoDialog, setMotivoDialog] = useState<{ type: "devolver" | "cancelar"; id: string } | null>(null);
   const [motivo, setMotivo] = useState("");
@@ -110,6 +112,13 @@ export default function Faturamento() {
   const [detalhesId, setDetalhesId] = useState<string | null>(null);
   const [detalhesOpen, setDetalhesOpen] = useState(false);
 
+  // Dialog faturar NF
+  const [faturarDialog, setFaturarDialog] = useState<PedidoFat | null>(null);
+  const [nfData, setNfData] = useState<{ numero: string; rastreio: string; obs: string; file: File | null }>({
+    numero: "", rastreio: "", obs: "", file: null,
+  });
+  const [submetendoNf, setSubmetendoNf] = useState(false);
+
   const carregar = useCallback(() => setRefreshKey((k) => k + 1), []);
   usePullToRefresh(carregar);
 
@@ -122,6 +131,40 @@ export default function Faturamento() {
       setVendedores(data.map((p) => ({ id: p.id, label: p.full_name || p.email })));
     });
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      const hoje = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const hojeStr = `${hoje.getFullYear()}-${pad(hoje.getMonth() + 1)}-${pad(hoje.getDate())}`;
+      const hojeInicio = `${hojeStr}T00:00:00`;
+
+      const [agRes, fatHojeRes, tempoRes, problemaRes] = await Promise.all([
+        supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "aguardando_faturamento"),
+        supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "faturado").gte("faturado_em", hojeInicio),
+        supabase.from("pedidos").select("created_at, faturado_em").eq("status", "faturado").not("faturado_em", "is", null),
+        supabase.from("pedidos").select("id", { count: "exact", head: true }).in("status", ["devolvido", "cancelado"]),
+      ]);
+
+      let tempoMedio = 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const faturadosPedidos = (tempoRes.data ?? []) as any[];
+      if (faturadosPedidos.length > 0) {
+        const totalMs = faturadosPedidos.reduce((s: number, p: { created_at: string; faturado_em: string }) => {
+          return s + (new Date(p.faturado_em).getTime() - new Date(p.created_at).getTime());
+        }, 0);
+        // Converter de ms para dias (1000ms * 60s * 60min * 24h)
+        tempoMedio = totalMs / faturadosPedidos.length / (1000 * 60 * 60 * 24);
+      }
+
+      setKpis({
+        aguardando: agRes.count ?? 0,
+        faturadosHoje: fatHojeRes.count ?? 0,
+        tempoMedio,
+        comProblema: problemaRes.count ?? 0,
+      });
+    })();
+  }, [refreshKey]);
 
   useEffect(() => {
     setLoading(true);
@@ -265,7 +308,49 @@ export default function Faturamento() {
   };
 
   const assumir = (id: string) => atualizar(id, { status: "em_faturamento", responsavel_id: user?.id });
-  const faturar = (id: string) => atualizar(id, { status: "faturado" });
+
+  const abrirFaturarDialog = (p: PedidoFat) => {
+    setFaturarDialog(p);
+    setNfData({ numero: "", rastreio: "", obs: "", file: null });
+  };
+
+  const confirmarFaturamento = async () => {
+    if (!faturarDialog) return;
+    if (!nfData.numero.trim()) { toast.error("Informe o número da NF"); return; }
+    setSubmetendoNf(true);
+
+    let nf_pdf_url: string | null = null;
+    if (nfData.file) {
+      const path = `${faturarDialog.id}/${nfData.numero.trim()}.pdf`;
+      const { data: upData, error: upErr } = await supabase.storage
+        .from("notas_fiscais")
+        .upload(path, nfData.file, { upsert: true });
+      if (upErr) {
+        toast.error("Erro ao enviar PDF da NF: " + upErr.message);
+        setSubmetendoNf(false);
+        return;
+      }
+      nf_pdf_url = upData?.path ?? null;
+    }
+
+    const { error } = await supabase
+      .from("pedidos")
+      .update({
+        status: "faturado",
+        nota_fiscal: nfData.numero.trim(),
+        nf_pdf_url,
+        rastreio: nfData.rastreio.trim() || null,
+        obs_faturamento: nfData.obs.trim() || null,
+        faturado_em: new Date().toISOString(),
+      })
+      .eq("id", faturarDialog.id);
+
+    setSubmetendoNf(false);
+    if (error) { toast.error("Erro ao faturar: " + error.message); return; }
+    toast.success(`Pedido #${faturarDialog.numero_pedido} faturado com NF ${nfData.numero}`);
+    setFaturarDialog(null);
+    setRefreshKey((k) => k + 1);
+  };
 
   const abrirMotivo = (type: "devolver" | "cancelar", id: string) => {
     setMotivoDialog({ type, id });
@@ -368,8 +453,9 @@ export default function Faturamento() {
         {p.status === "em_faturamento" && (
           <>
             <Button size="sm" disabled={atualizando === p.id}
-              onClick={wrap((e) => { e.stopPropagation(); faturar(p.id); })}>
-              {atualizando === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Faturar"}
+              onClick={wrap((e) => { e.stopPropagation(); abrirFaturarDialog(p); })}>
+              <FileCheck className="h-3 w-3 mr-1" />
+              Faturar
             </Button>
             <Button size="sm" variant="outline"
               onClick={wrap((e) => { e.stopPropagation(); abrirMotivo("devolver", p.id); })}>
@@ -404,6 +490,55 @@ export default function Faturamento() {
       <div>
         <h1 className="text-2xl font-bold">Faturamento</h1>
         <p className="text-sm text-muted-foreground">Gerencie e processe pedidos enviados pelos vendedores</p>
+      </div>
+
+      {/* KPIs */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Aguardando faturamento</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-700">{kpis.aguardando}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Faturados hoje</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-700">{kpis.faturadosHoje}</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Tempo médio de faturamento</CardTitle>
+            <Timer className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {kpis.tempoMedio > 0 ? `${kpis.tempoMedio.toFixed(1)} dias` : "—"}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={kpis.comProblema > 0 ? "border-red-300 bg-red-50" : ""}>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className={`text-sm font-medium ${kpis.comProblema > 0 ? "text-red-800" : "text-muted-foreground"}`}>
+              Com problema
+            </CardTitle>
+            <AlertTriangle className={`h-4 w-4 ${kpis.comProblema > 0 ? "text-red-500" : "text-muted-foreground"}`} />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${kpis.comProblema > 0 ? "text-red-700" : ""}`}>
+              {kpis.comProblema}
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filtros */}
@@ -602,6 +737,57 @@ export default function Faturamento() {
             <Button onClick={salvarEdicao} disabled={salvandoEdit}>
               {salvandoEdit && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: faturar com NF */}
+      <Dialog open={!!faturarDialog} onOpenChange={(o) => !o && setFaturarDialog(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Faturar pedido #{faturarDialog?.numero_pedido}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Número da NF *</Label>
+              <Input
+                value={nfData.numero}
+                onChange={(e) => setNfData((d) => ({ ...d, numero: e.target.value }))}
+                placeholder="Ex: 001234"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>PDF da NF</Label>
+              <Input
+                type="file"
+                accept=".pdf"
+                onChange={(e) => setNfData((d) => ({ ...d, file: e.target.files?.[0] ?? null }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Código de rastreio</Label>
+              <Input
+                value={nfData.rastreio}
+                onChange={(e) => setNfData((d) => ({ ...d, rastreio: e.target.value }))}
+                placeholder="Ex: BR123456789"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Observações</Label>
+              <Textarea
+                rows={3}
+                value={nfData.obs}
+                onChange={(e) => setNfData((d) => ({ ...d, obs: e.target.value }))}
+                placeholder="Informações adicionais do faturamento…"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFaturarDialog(null)}>Voltar</Button>
+            <Button onClick={confirmarFaturamento} disabled={submetendoNf || !nfData.numero.trim()}>
+              {submetendoNf && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Confirmar faturamento
             </Button>
           </DialogFooter>
         </DialogContent>

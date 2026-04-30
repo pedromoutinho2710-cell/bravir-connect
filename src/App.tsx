@@ -11,8 +11,11 @@ import NotFound from "./pages/NotFound";
 import PlaceholderPage from "@/components/PlaceholderPage";
 import NovoPedido from "./pages/NovoPedido";
 import MeusPedidos from "./pages/MeusPedidos";
+import MeuPainel from "./pages/MeuPainel";
+import MeusClientes from "./pages/MeusClientes";
 import Faturamento from "./pages/Faturamento";
 import Formularios from "./pages/admin/Formularios";
+import Dashboard from "./pages/Dashboard";
 
 const queryClient = new QueryClient();
 
@@ -29,7 +32,7 @@ const App = () => (
 
             {/* Admin */}
             <Route element={<ProtectedRoute allow={["admin"]}><AppLayout /></ProtectedRoute>}>
-              <Route path="/dashboard" element={<PlaceholderPage title="Dashboard" />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/pedidos" element={<PlaceholderPage title="Pedidos" />} />
               <Route path="/vendedores" element={<PlaceholderPage title="Vendedores" />} />
               <Route path="/produtos" element={<PlaceholderPage title="Produtos" />} />
@@ -39,9 +42,10 @@ const App = () => (
 
             {/* Vendedor */}
             <Route element={<ProtectedRoute allow={["vendedor"]}><AppLayout /></ProtectedRoute>}>
-              <Route path="/meu-painel" element={<PlaceholderPage title="Meu Painel" />} />
+              <Route path="/meu-painel" element={<MeuPainel />} />
               <Route path="/novo-pedido" element={<NovoPedido />} />
               <Route path="/meus-pedidos" element={<MeusPedidos />} />
+              <Route path="/meus-clientes" element={<MeusClientes />} />
             </Route>
 
             {/* Faturamento */}
