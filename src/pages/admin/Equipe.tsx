@@ -1,0 +1,292 @@
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import { Loader2, UserPlus, Pencil, PowerOff, Power } from "lucide-react";
+import { ROLE_LABEL, type AppRole } from "@/lib/roles";
+
+type UsuarioRow = {
+  id: string;
+  email: string;
+  full_name: string | null;
+  ativo: boolean | null;
+  role: AppRole | null;
+};
+
+const ROLES: AppRole[] = ["admin", "vendedor", "faturamento", "logistica", "trade"];
+
+const ROLE_COLOR: Record<string, string> = {
+  admin: "bg-purple-100 text-purple-800 border-purple-300",
+  vendedor: "bg-blue-100 text-blue-800 border-blue-300",
+  faturamento: "bg-green-100 text-green-800 border-green-300",
+  logistica: "bg-orange-100 text-orange-800 border-orange-300",
+  trade: "bg-yellow-100 text-yellow-800 border-yellow-300",
+};
+
+export default function Equipe() {
+  const [usuarios, setUsuarios] = useState<UsuarioRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Modal novo usuário
+  const [novoOpen, setNovoOpen] = useState(false);
+  const [novoNome, setNovoNome] = useState("");
+  const [novoEmail, setNovoEmail] = useState("");
+  const [novoSenha, setNovoSenha] = useState("");
+  const [novoRole, setNovoRole] = useState<AppRole>("vendedor");
+  const [criando, setCriando] = useState(false);
+
+  // Modal editar role
+  const [editUser, setEditUser] = useState<UsuarioRow | null>(null);
+  const [editRole, setEditRole] = useState<AppRole>("vendedor");
+  const [salvandoEdit, setSalvandoEdit] = useState(false);
+
+  // Confirmação toggle ativo
+  const [toggleTarget, setToggleTarget] = useState<UsuarioRow | null>(null);
+  const [toggling, setToggling] = useState(false);
+
+  const carregar = async () => {
+    setLoading(true);
+    const [profRes, rolesRes] = await Promise.all([
+      supabase.from("profiles").select("id, email, full_name, ativo").order("full_name"),
+      supabase.from("user_roles").select("user_id, role"),
+    ]);
+
+    const rolesMap: Record<string, AppRole> = {};
+    (rolesRes.data ?? []).forEach((r) => { rolesMap[r.user_id] = r.role as AppRole; });
+
+    setUsuarios(
+      (profRes.data ?? []).map((p) => ({
+        id: p.id,
+        email: p.email,
+        full_name: p.full_name,
+        ativo: p.ativo ?? true,
+        role: rolesMap[p.id] ?? null,
+      })),
+    );
+    setLoading(false);
+  };
+
+  useEffect(() => { carregar(); }, []);
+
+  const criarUsuario = async () => {
+    if (!novoNome.trim() || !novoEmail.trim() || !novoSenha.trim()) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+    setCriando(true);
+    const { data, error } = await supabase.functions.invoke("admin-usuario", {
+      body: { acao: "criar", email: novoEmail.trim(), senha: novoSenha, full_name: novoNome.trim(), role: novoRole },
+    });
+    setCriando(false);
+    if (error || data?.error) {
+      toast.error("Erro ao criar usuário: " + (data?.error ?? error?.message));
+      return;
+    }
+    toast.success(`Usuário ${novoNome} criado com sucesso`);
+    setNovoOpen(false);
+    setNovoNome(""); setNovoEmail(""); setNovoSenha(""); setNovoRole("vendedor");
+    carregar();
+  };
+
+  const salvarRole = async () => {
+    if (!editUser) return;
+    setSalvandoEdit(true);
+    const { data, error } = await supabase.functions.invoke("admin-usuario", {
+      body: { acao: "atualizar_role", user_id: editUser.id, role: editRole },
+    });
+    setSalvandoEdit(false);
+    if (error || data?.error) { toast.error("Erro ao atualizar perfil"); return; }
+    toast.success("Perfil atualizado");
+    setEditUser(null);
+    carregar();
+  };
+
+  const confirmarToggle = async () => {
+    if (!toggleTarget) return;
+    setToggling(true);
+    const novoAtivo = !(toggleTarget.ativo ?? true);
+    const { data, error } = await supabase.functions.invoke("admin-usuario", {
+      body: { acao: "toggle_ativo", user_id: toggleTarget.id, ativo: novoAtivo },
+    });
+    setToggling(false);
+    if (error || data?.error) { toast.error("Erro ao alterar status"); return; }
+    toast.success(novoAtivo ? "Usuário reativado" : "Usuário desativado");
+    setToggleTarget(null);
+    carregar();
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Equipe</h1>
+          <p className="text-sm text-muted-foreground">Gerencie os usuários do sistema</p>
+        </div>
+        <Button onClick={() => setNovoOpen(true)}>
+          <UserPlus className="h-4 w-4" />
+          Novo usuário
+        </Button>
+      </div>
+
+      {loading ? (
+        <div className="flex h-48 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="rounded-md border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Email</TableHead>
+                <TableHead>Perfil</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="w-28">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {usuarios.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
+                    Nenhum usuário cadastrado
+                  </TableCell>
+                </TableRow>
+              )}
+              {usuarios.map((u) => (
+                <TableRow key={u.id} className={!(u.ativo ?? true) ? "opacity-50" : ""}>
+                  <TableCell className="font-medium">{u.full_name ?? "—"}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
+                  <TableCell>
+                    {u.role ? (
+                      <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${ROLE_COLOR[u.role] ?? ""}`}>
+                        {ROLE_LABEL[u.role]}
+                      </span>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-muted-foreground">Sem perfil</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <span className={`text-xs font-medium ${(u.ativo ?? true) ? "text-green-700" : "text-red-600"}`}>
+                      {(u.ativo ?? true) ? "Ativo" : "Inativo"}
+                    </span>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1.5">
+                      <Button size="icon" variant="outline" className="h-7 w-7"
+                        onClick={() => { setEditUser(u); setEditRole(u.role ?? "vendedor"); }}
+                        title="Editar perfil">
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                      <Button size="icon" variant="outline" className="h-7 w-7"
+                        onClick={() => setToggleTarget(u)}
+                        title={(u.ativo ?? true) ? "Desativar" : "Reativar"}>
+                        {(u.ativo ?? true)
+                          ? <PowerOff className="h-3 w-3 text-red-500" />
+                          : <Power className="h-3 w-3 text-green-600" />}
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* Modal: novo usuário */}
+      <Dialog open={novoOpen} onOpenChange={setNovoOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Novo usuário</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Nome completo *</Label>
+              <Input value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="João Silva" autoFocus />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email *</Label>
+              <Input type="email" value={novoEmail} onChange={(e) => setNovoEmail(e.target.value)} placeholder="joao@empresa.com" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Senha temporária *</Label>
+              <Input type="password" value={novoSenha} onChange={(e) => setNovoSenha(e.target.value)} placeholder="Mínimo 6 caracteres" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Perfil *</Label>
+              <Select value={novoRole} onValueChange={(v) => setNovoRole(v as AppRole)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABEL[r]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setNovoOpen(false)}>Cancelar</Button>
+            <Button onClick={criarUsuario} disabled={criando}>
+              {criando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Criar usuário
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: editar role */}
+      <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Editar perfil — {editUser?.full_name ?? editUser?.email}</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Perfil</Label>
+              <Select value={editRole} onValueChange={(v) => setEditRole(v as AppRole)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ROLES.map((r) => <SelectItem key={r} value={r}>{ROLE_LABEL[r]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditUser(null)}>Cancelar</Button>
+            <Button onClick={salvarRole} disabled={salvandoEdit}>
+              {salvandoEdit && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: confirmar toggle ativo */}
+      <Dialog open={!!toggleTarget} onOpenChange={(o) => !o && setToggleTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {(toggleTarget?.ativo ?? true) ? "Desativar usuário" : "Reativar usuário"}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            {(toggleTarget?.ativo ?? true)
+              ? `Desativar ${toggleTarget?.full_name ?? toggleTarget?.email}? O usuário não conseguirá acessar o sistema.`
+              : `Reativar ${toggleTarget?.full_name ?? toggleTarget?.email}?`}
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setToggleTarget(null)}>Cancelar</Button>
+            <Button
+              variant={(toggleTarget?.ativo ?? true) ? "destructive" : "default"}
+              onClick={confirmarToggle}
+              disabled={toggling}
+            >
+              {toggling && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

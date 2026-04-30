@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -7,8 +7,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { formatCNPJ, formatCEP, isValidCNPJ, onlyDigits, formatBRL, formatDate } from "@/lib/format";
-import { PERFIS_CLIENTE, TABELAS_PRECO, UFS } from "@/lib/constants";
-import { AlertCircle, CheckCircle2 } from "lucide-react";
+import { UFS } from "@/lib/constants";
+import { AlertCircle, CheckCircle2, Search } from "lucide-react";
 
 export type DadosCliente = {
   cliente_id?: string;
@@ -30,30 +30,118 @@ export type DadosCliente = {
 
 type UltimoPedido = { id: string; numero_pedido: number; data_pedido: string; status: string; total: number };
 
+type Sugestao = {
+  id: string;
+  razao_social: string;
+  cnpj: string;
+  cidade: string | null;
+  uf: string | null;
+  cep: string | null;
+  comprador: string | null;
+  perfil_cliente: string | null;
+  tabela_preco: string | null;
+  codigo_cliente: string | null;
+  aceita_saldo: boolean | null;
+  negativado: boolean | null;
+};
+
 type Props = {
   value: DadosCliente;
   onChange: (v: DadosCliente) => void;
   vendedorId: string;
 };
 
+const COND_PAGAMENTO = [
+  "À vista",
+  "7 dias",
+  "14 dias",
+  "21 dias",
+  "28 dias",
+  "30 dias",
+  "30/60 dias",
+  "30/60/90 dias",
+  "30/60/90/120 dias",
+];
+
 export function SecaoCliente({ value, onChange, vendedorId }: Props) {
   const [cnpjStatus, setCnpjStatus] = useState<"idle" | "buscando" | "encontrado" | "novo" | "invalido">("idle");
   const [ultimosPedidos, setUltimosPedidos] = useState<UltimoPedido[]>([]);
   const [alertaMesmoDia, setAlertaMesmoDia] = useState(false);
+  const [negativado, setNegativado] = useState(false);
+
+  // Search field state
+  const [searchText, setSearchText] = useState(() => value.razao_social || "");
+  const [sugestoes, setSugestoes] = useState<Sugestao[]>([]);
+  const [showSugestoes, setShowSugestoes] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipCnpjLookupRef = useRef(false);
 
   const set = <K extends keyof DadosCliente>(k: K, v: DadosCliente[K]) =>
     onChange({ ...value, [k]: v });
 
+  // Click-outside to close dropdown
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowSugestoes(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // Sync searchText when loading from draft (value.razao_social populated from outside)
+  useEffect(() => {
+    if (value.razao_social && !searchText) {
+      setSearchText(value.razao_social);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value.razao_social]);
+
+  // Fill all fields from a complete client record
+  const preencherCliente = (cl: Sugestao) => {
+    setCnpjStatus("encontrado");
+    setNegativado(cl.negativado ?? false);
+    setSearchText(cl.razao_social);
+    setSugestoes([]);
+    setShowSugestoes(false);
+    onChange({
+      ...value,
+      cliente_id: cl.id,
+      cnpj: formatCNPJ(cl.cnpj),
+      razao_social: cl.razao_social,
+      cidade: cl.cidade ?? "",
+      uf: cl.uf ?? "",
+      cep: cl.cep ? formatCEP(cl.cep) : "",
+      comprador: cl.comprador ?? "",
+      perfil_cliente: cl.perfil_cliente ?? value.perfil_cliente,
+      tabela_preco: cl.tabela_preco ?? value.tabela_preco,
+      codigo_cliente: cl.codigo_cliente ?? "",
+      aceita_saldo: cl.aceita_saldo ?? false,
+    });
+  };
+
+  // CNPJ lookup (triggered by value.cnpj changes)
   useEffect(() => {
     const cnpjLimpo = onlyDigits(value.cnpj);
     if (cnpjLimpo.length !== 14) {
-      setCnpjStatus("idle");
-      setUltimosPedidos([]);
-      setAlertaMesmoDia(false);
+      if (!searchText || onlyDigits(searchText).length < 14) {
+        setCnpjStatus("idle");
+        setUltimosPedidos([]);
+        setAlertaMesmoDia(false);
+        setNegativado(false);
+      }
       return;
     }
     if (!isValidCNPJ(cnpjLimpo)) {
       setCnpjStatus("invalido");
+      return;
+    }
+
+    // Skip if triggered by name-search selection
+    if (skipCnpjLookupRef.current) {
+      skipCnpjLookupRef.current = false;
       return;
     }
 
@@ -67,28 +155,30 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
         .maybeSingle();
       if (cancel) return;
       if (cliente) {
-        setCnpjStatus("encontrado");
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cl = cliente as any;
-        onChange({
-          ...value,
-          cliente_id: cliente.id,
-          cnpj: formatCNPJ(cliente.cnpj),
-          razao_social: cliente.razao_social,
-          cidade: cliente.cidade ?? "",
-          uf: cliente.uf ?? "",
-          cep: cliente.cep ? formatCEP(cliente.cep) : "",
-          comprador: cliente.comprador ?? "",
-          codigo_cliente: cl.codigo_cliente ?? "",
-          aceita_saldo: cl.aceita_saldo ?? false,
+        preencherCliente({
+          id: cl.id,
+          razao_social: cl.razao_social,
+          cnpj: cl.cnpj,
+          cidade: cl.cidade,
+          uf: cl.uf,
+          cep: cl.cep,
+          comprador: cl.comprador,
+          perfil_cliente: cl.perfil_cliente,
+          tabela_preco: cl.tabela_preco,
+          codigo_cliente: cl.codigo_cliente,
+          aceita_saldo: cl.aceita_saldo,
+          negativado: cl.negativado,
         });
+
         const { data: peds } = await supabase
           .from("pedidos")
           .select("id, numero_pedido, data_pedido, status, itens_pedido(total_item)")
-          .eq("cliente_id", cliente.id)
+          .eq("cliente_id", cl.id)
           .order("data_pedido", { ascending: false })
           .limit(3);
-        if (peds) {
+        if (peds && !cancel) {
           setUltimosPedidos(
             peds.map((p) => ({
               id: p.id,
@@ -96,8 +186,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
               data_pedido: p.data_pedido,
               status: p.status,
               total: (p.itens_pedido as { total_item: number }[] | null)?.reduce(
-                (s, i) => s + Number(i.total_item),
-                0,
+                (s, i) => s + Number(i.total_item), 0,
               ) ?? 0,
             })),
           );
@@ -106,24 +195,100 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
         const { data: hojePed } = await supabase
           .from("pedidos")
           .select("id")
-          .eq("cliente_id", cliente.id)
+          .eq("cliente_id", cl.id)
           .eq("vendedor_id", vendedorId)
           .eq("data_pedido", hoje)
           .neq("status", "rascunho")
           .limit(1);
-        setAlertaMesmoDia((hojePed?.length ?? 0) > 0);
+        if (!cancel) setAlertaMesmoDia((hojePed?.length ?? 0) > 0);
       } else {
         setCnpjStatus("novo");
         setUltimosPedidos([]);
         setAlertaMesmoDia(false);
+        setNegativado(false);
         onChange({ ...value, cliente_id: undefined });
       }
     })();
-    return () => {
-      cancel = true;
-    };
+    return () => { cancel = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value.cnpj, vendedorId]);
+
+  // Name search handler
+  const handleSearchChange = (text: string) => {
+    setSearchText(text);
+    const digits = onlyDigits(text);
+
+    if (digits.length >= 14) {
+      // CNPJ mode — format and trigger CNPJ lookup
+      onChange({ ...value, cnpj: formatCNPJ(digits) });
+      setSugestoes([]);
+      setShowSugestoes(false);
+      return;
+    }
+
+    // Name search: 3+ non-digit characters
+    const letras = text.replace(/[\d.\-/\s]/g, "");
+    if (letras.length >= 3) {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      searchTimerRef.current = setTimeout(async () => {
+        const { data } = await supabase
+          .from("clientes")
+          .select("id, razao_social, cnpj, cidade, uf, cep, comprador, perfil_cliente, tabela_preco, codigo_cliente, aceita_saldo, negativado")
+          .ilike("razao_social", `%${text.trim()}%`)
+          .limit(10);
+        setSugestoes((data ?? []) as Sugestao[]);
+        setShowSugestoes((data?.length ?? 0) > 0);
+      }, 300);
+    } else {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+      setSugestoes([]);
+      setShowSugestoes(false);
+    }
+  };
+
+  const selecionarSugestao = (s: Sugestao) => {
+    skipCnpjLookupRef.current = true;
+    preencherCliente(s);
+    onChange({
+      ...value,
+      cliente_id: s.id,
+      cnpj: formatCNPJ(s.cnpj),
+      razao_social: s.razao_social,
+      cidade: s.cidade ?? "",
+      uf: s.uf ?? "",
+      cep: s.cep ? formatCEP(s.cep) : "",
+      comprador: s.comprador ?? "",
+      perfil_cliente: s.perfil_cliente ?? value.perfil_cliente,
+      tabela_preco: s.tabela_preco ?? value.tabela_preco,
+      codigo_cliente: s.codigo_cliente ?? "",
+      aceita_saldo: s.aceita_saldo ?? false,
+    });
+
+    // Load last orders for selected client
+    supabase
+      .from("pedidos")
+      .select("id, numero_pedido, data_pedido, status, itens_pedido(total_item)")
+      .eq("cliente_id", s.id)
+      .order("data_pedido", { ascending: false })
+      .limit(3)
+      .then(({ data: peds }) => {
+        if (peds) {
+          setUltimosPedidos(
+            peds.map((p) => ({
+              id: p.id,
+              numero_pedido: p.numero_pedido,
+              data_pedido: p.data_pedido,
+              status: p.status,
+              total: (p.itens_pedido as { total_item: number }[] | null)?.reduce(
+                (sum, i) => sum + Number(i.total_item), 0,
+              ) ?? 0,
+            })),
+          );
+        }
+      });
+  };
+
+  const condOpcoes = negativado ? ["À vista"] : COND_PAGAMENTO;
 
   return (
     <Card className="bg-[#EFF6FF] border-blue-200">
@@ -132,44 +297,59 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       </CardHeader>
       <CardContent className="space-y-5">
 
-        {/* Linha 1: CNPJ + Razão Social */}
-        <div className="grid gap-5 md:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label className="text-base font-semibold">CNPJ *</Label>
+        {/* Campo de busca unificado */}
+        <div className="space-y-1.5" ref={searchRef}>
+          <Label className="text-base font-semibold">Buscar cliente (CNPJ ou nome) *</Label>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
-              value={value.cnpj}
-              onChange={(e) => set("cnpj", formatCNPJ(e.target.value))}
-              placeholder="00.000.000/0000-00"
-              maxLength={18}
-              className="h-11 text-base"
+              value={searchText}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => sugestoes.length > 0 && setShowSugestoes(true)}
+              placeholder="00.000.000/0000-00 ou nome da empresa"
+              className="h-11 text-base pl-9"
             />
-            <div className="text-xs">
-              {cnpjStatus === "invalido" && (
-                <span className="flex items-center gap-1 text-destructive">
-                  <AlertCircle className="h-3 w-3" /> CNPJ inválido
-                </span>
-              )}
-              {cnpjStatus === "encontrado" && (
-                <span className="flex items-center gap-1 text-primary">
-                  <CheckCircle2 className="h-3 w-3" /> Cliente cadastrado — dados preenchidos
-                </span>
-              )}
-              {cnpjStatus === "novo" && (
-                <span className="text-muted-foreground">Novo cliente — preencha os dados abaixo</span>
-              )}
-              {cnpjStatus === "buscando" && <span className="text-muted-foreground">Buscando…</span>}
-            </div>
+            {showSugestoes && sugestoes.length > 0 && (
+              <div className="absolute z-50 w-full bg-background border rounded-md shadow-lg mt-1 max-h-56 overflow-y-auto">
+                {sugestoes.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onMouseDown={(e) => { e.preventDefault(); selecionarSugestao(s); }}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b last:border-0"
+                  >
+                    <div className="font-medium">{s.razao_social}</div>
+                    <div className="text-xs text-muted-foreground">{formatCNPJ(s.cnpj)}</div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-base font-semibold">Razão social *</Label>
-            <Input
-              value={value.razao_social}
-              onChange={(e) => set("razao_social", e.target.value)}
-              placeholder="Nome empresarial"
-              className="h-11 text-base"
-            />
+          <div className="text-xs">
+            {cnpjStatus === "invalido" && (
+              <span className="flex items-center gap-1 text-destructive">
+                <AlertCircle className="h-3 w-3" /> CNPJ inválido
+              </span>
+            )}
+            {cnpjStatus === "encontrado" && (
+              <span className="flex items-center gap-1 text-primary">
+                <CheckCircle2 className="h-3 w-3" /> Cliente cadastrado — dados preenchidos
+              </span>
+            )}
+            {cnpjStatus === "novo" && (
+              <span className="text-muted-foreground">Novo cliente — preencha os dados abaixo</span>
+            )}
+            {cnpjStatus === "buscando" && <span className="text-muted-foreground">Buscando…</span>}
           </div>
         </div>
+
+        {/* Alerta negativado */}
+        {negativado && (
+          <div className="rounded-md border border-red-400 bg-red-50 p-3 text-sm text-red-800 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            Cliente negativado — apenas pagamento à vista disponível.
+          </div>
+        )}
 
         {alertaMesmoDia && (
           <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive flex items-center gap-2">
@@ -197,29 +377,52 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           </div>
         )}
 
-        {/* Linha 2: Perfil + Tabela */}
+        {/* Razão social */}
+        <div className="space-y-1.5">
+          <Label className="text-base font-semibold">Razão social *</Label>
+          <Input
+            value={value.razao_social}
+            onChange={(e) => set("razao_social", e.target.value)}
+            placeholder="Nome empresarial"
+            className="h-11 text-base"
+          />
+        </div>
+
+        {/* Perfil + Tabela (read-only quando cliente encontrado) */}
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-1.5">
-            <Label className="text-base font-semibold">Perfil do cliente *</Label>
-            <Select value={value.perfil_cliente} onValueChange={(v) => set("perfil_cliente", v)}>
-              <SelectTrigger className="h-11 text-base"><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>
-                {PERFIS_CLIENTE.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Label className="text-base font-semibold">
+              Perfil do cliente *
+              {cnpjStatus === "encontrado" && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">(definido pelo cadastro)</span>
+              )}
+            </Label>
+            <Input
+              value={value.perfil_cliente}
+              readOnly
+              disabled={cnpjStatus === "encontrado"}
+              placeholder="Definido pelo faturamento"
+              className="h-11 text-base"
+            />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-base font-semibold">Tabela de preço *</Label>
-            <Select value={value.tabela_preco} onValueChange={(v) => set("tabela_preco", v)}>
-              <SelectTrigger className="h-11 text-base"><SelectValue placeholder="Selecione" /></SelectTrigger>
-              <SelectContent>
-                {TABELAS_PRECO.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <Label className="text-base font-semibold">
+              Tabela de preço *
+              {cnpjStatus === "encontrado" && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">(definido pelo cadastro)</span>
+              )}
+            </Label>
+            <Input
+              value={value.tabela_preco}
+              readOnly
+              disabled={cnpjStatus === "encontrado"}
+              placeholder="Definido pelo faturamento"
+              className="h-11 text-base"
+            />
           </div>
         </div>
 
-        {/* Linha 3: Cidade + UF */}
+        {/* Cidade + UF */}
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-base font-semibold">Cidade</Label>
@@ -240,7 +443,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           </div>
         </div>
 
-        {/* Linha 4: CEP + Comprador */}
+        {/* CEP + Comprador */}
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-base font-semibold">CEP</Label>
@@ -262,7 +465,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           </div>
         </div>
 
-        {/* Linha 5: Tipo + Condição de pagamento */}
+        {/* Tipo + Condição de pagamento */}
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-base font-semibold">Tipo *</Label>
@@ -276,16 +479,21 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           </div>
           <div className="space-y-1.5">
             <Label className="text-base font-semibold">Condição de pagamento</Label>
-            <Input
+            <Select
               value={value.cond_pagamento}
-              onChange={(e) => set("cond_pagamento", e.target.value)}
-              placeholder="Ex: 30/60/90 dias"
-              className="h-11 text-base"
-            />
+              onValueChange={(v) => set("cond_pagamento", v)}
+            >
+              <SelectTrigger className="h-11 text-base">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                {condOpcoes.map((op) => <SelectItem key={op} value={op}>{op}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
-        {/* Linha 6: Código do cliente + Aceita saldo */}
+        {/* Código do cliente + Aceita saldo */}
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-base font-semibold">Código do cliente</Label>
@@ -305,7 +513,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           </div>
         </div>
 
-        {/* Linha 7: Agendamento */}
+        {/* Agendamento */}
         <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-3">
           <Switch checked={value.agendamento} onCheckedChange={(c) => set("agendamento", c)} />
           <div>

@@ -15,6 +15,8 @@ import MeuPainel from "./pages/MeuPainel";
 import MeusClientes from "./pages/MeusClientes";
 import Faturamento from "./pages/Faturamento";
 import Formularios from "./pages/admin/Formularios";
+import Equipe from "./pages/admin/Equipe";
+import Metas from "./pages/admin/Metas";
 import Dashboard from "./pages/Dashboard";
 
 const queryClient = new QueryClient();
@@ -30,14 +32,19 @@ const App = () => (
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
 
-            {/* Admin */}
+            {/* Admin — tem acesso a tudo */}
             <Route element={<ProtectedRoute allow={["admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<Dashboard />} />
-              <Route path="/pedidos" element={<PlaceholderPage title="Pedidos" />} />
-              <Route path="/vendedores" element={<PlaceholderPage title="Vendedores" />} />
-              <Route path="/produtos" element={<PlaceholderPage title="Produtos" />} />
-              <Route path="/metas" element={<PlaceholderPage title="Metas" />} />
+              <Route path="/admin/equipe" element={<Equipe />} />
+              <Route path="/admin/metas" element={<Metas />} />
               <Route path="/admin/formularios" element={<Formularios />} />
+              {/* rotas de vendedor acessíveis ao admin */}
+              <Route path="/meu-painel" element={<MeuPainel />} />
+              <Route path="/novo-pedido" element={<NovoPedido />} />
+              <Route path="/meus-pedidos" element={<MeusPedidos />} />
+              <Route path="/meus-clientes" element={<MeusClientes />} />
+              {/* rota de faturamento acessível ao admin */}
+              <Route path="/faturamento" element={<Faturamento />} />
             </Route>
 
             {/* Vendedor */}
@@ -51,12 +58,16 @@ const App = () => (
             {/* Faturamento */}
             <Route element={<ProtectedRoute allow={["faturamento"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/faturamento" element={<Faturamento />} />
-              <Route path="/faturamento/todos" element={<Faturamento />} />
             </Route>
 
             {/* Logistica */}
             <Route element={<ProtectedRoute allow={["logistica"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/logistica" element={<PlaceholderPage title="Painel de Entregas" />} />
+            </Route>
+
+            {/* Trade */}
+            <Route element={<ProtectedRoute allow={["trade"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/trade" element={<PlaceholderPage title="Painel Trade" />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/format";
-import { Loader2, FileSpreadsheet, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle } from "lucide-react";
+import { Loader2, FileSpreadsheet, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2 } from "lucide-react";
 import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { exportarPedidoExcel } from "@/lib/excel";
@@ -117,7 +117,12 @@ export default function Faturamento() {
   const [nfData, setNfData] = useState<{ numero: string; rastreio: string; obs: string; file: File | null }>({
     numero: "", rastreio: "", obs: "", file: null,
   });
+  const [itensQtd, setItensQtd] = useState<Record<number, number>>({});
   const [submetendoNf, setSubmetendoNf] = useState(false);
+
+  // Dialog excluir
+  const [excluirTarget, setExcluirTarget] = useState<PedidoFat | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const carregar = useCallback(() => setRefreshKey((k) => k + 1), []);
   usePullToRefresh(carregar);
@@ -312,6 +317,20 @@ export default function Faturamento() {
   const abrirFaturarDialog = (p: PedidoFat) => {
     setFaturarDialog(p);
     setNfData({ numero: "", rastreio: "", obs: "", file: null });
+    const qtds: Record<number, number> = {};
+    p.itens.forEach((item, idx) => { qtds[idx] = item.quantidade; });
+    setItensQtd(qtds);
+  };
+
+  const excluirPedido = async () => {
+    if (!excluirTarget) return;
+    setExcluindo(true);
+    const { error } = await supabase.from("pedidos").delete().eq("id", excluirTarget.id);
+    setExcluindo(false);
+    if (error) { toast.error("Erro ao excluir: " + error.message); return; }
+    toast.success(`Pedido #${excluirTarget.numero_pedido} excluído`);
+    setExcluirTarget(null);
+    setRefreshKey((k) => k + 1);
   };
 
   const confirmarFaturamento = async () => {
@@ -469,6 +488,18 @@ export default function Faturamento() {
             Cancelar
           </Button>
         )}
+        {["faturado", "devolvido", "cancelado"].includes(p.status) && (
+          <Button size="sm" variant="destructive"
+            onClick={wrap((e) => { e.stopPropagation(); setExcluirTarget(p); })}>
+            <Trash2 className="h-3 w-3 mr-1" />
+            Excluir
+          </Button>
+        )}
+        <Button size="sm" variant="outline"
+          onClick={wrap((e) => { e.stopPropagation(); setDetalhesId(p.id); setDetalhesOpen(true); })}
+          title="Ver detalhes">
+          <Eye className="h-3 w-3" />
+        </Button>
         <Button size="sm" variant="outline" disabled={exportando === p.id}
           onClick={(e) => handleExcel(p, e)} title="Exportar Excel">
           {exportando === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileSpreadsheet className="h-3 w-3" />}
@@ -744,11 +775,51 @@ export default function Faturamento() {
 
       {/* Dialog: faturar com NF */}
       <Dialog open={!!faturarDialog} onOpenChange={(o) => !o && setFaturarDialog(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Faturar pedido #{faturarDialog?.numero_pedido}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            {/* Itens do pedido */}
+            <div className="space-y-1.5">
+              <Label>Itens a faturar</Label>
+              <div className="rounded-md border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left px-3 py-2">Produto</th>
+                      <th className="text-center px-3 py-2 w-16">Pedido</th>
+                      <th className="text-center px-3 py-2 w-24">Faturar</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(faturarDialog?.itens ?? []).map((item, idx) => (
+                      <tr key={idx} className="border-b last:border-0">
+                        <td className="px-3 py-2">
+                          <div className="font-medium">{item.nome}</div>
+                          <div className="text-xs text-muted-foreground">{item.codigo}</div>
+                        </td>
+                        <td className="text-center px-3 py-2 text-muted-foreground">{item.quantidade}</td>
+                        <td className="px-3 py-2">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={item.quantidade}
+                            value={itensQtd[idx] ?? item.quantidade}
+                            onChange={(e) => {
+                              const v = Math.max(0, Math.min(item.quantidade, Number(e.target.value) || 0));
+                              setItensQtd((prev) => ({ ...prev, [idx]: v }));
+                            }}
+                            className="h-7 w-20 text-sm text-center mx-auto block"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               <Label>Número da NF *</Label>
               <Input
@@ -788,6 +859,25 @@ export default function Faturamento() {
             <Button onClick={confirmarFaturamento} disabled={submetendoNf || !nfData.numero.trim()}>
               {submetendoNf && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Confirmar faturamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: excluir pedido */}
+      <Dialog open={!!excluirTarget} onOpenChange={(o) => !o && setExcluirTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Excluir pedido #{excluirTarget?.numero_pedido}?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground py-2">
+            Esta ação é irreversível. O pedido e todos os seus itens serão removidos permanentemente.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExcluirTarget(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={excluirPedido} disabled={excluindo}>
+              {excluindo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Excluir permanentemente
             </Button>
           </DialogFooter>
         </DialogContent>

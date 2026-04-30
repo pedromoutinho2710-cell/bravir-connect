@@ -1,9 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
-  ShoppingCart,
   Users,
-  Package,
   Target,
   ClipboardList,
   PlusCircle,
@@ -11,22 +9,42 @@ import {
   Truck,
   LogOut,
   FileStack,
+  UserCog,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 
 type Item = { title: string; url: string; icon: typeof LayoutDashboard };
+type Section = { label: string; items: Item[] };
 
-const MENU: Record<AppRole, Item[]> = {
-  admin: [
-    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-    { title: "Pedidos", url: "/pedidos", icon: ShoppingCart },
-    { title: "Vendedores", url: "/vendedores", icon: Users },
-    { title: "Produtos", url: "/produtos", icon: Package },
-    { title: "Metas", url: "/metas", icon: Target },
-    { title: "Formulários", url: "/admin/formularios", icon: FileStack },
-  ],
+const ADMIN_SECTIONS: Section[] = [
+  {
+    label: "Admin",
+    items: [
+      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+      { title: "Equipe", url: "/admin/equipe", icon: UserCog },
+      { title: "Metas", url: "/admin/metas", icon: Target },
+      { title: "Formulários", url: "/admin/formularios", icon: FileStack },
+    ],
+  },
+  {
+    label: "Vendas",
+    items: [
+      { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
+      { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
+      { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
+    ],
+  },
+  {
+    label: "Faturamento",
+    items: [
+      { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
+    ],
+  },
+];
+
+const FLAT_MENU: Partial<Record<AppRole, Item[]>> = {
   vendedor: [
     { title: "Meu Painel", url: "/meu-painel", icon: LayoutDashboard },
     { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
@@ -35,18 +53,35 @@ const MENU: Record<AppRole, Item[]> = {
   ],
   faturamento: [
     { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
-    { title: "Todos os Pedidos", url: "/faturamento/todos", icon: ClipboardList },
   ],
   logistica: [
     { title: "Painel de Entregas", url: "/logistica", icon: Truck },
   ],
+  trade: [],
 };
 
 type Props = { onNavigate: () => void };
 
 export function MobileNav({ onNavigate }: Props) {
   const { role, user, fullName, signOut } = useAuth();
-  const items = role ? MENU[role] : [];
+
+  const navLink = (item: Item) => (
+    <NavLink
+      key={item.url}
+      to={item.url}
+      onClick={onNavigate}
+      className={({ isActive }) =>
+        `flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
+            : "text-sidebar-foreground hover:bg-sidebar-accent/60"
+        }`
+      }
+    >
+      <item.icon className="h-4 w-4 flex-shrink-0" />
+      {item.title}
+    </NavLink>
+  );
 
   return (
     <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground">
@@ -60,23 +95,18 @@ export function MobileNav({ onNavigate }: Props) {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-        {items.map((item) => (
-          <NavLink
-            key={item.url}
-            to={item.url}
-            onClick={onNavigate}
-            className={({ isActive }) =>
-              `flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-semibold"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent/60"
-              }`
-            }
-          >
-            <item.icon className="h-4 w-4 flex-shrink-0" />
-            {item.title}
-          </NavLink>
-        ))}
+        {role === "admin" ? (
+          ADMIN_SECTIONS.map((section) => (
+            <div key={section.label} className="mb-3">
+              <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-sidebar-foreground/50 font-semibold">
+                {section.label}
+              </div>
+              {section.items.map(navLink)}
+            </div>
+          ))
+        ) : (
+          (role ? FLAT_MENU[role] ?? [] : []).map(navLink)
+        )}
       </nav>
 
       {/* Footer */}

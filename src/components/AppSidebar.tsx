@@ -1,9 +1,7 @@
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
-  ShoppingCart,
   Users,
-  Package,
   Target,
   ClipboardList,
   PlusCircle,
@@ -11,6 +9,7 @@ import {
   Truck,
   LogOut,
   FileStack,
+  UserCog,
 } from "lucide-react";
 import {
   Sidebar,
@@ -29,16 +28,35 @@ import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 
 type Item = { title: string; url: string; icon: typeof LayoutDashboard };
+type Section = { label: string; items: Item[] };
 
-const MENU: Record<AppRole, Item[]> = {
-  admin: [
-    { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-    { title: "Pedidos", url: "/pedidos", icon: ShoppingCart },
-    { title: "Vendedores", url: "/vendedores", icon: Users },
-    { title: "Produtos", url: "/produtos", icon: Package },
-    { title: "Metas", url: "/metas", icon: Target },
-    { title: "Formulários", url: "/admin/formularios", icon: FileStack },
-  ],
+const ADMIN_SECTIONS: Section[] = [
+  {
+    label: "Admin",
+    items: [
+      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+      { title: "Equipe", url: "/admin/equipe", icon: UserCog },
+      { title: "Metas", url: "/admin/metas", icon: Target },
+      { title: "Formulários", url: "/admin/formularios", icon: FileStack },
+    ],
+  },
+  {
+    label: "Vendas",
+    items: [
+      { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
+      { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
+      { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
+    ],
+  },
+  {
+    label: "Faturamento",
+    items: [
+      { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
+    ],
+  },
+];
+
+const FLAT_MENU: Partial<Record<AppRole, Item[]>> = {
   vendedor: [
     { title: "Meu Painel", url: "/meu-painel", icon: LayoutDashboard },
     { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
@@ -47,17 +65,34 @@ const MENU: Record<AppRole, Item[]> = {
   ],
   faturamento: [
     { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
-    { title: "Todos os Pedidos", url: "/faturamento/todos", icon: ClipboardList },
   ],
   logistica: [
     { title: "Painel de Entregas", url: "/logistica", icon: Truck },
   ],
+  trade: [],
 };
+
+function NavItem({ item, pathname }: { item: Item; pathname: string }) {
+  const active = pathname === item.url;
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        asChild
+        isActive={active}
+        className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold"
+      >
+        <NavLink to={item.url} className="flex items-center gap-3">
+          <item.icon className="h-4 w-4" />
+          <span>{item.title}</span>
+        </NavLink>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
 
 export function AppSidebar() {
   const { role, user, signOut } = useAuth();
   const { pathname } = useLocation();
-  const items = role ? MENU[role] : [];
 
   return (
     <Sidebar collapsible="icon">
@@ -73,30 +108,31 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel className="text-sidebar-foreground/60">Menu</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {items.map((item) => {
-                const active = pathname === item.url;
-                return (
-                  <SidebarMenuItem key={item.url}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={active}
-                      className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold"
-                    >
-                      <NavLink to={item.url} className="flex items-center gap-3">
-                        <item.icon className="h-4 w-4" />
-                        <span>{item.title}</span>
-                      </NavLink>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        {role === "admin" ? (
+          ADMIN_SECTIONS.map((section) => (
+            <SidebarGroup key={section.label}>
+              <SidebarGroupLabel className="text-sidebar-foreground/60">{section.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {section.items.map((item) => (
+                    <NavItem key={item.url} item={item} pathname={pathname} />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))
+        ) : (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-sidebar-foreground/60">Menu</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {(role ? FLAT_MENU[role] ?? [] : []).map((item) => (
+                  <NavItem key={item.url} item={item} pathname={pathname} />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-3">
