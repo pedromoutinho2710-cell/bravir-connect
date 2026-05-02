@@ -32,35 +32,28 @@ const App = () => (
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
 
-            {/* Admin — tem acesso a tudo */}
+            {/* Rotas exclusivas do admin */}
             <Route element={<ProtectedRoute allow={["admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/admin/equipe" element={<Equipe />} />
               <Route path="/admin/metas" element={<Metas />} />
               <Route path="/admin/formularios" element={<Formularios />} />
-              {/* rotas de vendedor acessíveis ao admin */}
-              <Route path="/meu-painel" element={<MeuPainel />} />
-              <Route path="/novo-pedido" element={<NovoPedido />} />
-              <Route path="/meus-pedidos" element={<MeusPedidos />} />
-              <Route path="/meus-clientes" element={<MeusClientes />} />
-              {/* rota de faturamento acessível ao admin */}
-              <Route path="/faturamento" element={<Faturamento />} />
             </Route>
 
-            {/* Vendedor */}
-            <Route element={<ProtectedRoute allow={["vendedor"]}><AppLayout /></ProtectedRoute>}>
+            {/* Rotas de vendedor — acessíveis por vendedor e admin */}
+            <Route element={<ProtectedRoute allow={["vendedor", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/meu-painel" element={<MeuPainel />} />
               <Route path="/novo-pedido" element={<NovoPedido />} />
               <Route path="/meus-pedidos" element={<MeusPedidos />} />
               <Route path="/meus-clientes" element={<MeusClientes />} />
             </Route>
 
-            {/* Faturamento */}
-            <Route element={<ProtectedRoute allow={["faturamento"]}><AppLayout /></ProtectedRoute>}>
+            {/* Rotas de faturamento — acessíveis por faturamento e admin */}
+            <Route element={<ProtectedRoute allow={["faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/faturamento" element={<Faturamento />} />
             </Route>
 
-            {/* Logistica */}
+            {/* Logística */}
             <Route element={<ProtectedRoute allow={["logistica"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/logistica" element={<PlaceholderPage title="Painel de Entregas" />} />
             </Route>
