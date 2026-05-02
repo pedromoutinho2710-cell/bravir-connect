@@ -17,39 +17,72 @@ export type Database = {
       clientes: {
         Row: {
           aceita_saldo: boolean
+          bairro: string | null
           cep: string | null
           cidade: string | null
           cnpj: string
           codigo_cliente: string | null
           comprador: string | null
           created_at: string
+          email: string | null
           id: string
+          inscricao_estadual: string | null
+          negativado: boolean | null
+          numero: string | null
+          perfil_cliente: string | null
           razao_social: string
+          rua: string | null
+          status: string | null
+          tabela_preco: string | null
+          telefone: string | null
           uf: string | null
+          vendedor_id: string | null
         }
         Insert: {
           aceita_saldo?: boolean
+          bairro?: string | null
           cep?: string | null
           cidade?: string | null
           cnpj: string
           codigo_cliente?: string | null
           comprador?: string | null
           created_at?: string
+          email?: string | null
           id?: string
+          inscricao_estadual?: string | null
+          negativado?: boolean | null
+          numero?: string | null
+          perfil_cliente?: string | null
           razao_social: string
+          rua?: string | null
+          status?: string | null
+          tabela_preco?: string | null
+          telefone?: string | null
           uf?: string | null
+          vendedor_id?: string | null
         }
         Update: {
           aceita_saldo?: boolean
+          bairro?: string | null
           cep?: string | null
           cidade?: string | null
           cnpj?: string
           codigo_cliente?: string | null
           comprador?: string | null
           created_at?: string
+          email?: string | null
           id?: string
+          inscricao_estadual?: string | null
+          negativado?: boolean | null
+          numero?: string | null
+          perfil_cliente?: string | null
           razao_social?: string
+          rua?: string | null
+          status?: string | null
+          tabela_preco?: string | null
+          telefone?: string | null
           uf?: string | null
+          vendedor_id?: string | null
         }
         Relationships: []
       }

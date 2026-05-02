@@ -91,11 +91,10 @@ export default function Trade() {
 
     if (modalCliente.vendedor_id) {
       await supabase.from("notificacoes").insert({
-        user_id: modalCliente.vendedor_id,
-        titulo: "Cliente ativado",
+        destinatario_id: modalCliente.vendedor_id,
+        destinatario_role: "vendedor",
         mensagem: `${modalCliente.razao_social} foi ativado e já pode receber pedidos`,
         tipo: "cliente_ativo",
-        referencia_id: modalCliente.id,
       });
     }
 

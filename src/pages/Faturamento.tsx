@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -67,6 +68,7 @@ const STATUS_LABEL: Record<string, string> = {
   aguardando_faturamento: "Aguardando",
   em_faturamento: "Em faturamento",
   faturado: "Faturado",
+  parcialmente_faturado: "Parc. faturado",
   devolvido: "Devolvido",
   cancelado: "Cancelado",
 };
@@ -75,6 +77,7 @@ const STATUS_COLOR: Record<string, string> = {
   aguardando_faturamento: "bg-yellow-100 text-yellow-800 border-yellow-300",
   em_faturamento: "bg-blue-100 text-blue-800 border-blue-300",
   faturado: "bg-green-100 text-green-800 border-green-300",
+  parcialmente_faturado: "bg-teal-100 text-teal-800 border-teal-300",
   devolvido: "bg-orange-100 text-orange-800 border-orange-300",
   cancelado: "bg-red-100 text-red-800 border-red-300",
 };
@@ -114,11 +117,12 @@ export default function Faturamento() {
   const [detalhesOpen, setDetalhesOpen] = useState(false);
 
   // Dialog faturar NF
+  type ItemFat = { marcar: boolean; qtd: number };
   const [faturarDialog, setFaturarDialog] = useState<PedidoFat | null>(null);
   const [nfData, setNfData] = useState<{ numero: string; rastreio: string; obs: string; file: File | null }>({
     numero: "", rastreio: "", obs: "", file: null,
   });
-  const [itensQtd, setItensQtd] = useState<Record<number, number>>({});
+  const [itensFat, setItensFat] = useState<Record<number, ItemFat>>({});
   const [submetendoNf, setSubmetendoNf] = useState(false);
 
   // Dialog excluir
@@ -355,22 +359,11 @@ export default function Faturamento() {
 
     if (error) { toast.error("Erro: " + error.message); setCadastrando(false); return; }
 
-    const { data: tradeUsers } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "trade");
-
-    if (tradeUsers && tradeUsers.length > 0) {
-      await supabase.from("notificacoes").insert(
-        tradeUsers.map((u) => ({
-          user_id: u.user_id,
-          titulo: "Cliente aguardando configuração",
-          mensagem: `${cadastrarDialog.razao_social} foi cadastrado no Sankhya e aguarda configuração de perfil`,
-          tipo: "cliente_aguardando_trade",
-          referencia_id: cadastrarDialog.id,
-        }))
-      );
-    }
+    await supabase.from("notificacoes").insert({
+      destinatario_role: "trade",
+      mensagem: `${cadastrarDialog.razao_social} foi cadastrado no Sankhya e aguarda configuração de perfil`,
+      tipo: "cliente_aguardando_trade",
+    });
 
     toast.success(`${cadastrarDialog.razao_social} marcado como cadastrado no Sankhya`);
     setCadastrarDialog(null);
@@ -381,9 +374,9 @@ export default function Faturamento() {
   const abrirFaturarDialog = (p: PedidoFat) => {
     setFaturarDialog(p);
     setNfData({ numero: "", rastreio: "", obs: "", file: null });
-    const qtds: Record<number, number> = {};
-    p.itens.forEach((item, idx) => { qtds[idx] = item.quantidade; });
-    setItensQtd(qtds);
+    const fat: Record<number, ItemFat> = {};
+    p.itens.forEach((item, idx) => { fat[idx] = { marcar: true, qtd: item.quantidade }; });
+    setItensFat(fat);
   };
 
   const excluirPedido = async () => {
@@ -399,11 +392,17 @@ export default function Faturamento() {
 
   const confirmarFaturamento = async () => {
     if (!faturarDialog) return;
-    if (!nfData.numero.trim()) { toast.error("Informe o número da NF"); return; }
+
+    const marcados = Object.values(itensFat).filter((v) => v.marcar);
+    if (marcados.length === 0) {
+      toast.error("Selecione ao menos um produto para faturar");
+      return;
+    }
+
     setSubmetendoNf(true);
 
     let nf_pdf_url: string | null = null;
-    if (nfData.file) {
+    if (nfData.file && nfData.numero.trim()) {
       const path = `${faturarDialog.id}/${nfData.numero.trim()}.pdf`;
       const { data: upData, error: upErr } = await supabase.storage
         .from("notas_fiscais")
@@ -416,11 +415,14 @@ export default function Faturamento() {
       nf_pdf_url = upData?.path ?? null;
     }
 
+    const total = faturarDialog.itens.length;
+    const novoStatus = marcados.length === total ? "faturado" : "parcialmente_faturado";
+
     const { error } = await supabase
       .from("pedidos")
       .update({
-        status: "faturado",
-        nota_fiscal: nfData.numero.trim(),
+        status: novoStatus,
+        nota_fiscal: nfData.numero.trim() || null,
         nf_pdf_url,
         rastreio: nfData.rastreio.trim() || null,
         obs_faturamento: nfData.obs.trim() || null,
@@ -430,7 +432,11 @@ export default function Faturamento() {
 
     setSubmetendoNf(false);
     if (error) { toast.error("Erro ao faturar: " + error.message); return; }
-    toast.success(`Pedido #${faturarDialog.numero_pedido} faturado com NF ${nfData.numero}`);
+
+    const msg = novoStatus === "faturado"
+      ? `Pedido #${faturarDialog.numero_pedido} faturado completamente`
+      : `Pedido #${faturarDialog.numero_pedido} parcialmente faturado (${marcados.length}/${total} produtos)`;
+    toast.success(msg);
     setFaturarDialog(null);
     setRefreshKey((k) => k + 1);
   };
@@ -515,7 +521,7 @@ export default function Faturamento() {
   };
 
   const podeCancelar = (status: string) =>
-    status === "aguardando_faturamento" || status === "em_faturamento";
+    status === "aguardando_faturamento" || status === "em_faturamento" || status === "parcialmente_faturado";
 
   function AcoesPedido({ p, stopProp = true }: { p: PedidoFat; stopProp?: boolean }) {
     const wrap = (fn: (e: React.MouseEvent) => void) => (e: React.MouseEvent) => {
@@ -533,17 +539,19 @@ export default function Faturamento() {
         {(p.status === "aguardando_faturamento" || p.status === "em_faturamento") && (
           <Button size="sm" variant="outline" onClick={(e) => abrirEditar(p, e)}>Editar</Button>
         )}
-        {p.status === "em_faturamento" && (
+        {(p.status === "em_faturamento" || p.status === "parcialmente_faturado") && (
           <>
             <Button size="sm" disabled={atualizando === p.id}
               onClick={wrap((e) => { e.stopPropagation(); abrirFaturarDialog(p); })}>
               <FileCheck className="h-3 w-3 mr-1" />
               Faturar
             </Button>
-            <Button size="sm" variant="outline"
-              onClick={wrap((e) => { e.stopPropagation(); abrirMotivo("devolver", p.id); })}>
-              Devolver
-            </Button>
+            {p.status === "em_faturamento" && (
+              <Button size="sm" variant="outline"
+                onClick={wrap((e) => { e.stopPropagation(); abrirMotivo("devolver", p.id); })}>
+                Devolver
+              </Button>
+            )}
           </>
         )}
         {podeCancelar(p.status) && (
@@ -914,50 +922,116 @@ export default function Faturamento() {
           <div className="space-y-4 py-2">
             {/* Itens do pedido */}
             <div className="space-y-1.5">
-              <Label>Itens a faturar</Label>
+              <div className="flex items-center justify-between">
+                <Label>Produtos a faturar</Label>
+                {(() => {
+                  const total = faturarDialog?.itens.length ?? 0;
+                  const marcados = Object.values(itensFat).filter((v) => v.marcar).length;
+                  return (
+                    <span className="text-xs text-muted-foreground">
+                      {marcados}/{total} selecionados
+                      {marcados > 0 && marcados < total && (
+                        <span className="ml-2 text-teal-700 font-medium">— faturamento parcial</span>
+                      )}
+                    </span>
+                  );
+                })()}
+              </div>
               <div className="rounded-md border overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-muted/50">
+                      <th className="px-3 py-2 w-10">
+                        <Checkbox
+                          checked={
+                            Object.values(itensFat).length > 0 &&
+                            Object.values(itensFat).every((v) => v.marcar)
+                          }
+                          onCheckedChange={(c) =>
+                            setItensFat((prev) => {
+                              const next = { ...prev };
+                              Object.keys(next).forEach((k) => {
+                                next[Number(k)] = { ...next[Number(k)], marcar: !!c };
+                              });
+                              return next;
+                            })
+                          }
+                        />
+                      </th>
                       <th className="text-left px-3 py-2">Produto</th>
                       <th className="text-center px-3 py-2 w-16">Pedido</th>
-                      <th className="text-center px-3 py-2 w-24">Faturar</th>
+                      <th className="text-center px-3 py-2 w-24">Qtd. faturar</th>
+                      <th className="text-center px-3 py-2 w-24">Status</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(faturarDialog?.itens ?? []).map((item, idx) => (
-                      <tr key={idx} className="border-b last:border-0">
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{item.nome}</div>
-                          <div className="text-xs text-muted-foreground">{item.codigo}</div>
-                        </td>
-                        <td className="text-center px-3 py-2 text-muted-foreground">{item.quantidade}</td>
-                        <td className="px-3 py-2">
-                          <Input
-                            type="number"
-                            min={0}
-                            max={item.quantidade}
-                            value={itensQtd[idx] ?? item.quantidade}
-                            onChange={(e) => {
-                              const v = Math.max(0, Math.min(item.quantidade, Number(e.target.value) || 0));
-                              setItensQtd((prev) => ({ ...prev, [idx]: v }));
-                            }}
-                            className="h-7 w-20 text-sm text-center mx-auto block"
-                          />
-                        </td>
-                      </tr>
-                    ))}
+                    {(faturarDialog?.itens ?? []).map((item, idx) => {
+                      const fat = itensFat[idx] ?? { marcar: true, qtd: item.quantidade };
+                      return (
+                        <tr
+                          key={idx}
+                          className={`border-b last:border-0 transition-opacity ${!fat.marcar ? "opacity-40" : ""}`}
+                        >
+                          <td className="px-3 py-2">
+                            <Checkbox
+                              checked={fat.marcar}
+                              onCheckedChange={(c) =>
+                                setItensFat((prev) => ({
+                                  ...prev,
+                                  [idx]: { ...prev[idx], marcar: !!c },
+                                }))
+                              }
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="font-medium">{item.nome}</div>
+                            <div className="text-xs text-muted-foreground">{item.codigo}</div>
+                          </td>
+                          <td className="text-center px-3 py-2 text-muted-foreground">
+                            {item.quantidade}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input
+                              type="number"
+                              min={1}
+                              max={item.quantidade}
+                              value={fat.qtd}
+                              disabled={!fat.marcar}
+                              onChange={(e) => {
+                                const v = Math.max(1, Math.min(item.quantidade, Number(e.target.value) || 1));
+                                setItensFat((prev) => ({
+                                  ...prev,
+                                  [idx]: { ...prev[idx], qtd: v },
+                                }));
+                              }}
+                              className="h-7 w-20 text-sm text-center mx-auto block"
+                            />
+                          </td>
+                          <td className="text-center px-3 py-2">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                                fat.marcar
+                                  ? "bg-green-100 text-green-800"
+                                  : "bg-gray-100 text-gray-500"
+                              }`}
+                            >
+                              {fat.marcar ? "Faturar" : "Pendente"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label>Número da NF *</Label>
+              <Label>Número da NF</Label>
               <Input
                 value={nfData.numero}
                 onChange={(e) => setNfData((d) => ({ ...d, numero: e.target.value }))}
-                placeholder="Ex: 001234"
+                placeholder="Ex: 001234 (opcional)"
               />
             </div>
             <div className="space-y-1.5">
@@ -973,13 +1047,13 @@ export default function Faturamento() {
               <Input
                 value={nfData.rastreio}
                 onChange={(e) => setNfData((d) => ({ ...d, rastreio: e.target.value }))}
-                placeholder="Ex: BR123456789"
+                placeholder="Ex: BR123456789 (opcional)"
               />
             </div>
             <div className="space-y-1.5">
               <Label>Observações</Label>
               <Textarea
-                rows={3}
+                rows={2}
                 value={nfData.obs}
                 onChange={(e) => setNfData((d) => ({ ...d, obs: e.target.value }))}
                 placeholder="Informações adicionais do faturamento…"
@@ -988,9 +1062,15 @@ export default function Faturamento() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFaturarDialog(null)}>Voltar</Button>
-            <Button onClick={confirmarFaturamento} disabled={submetendoNf || !nfData.numero.trim()}>
+            <Button onClick={confirmarFaturamento} disabled={submetendoNf}>
               {submetendoNf && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Confirmar faturamento
+              {(() => {
+                const marcados = Object.values(itensFat).filter((v) => v.marcar).length;
+                const total = faturarDialog?.itens.length ?? 0;
+                if (marcados === 0) return "Selecione produtos";
+                if (marcados === total) return "Confirmar faturamento";
+                return `Faturar ${marcados} de ${total} produtos`;
+              })()}
             </Button>
           </DialogFooter>
         </DialogContent>

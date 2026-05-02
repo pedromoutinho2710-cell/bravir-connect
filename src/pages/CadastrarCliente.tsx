@@ -54,47 +54,34 @@ export default function CadastrarCliente() {
 
     setEnviando(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const payload: any = {
-        cnpj: cnpjDigits,
-        razao_social: razaoSocial.trim(),
-        cidade: cidade.trim() || null,
-        uf: uf || null,
-        cep: onlyDigits(cep) || null,
-        status: "pendente_cadastro",
-        vendedor_id: user.id,
-        inscricao_estadual: isento ? "Isento" : inscricaoEstadual.trim(),
-      };
-      if (email.trim()) payload.email = email.trim();
-      if (telefone) payload.telefone = onlyDigits(telefone);
-      if (rua.trim()) payload.rua = rua.trim();
-      if (numero.trim()) payload.numero = numero.trim();
-      if (bairro.trim()) payload.bairro = bairro.trim();
-
-      const { data: clienteData, error: clienteError } = await supabase
+      const { error: clienteError } = await supabase
         .from("clientes")
-        .insert(payload)
-        .select("id")
-        .single();
+        .insert({
+          cnpj: cnpjDigits,
+          razao_social: razaoSocial.trim(),
+          cidade: cidade.trim() || null,
+          uf: uf || null,
+          cep: onlyDigits(cep) || null,
+          status: "pendente_cadastro",
+          vendedor_id: user.id,
+          inscricao_estadual: isento ? "Isento" : inscricaoEstadual.trim(),
+          email: email.trim() || null,
+          telefone: onlyDigits(telefone) || null,
+          rua: rua.trim() || null,
+          numero: numero.trim() || null,
+          bairro: bairro.trim() || null,
+        });
 
-      if (clienteError) { toast.error("Erro ao cadastrar: " + clienteError.message); return; }
-
-      const { data: fatUsers } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "faturamento");
-
-      if (fatUsers && fatUsers.length > 0) {
-        await supabase.from("notificacoes").insert(
-          fatUsers.map((u) => ({
-            user_id: u.user_id,
-            titulo: "Novo cliente para cadastrar",
-            mensagem: `${razaoSocial.trim()} (CNPJ: ${formatCNPJ(cnpjDigits)}) enviado para cadastro`,
-            tipo: "cliente_pendente",
-            referencia_id: clienteData.id,
-          }))
-        );
+      if (clienteError) {
+        toast.error("Erro ao cadastrar: " + clienteError.message);
+        return;
       }
+
+      await supabase.from("notificacoes").insert({
+        destinatario_role: "faturamento",
+        mensagem: `Novo cliente para cadastrar: ${razaoSocial.trim()} (CNPJ: ${formatCNPJ(cnpjDigits)})`,
+        tipo: "cliente_pendente",
+      });
 
       toast.success("Cliente enviado para cadastro pelo faturamento!");
       setCnpj(""); setRazaoSocial(""); setEmail(""); setTelefone("");
