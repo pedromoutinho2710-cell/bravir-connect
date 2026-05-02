@@ -21,6 +21,9 @@ import Metas from "./pages/admin/Metas";
 import Dashboard from "./pages/Dashboard";
 import Trade from "./pages/Trade";
 import TradeCampanhas from "./pages/TradeCampanhas";
+import FaturamentoClientesPendentes from "./pages/FaturamentoClientesPendentes";
+import PedidosAdmin from "./pages/admin/PedidosAdmin";
+import ClientesAdmin from "./pages/admin/ClientesAdmin";
 
 const queryClient = new QueryClient();
 
@@ -41,6 +44,8 @@ const App = () => (
               <Route path="/admin/equipe" element={<Equipe />} />
               <Route path="/admin/metas" element={<Metas />} />
               <Route path="/admin/formularios" element={<Formularios />} />
+              <Route path="/admin/pedidos" element={<PedidosAdmin />} />
+              <Route path="/admin/clientes" element={<ClientesAdmin />} />
             </Route>
 
             {/* Rotas de vendedor — acessíveis por vendedor e admin */}
@@ -55,6 +60,7 @@ const App = () => (
             {/* Rotas de faturamento — acessíveis por faturamento e admin */}
             <Route element={<ProtectedRoute allow={["faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/faturamento" element={<Faturamento />} />
+              <Route path="/faturamento/clientes-pendentes" element={<FaturamentoClientesPendentes />} />
             </Route>
 
             {/* Logística */}

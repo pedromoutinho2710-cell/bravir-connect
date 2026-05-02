@@ -35,27 +35,23 @@ type Section = { label: string; items: Item[] };
 
 const ADMIN_SECTIONS: Section[] = [
   {
-    label: "Admin",
+    label: "Visão Geral",
     items: [
       { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-      { title: "Equipe", url: "/admin/equipe", icon: UserCog },
-      { title: "Metas", url: "/admin/metas", icon: Target },
-      { title: "Formulários", url: "/admin/formularios", icon: FileStack },
     ],
   },
   {
     label: "Vendas",
     items: [
-      { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
-      { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
-      { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
-      { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
+      { title: "Pedidos", url: "/admin/pedidos", icon: ClipboardList },
+      { title: "Clientes", url: "/admin/clientes", icon: Users },
     ],
   },
   {
     label: "Faturamento",
     items: [
       { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
+      { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
     ],
   },
   {
@@ -63,6 +59,14 @@ const ADMIN_SECTIONS: Section[] = [
     items: [
       { title: "Clientes aguardando", url: "/trade", icon: Store },
       { title: "Campanhas", url: "/trade/campanhas", icon: Megaphone },
+    ],
+  },
+  {
+    label: "Administração",
+    items: [
+      { title: "Equipe", url: "/admin/equipe", icon: UserCog },
+      { title: "Metas", url: "/admin/metas", icon: Target },
+      { title: "Formulários", url: "/admin/formularios", icon: FileStack },
     ],
   },
 ];
@@ -77,6 +81,7 @@ const FLAT_MENU: Partial<Record<AppRole, Item[]>> = {
   ],
   faturamento: [
     { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
+    { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
   ],
   logistica: [
     { title: "Painel de Entregas", url: "/logistica", icon: Truck },

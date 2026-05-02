@@ -94,6 +94,7 @@ export default function Dashboard() {
   const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, totalPedidos: 0, pedidosAberto: 0, ticketMedio: 0 });
   const [metaTotal, setMetaTotal] = useState(0);
   const [fatMesAtual, setFatMesAtual] = useState(0);
+  const [pipelineTotal, setPipelineTotal] = useState(0);
   const [ranking, setRanking] = useState<RankingVendedor[]>([]);
   const [topSkus, setTopSkus] = useState<RankingSku[]>([]);
   const [statusCounts, setStatusCounts] = useState<StatusCount>({});
@@ -110,7 +111,7 @@ export default function Dashboard() {
 
     (async () => {
       try {
-        const [pedidosRes, metasRes, pedidosMesRes, agRes, emRes, fatRes, devRes, canRes] = await Promise.all([
+        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, agRes, emRes, fatRes, devRes, canRes] = await Promise.all([
           // Pedidos do período — base para KPIs, ranking e top SKUs
           supabase
             .from("pedidos")
@@ -131,6 +132,11 @@ export default function Dashboard() {
             .gte("data_pedido", mesInicio)
             .lte("data_pedido", mesFim)
             .not("status", "in", '("rascunho","cancelado")'),
+          // Pedidos em pipeline (aguardando + em_faturamento) para previsão do mês
+          supabase
+            .from("pedidos")
+            .select("id, itens_pedido(total_item)")
+            .in("status", ["aguardando_faturamento", "em_faturamento"]),
           // Contagens por status — histórico completo sem filtro de data
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "aguardando_faturamento"),
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "em_faturamento"),
@@ -169,6 +175,15 @@ export default function Dashboard() {
           0,
         );
         setFatMesAtual(fatMes);
+
+        // Pipeline total para previsão
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pipeline = (pipelineRes.data ?? []).reduce(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (s: number, p: any) => s + (p.itens_pedido ?? []).reduce((si: number, i: any) => si + Number(i.total_item), 0),
+          0,
+        );
+        setPipelineTotal(pipeline);
 
         // Contagens por status
         setStatusCounts({
@@ -259,6 +274,8 @@ export default function Dashboard() {
   }, [periodo]);
 
   const metaPct = metaTotal > 0 ? Math.min((fatMesAtual / metaTotal) * 100, 100) : 0;
+  const previsaoMes = fatMesAtual + pipelineTotal;
+  const previsaoPct = metaTotal > 0 ? Math.min((previsaoMes / metaTotal) * 100, 100) : 0;
 
   if (loading) {
     return (
@@ -333,6 +350,40 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Previsão do mês */}
+      {metaTotal > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium">Previsão do mês</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <div className="text-2xl font-bold">{formatBRL(previsaoMes)}</div>
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Meta: {formatBRL(metaTotal)}</span>
+                <span className="font-medium">{previsaoPct.toFixed(1)}% previsto</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-muted">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    previsaoPct >= 80 ? "" : previsaoPct >= 50 ? "bg-yellow-400" : "bg-red-500"
+                  }`}
+                  style={{
+                    width: `${previsaoPct}%`,
+                    ...(previsaoPct >= 80 ? { backgroundColor: "#1A6B3A" } : {}),
+                  }}
+                />
+              </div>
+              <div className="flex gap-4 text-xs text-muted-foreground">
+                <span>Faturado: {formatBRL(fatMesAtual)}</span>
+                <span>Pipeline: {formatBRL(pipelineTotal)}</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Meta geral da empresa */}
       <Card>

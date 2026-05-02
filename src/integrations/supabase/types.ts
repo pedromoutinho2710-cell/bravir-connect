@@ -17,6 +17,7 @@ export type Database = {
       clientes: {
         Row: {
           aceita_saldo: boolean
+          assumido_por: string | null
           bairro: string | null
           cep: string | null
           cidade: string | null
@@ -40,6 +41,7 @@ export type Database = {
         }
         Insert: {
           aceita_saldo?: boolean
+          assumido_por?: string | null
           bairro?: string | null
           cep?: string | null
           cidade?: string | null
@@ -63,6 +65,7 @@ export type Database = {
         }
         Update: {
           aceita_saldo?: boolean
+          assumido_por?: string | null
           bairro?: string | null
           cep?: string | null
           cidade?: string | null
@@ -384,22 +387,58 @@ export type Database = {
       }
       profiles: {
         Row: {
+          ativo: boolean | null
           created_at: string
           email: string
           full_name: string | null
           id: string
         }
         Insert: {
+          ativo?: boolean | null
           created_at?: string
           email: string
           full_name?: string | null
           id: string
         }
         Update: {
+          ativo?: boolean | null
           created_at?: string
           email?: string
           full_name?: string | null
           id?: string
+        }
+        Relationships: []
+      }
+      tarefas: {
+        Row: {
+          cliente_id: string | null
+          concluida: boolean
+          created_at: string
+          data_vencimento: string | null
+          descricao: string | null
+          id: string
+          titulo: string
+          vendedor_id: string | null
+        }
+        Insert: {
+          cliente_id?: string | null
+          concluida?: boolean
+          created_at?: string
+          data_vencimento?: string | null
+          descricao?: string | null
+          id?: string
+          titulo: string
+          vendedor_id?: string | null
+        }
+        Update: {
+          cliente_id?: string | null
+          concluida?: boolean
+          created_at?: string
+          data_vencimento?: string | null
+          descricao?: string | null
+          id?: string
+          titulo?: string
+          vendedor_id?: string | null
         }
         Relationships: []
       }

@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
-import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone } from "lucide-react";
+import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 
 type KPIs = {
@@ -26,6 +26,23 @@ type UltimoPedido = {
   razao_social: string;
   total: number;
   data_pedido: string;
+};
+
+type ClienteReativar = {
+  cliente_id: string;
+  razao_social: string;
+  ltv: number;
+  ultima_compra: string;
+  dias_sem_compra: number;
+};
+
+type TarefaDia = {
+  id: string;
+  titulo: string;
+  data_vencimento: string | null;
+  concluida: boolean;
+  cliente_id: string | null;
+  cliente_nome?: string;
 };
 
 type Campanha = {
@@ -55,6 +72,8 @@ export default function MeuPainel() {
   const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0 });
   const [ultimosPedidos, setUltimosPedidos] = useState<UltimoPedido[]>([]);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
+  const [clientesReativar, setClientesReativar] = useState<ClienteReativar[]>([]);
+  const [tarefasDia, setTarefasDia] = useState<TarefaDia[]>([]);
   const [loading, setLoading] = useState(true);
   const [baixandoTabela, setBaixandoTabela] = useState(false);
 
@@ -118,6 +137,65 @@ export default function MeuPainel() {
         .or(`data_fim.is.null,data_fim.gte.${hoje}`);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setCampanhas((campData ?? []) as any[]);
+
+      // Clientes para reativar (sem pedido há 30+ dias)
+      const limite30 = new Date(agora);
+      limite30.setDate(limite30.getDate() - 30);
+      const limite30Str = limite30.toISOString().slice(0, 10);
+      const { data: pedidosTodos } = await supabase
+        .from("pedidos")
+        .select("cliente_id, data_pedido, itens_pedido(total_item), clientes(razao_social)")
+        .eq("vendedor_id", user.id)
+        .not("status", "in", '("rascunho","cancelado")');
+
+      if (pedidosTodos) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const clienteMap = new Map<string, { razao_social: string; ltv: number; ultima_compra: string }>();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (pedidosTodos as any[]).forEach((p: any) => {
+          if (!p.cliente_id) return;
+          const entry = clienteMap.get(p.cliente_id) ?? {
+            razao_social: p.clientes?.razao_social ?? "—",
+            ltv: 0,
+            ultima_compra: p.data_pedido,
+          };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          entry.ltv += (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
+          if (p.data_pedido > entry.ultima_compra) entry.ultima_compra = p.data_pedido;
+          entry.razao_social = p.clientes?.razao_social ?? entry.razao_social;
+          clienteMap.set(p.cliente_id, entry);
+        });
+
+        const reativar: ClienteReativar[] = Array.from(clienteMap.entries())
+          .filter(([, v]) => v.ultima_compra < limite30Str)
+          .map(([cliente_id, v]) => {
+            const dias = Math.floor((agora.getTime() - new Date(v.ultima_compra).getTime()) / (1000 * 60 * 60 * 24));
+            return { cliente_id, razao_social: v.razao_social, ltv: v.ltv, ultima_compra: v.ultima_compra, dias_sem_compra: dias };
+          })
+          .sort((a, b) => b.ltv - a.ltv)
+          .slice(0, 10);
+        setClientesReativar(reativar);
+      }
+
+      // Tarefas do dia (vencendo hoje ou sem data, não concluídas)
+      const { data: tarData } = await supabase
+        .from("tarefas")
+        .select("id, titulo, data_vencimento, concluida, cliente_id, clientes(razao_social)")
+        .eq("vendedor_id", user.id)
+        .eq("concluida", false)
+        .or(`data_vencimento.is.null,data_vencimento.lte.${hoje}`)
+        .order("data_vencimento", { ascending: true });
+      if (tarData) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setTarefasDia((tarData as any[]).map((t: any) => ({
+          id: t.id,
+          titulo: t.titulo,
+          data_vencimento: t.data_vencimento,
+          concluida: t.concluida,
+          cliente_id: t.cliente_id,
+          cliente_nome: t.clientes?.razao_social,
+        })));
+      }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setUltimosPedidos((ultimosRes.data ?? []).map((p: any) => ({
@@ -297,6 +375,65 @@ export default function MeuPainel() {
                   </div>
                 );
               })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Tarefas do dia */}
+      {tarefasDia.length > 0 && (
+        <Card className="border-blue-300">
+          <CardHeader className="flex flex-row items-center gap-2 pb-3">
+            <CheckSquare className="h-5 w-5 text-blue-600" />
+            <CardTitle>Tarefas do dia</CardTitle>
+            <span className="ml-auto inline-flex items-center rounded-full bg-blue-600 text-white text-xs font-bold px-2 py-0.5">
+              {tarefasDia.length}
+            </span>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1.5">
+              {tarefasDia.map((t) => (
+                <div key={t.id} className="flex items-start gap-2 rounded-md border px-3 py-2">
+                  <CheckCircle2 className="h-4 w-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">{t.titulo}</div>
+                    {t.cliente_nome && (
+                      <div className="text-xs text-muted-foreground">{t.cliente_nome}</div>
+                    )}
+                    {t.data_vencimento && (
+                      <div className="text-xs text-red-600">
+                        Vence: {new Date(t.data_vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Clientes para reativar */}
+      {clientesReativar.length > 0 && (
+        <Card className="border-amber-300">
+          <CardHeader className="flex flex-row items-center gap-2 pb-3">
+            <RefreshCw className="h-5 w-5 text-amber-600" />
+            <CardTitle>Clientes para reativar</CardTitle>
+            <span className="ml-auto text-xs text-muted-foreground">sem pedido há 30+ dias</span>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1.5">
+              {clientesReativar.map((c) => (
+                <div key={c.cliente_id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                  <div>
+                    <div className="text-sm font-medium">{c.razao_social}</div>
+                    <div className="text-xs text-muted-foreground">
+                      Último pedido: {new Date(c.ultima_compra).toLocaleDateString("pt-BR")} ({c.dias_sem_compra} dias)
+                    </div>
+                  </div>
+                  <div className="text-sm font-semibold text-muted-foreground">{formatBRL(c.ltv)}</div>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
