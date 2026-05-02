@@ -301,6 +301,7 @@ export default function NovoPedido() {
         id, tipo, cond_pagamento, agendamento, observacoes, perfil_cliente, tabela_preco,
         clientes(id, cnpj, razao_social, cidade, uf, cep, comprador),
         itens_pedido(produto_id, quantidade, preco_unitario_bruto, total_item,
+          desconto_perfil, desconto_comercial, desconto_trade,
           produtos(codigo_jiva, nome, marca, cx_embarque, peso_unitario))
       `)
       .eq("id", id)
@@ -337,9 +338,9 @@ export default function NovoPedido() {
     setItens(((data.itens_pedido as any[]) ?? []).map((item) => {
       const p = item.produtos;
       const bruto = precos[item.produto_id]?.[data.tabela_preco] ?? Number(item.preco_unitario_bruto);
-      const dPerfil = descontos[item.produto_id]?.[data.perfil_cliente] ?? Number(item.desconto_perfil) ?? 0;
-      const dCom = Number(item.desconto_comercial) ?? 0;
-      const dTrade = Number(item.desconto_trade) ?? 0;
+      const dPerfil = descontos[item.produto_id]?.[data.perfil_cliente] ?? Number(item.desconto_perfil ?? 0);
+      const dCom = Number(item.desconto_comercial ?? 0);
+      const dTrade = Number(item.desconto_trade ?? 0);
       const apos_perfil = bruto * (1 - dPerfil / 100);
       const apos_comercial = apos_perfil * (1 - dCom / 100);
       const preco_final = apos_comercial * (1 - dTrade / 100);
