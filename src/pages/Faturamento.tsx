@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { formatBRL, formatDate } from "@/lib/format";
-import { Loader2, FileSpreadsheet, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2 } from "lucide-react";
+import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
+import { Loader2, FileSpreadsheet, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, UserPlus } from "lucide-react";
 import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { exportarPedidoExcel } from "@/lib/excel";
@@ -124,8 +125,38 @@ export default function Faturamento() {
   const [excluirTarget, setExcluirTarget] = useState<PedidoFat | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
+  // Clientes pendentes de cadastro
+  type ClientePendente = {
+    id: string;
+    razao_social: string;
+    cnpj: string;
+    cidade: string | null;
+    uf: string | null;
+    vendedor_id: string | null;
+    created_at: string;
+  };
+  const [clientesPendentes, setClientesPendentes] = useState<ClientePendente[]>([]);
+  const [loadingPendentes, setLoadingPendentes] = useState(true);
+  const [cadastrarDialog, setCadastrarDialog] = useState<ClientePendente | null>(null);
+  const [negativadoCliente, setNegativadoCliente] = useState(false);
+  const [cadastrando, setCadastrando] = useState(false);
+
   const carregar = useCallback(() => setRefreshKey((k) => k + 1), []);
   usePullToRefresh(carregar);
+
+  const carregarPendentes = useCallback(async () => {
+    setLoadingPendentes(true);
+    const { data } = await supabase
+      .from("clientes")
+      .select("id, razao_social, cnpj, cidade, uf, vendedor_id, created_at")
+      .eq("status", "pendente_cadastro")
+      .order("created_at", { ascending: true });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setClientesPendentes((data ?? []) as any[]);
+    setLoadingPendentes(false);
+  }, []);
+
+  useEffect(() => { carregarPendentes(); }, [carregarPendentes]);
 
   useEffect(() => {
     supabase.from("profiles").select("id, email, full_name").then(({ data }) => {
@@ -313,6 +344,39 @@ export default function Faturamento() {
   };
 
   const assumir = (id: string) => atualizar(id, { status: "em_faturamento", responsavel_id: user?.id });
+
+  const confirmarCadastroSankhya = async () => {
+    if (!cadastrarDialog) return;
+    setCadastrando(true);
+    const { error } = await supabase.from("clientes").update({
+      status: "aguardando_trade",
+      negativado: negativadoCliente,
+    }).eq("id", cadastrarDialog.id);
+
+    if (error) { toast.error("Erro: " + error.message); setCadastrando(false); return; }
+
+    const { data: tradeUsers } = await supabase
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "trade");
+
+    if (tradeUsers && tradeUsers.length > 0) {
+      await supabase.from("notificacoes").insert(
+        tradeUsers.map((u) => ({
+          user_id: u.user_id,
+          titulo: "Cliente aguardando configuração",
+          mensagem: `${cadastrarDialog.razao_social} foi cadastrado no Sankhya e aguarda configuração de perfil`,
+          tipo: "cliente_aguardando_trade",
+          referencia_id: cadastrarDialog.id,
+        }))
+      );
+    }
+
+    toast.success(`${cadastrarDialog.razao_social} marcado como cadastrado no Sankhya`);
+    setCadastrarDialog(null);
+    setCadastrando(false);
+    carregarPendentes();
+  };
 
   const abrirFaturarDialog = (p: PedidoFat) => {
     setFaturarDialog(p);
@@ -522,6 +586,74 @@ export default function Faturamento() {
         <h1 className="text-2xl font-bold">Faturamento</h1>
         <p className="text-sm text-muted-foreground">Gerencie e processe pedidos enviados pelos vendedores</p>
       </div>
+
+      {/* Clientes para cadastrar */}
+      {(loadingPendentes || clientesPendentes.length > 0) && (
+        <Card className={clientesPendentes.length > 0 ? "border-blue-300 bg-blue-50/40" : ""}>
+          <CardHeader className="flex flex-row items-center gap-2 pb-3">
+            <UserPlus className="h-5 w-5 text-blue-600" />
+            <CardTitle className="text-base">
+              Clientes para cadastrar
+              {clientesPendentes.length > 0 && (
+                <span className="ml-2 inline-flex items-center rounded-full bg-blue-600 text-white text-xs font-bold px-2 py-0.5">
+                  {clientesPendentes.length}
+                </span>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingPendentes ? (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              </div>
+            ) : clientesPendentes.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-2">
+                Nenhum cliente pendente
+              </p>
+            ) : (
+              <div className="rounded-md border overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>CNPJ</TableHead>
+                      <TableHead>Cidade / UF</TableHead>
+                      <TableHead>Vendedor</TableHead>
+                      <TableHead>Data envio</TableHead>
+                      <TableHead className="w-44">Ação</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {clientesPendentes.map((c) => (
+                      <TableRow key={c.id}>
+                        <TableCell className="font-medium">{c.razao_social}</TableCell>
+                        <TableCell className="font-mono text-sm text-muted-foreground">
+                          {formatCNPJ(c.cnpj)}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {[c.cidade, c.uf].filter(Boolean).join(" / ") || "—"}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {c.vendedor_id ? (profiles[c.vendedor_id] ?? "—") : "—"}
+                        </TableCell>
+                        <TableCell className="text-sm">{formatDate(c.created_at)}</TableCell>
+                        <TableCell>
+                          <Button size="sm" onClick={() => {
+                            setCadastrarDialog(c);
+                            setNegativadoCliente(false);
+                          }}>
+                            Marcar como cadastrado
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -878,6 +1010,38 @@ export default function Faturamento() {
             <Button variant="destructive" onClick={excluirPedido} disabled={excluindo}>
               {excluindo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Excluir permanentemente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: cadastrar no Sankhya */}
+      <Dialog open={!!cadastrarDialog} onOpenChange={(o) => !o && setCadastrarDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Cadastrar no Sankhya</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-muted-foreground">
+              Confirme que <strong>{cadastrarDialog?.razao_social}</strong> foi cadastrado no Sankhya.
+              O trade será notificado para configurar perfil e tabela de preço.
+            </p>
+            <div className="flex items-center gap-3 rounded-md border px-4 py-3">
+              <Switch
+                checked={negativadoCliente}
+                onCheckedChange={setNegativadoCliente}
+              />
+              <div>
+                <div className="text-sm font-medium">Cliente negativado</div>
+                <div className="text-xs text-muted-foreground">Apenas pagamento à vista disponível</div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCadastrarDialog(null)}>Cancelar</Button>
+            <Button onClick={confirmarCadastroSankhya} disabled={cadastrando}>
+              {cadastrando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Confirmar cadastro
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -10,6 +10,9 @@ import {
   LogOut,
   FileStack,
   UserCog,
+  UserPlus,
+  Megaphone,
+  Store,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
@@ -34,12 +37,20 @@ const ADMIN_SECTIONS: Section[] = [
       { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
       { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
       { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
+      { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
     ],
   },
   {
     label: "Faturamento",
     items: [
       { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
+    ],
+  },
+  {
+    label: "Trade",
+    items: [
+      { title: "Clientes aguardando", url: "/trade", icon: Store },
+      { title: "Campanhas", url: "/trade/campanhas", icon: Megaphone },
     ],
   },
 ];
@@ -50,6 +61,7 @@ const FLAT_MENU: Partial<Record<AppRole, Item[]>> = {
     { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
     { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
     { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
+    { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
   ],
   faturamento: [
     { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
@@ -57,7 +69,10 @@ const FLAT_MENU: Partial<Record<AppRole, Item[]>> = {
   logistica: [
     { title: "Painel de Entregas", url: "/logistica", icon: Truck },
   ],
-  trade: [],
+  trade: [
+    { title: "Clientes aguardando", url: "/trade", icon: Store },
+    { title: "Campanhas", url: "/trade/campanhas", icon: Megaphone },
+  ],
 };
 
 type Props = { onNavigate: () => void };

@@ -5,7 +5,7 @@ export const ROLE_HOME: Record<AppRole, string> = {
   vendedor: "/meu-painel",
   faturamento: "/faturamento",
   logistica: "/logistica",
-  trade: "/dashboard",
+  trade: "/trade",
 };
 
 export const ROLE_LABEL: Record<AppRole, string> = {

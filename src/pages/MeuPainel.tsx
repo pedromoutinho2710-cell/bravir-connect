@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
-import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users } from "lucide-react";
+import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone } from "lucide-react";
 import { toast } from "sonner";
 
 type KPIs = {
@@ -27,10 +28,33 @@ type UltimoPedido = {
   data_pedido: string;
 };
 
+type Campanha = {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  tipo: string | null;
+  valor: number | null;
+  data_fim: string | null;
+  created_at: string;
+};
+
+const TIPO_COLOR: Record<string, string> = {
+  desconto: "bg-blue-100 text-blue-800 border-blue-300",
+  bonificacao: "bg-green-100 text-green-800 border-green-300",
+  outro: "bg-gray-100 text-gray-800 border-gray-300",
+};
+
+const TIPO_LABEL: Record<string, string> = {
+  desconto: "Desconto",
+  bonificacao: "Bonificação",
+  outro: "Outro",
+};
+
 export default function MeuPainel() {
   const { user } = useAuth();
   const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0 });
   const [ultimosPedidos, setUltimosPedidos] = useState<UltimoPedido[]>([]);
+  const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [loading, setLoading] = useState(true);
   const [baixandoTabela, setBaixandoTabela] = useState(false);
 
@@ -84,6 +108,16 @@ export default function MeuPainel() {
       const meta = Number((metasRes.data as any)?.valor_meta_reais ?? 0);
 
       setKpis({ faturamento, numPedidos, ticketMedio, rascunhos, meta });
+
+      // Load campanhas ativas
+      const hoje = agora.toISOString().slice(0, 10);
+      const { data: campData } = await supabase
+        .from("campanhas")
+        .select("id, nome, descricao, tipo, valor, data_fim, created_at")
+        .eq("ativa", true)
+        .or(`data_fim.is.null,data_fim.gte.${hoje}`);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setCampanhas((campData ?? []) as any[]);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       setUltimosPedidos((ultimosRes.data ?? []).map((p: any) => ({
@@ -224,6 +258,49 @@ export default function MeuPainel() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Campanhas ativas */}
+      {campanhas.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2 pb-3">
+            <Megaphone className="h-5 w-5 text-primary" />
+            <CardTitle>Campanhas ativas</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {campanhas.map((c) => {
+                const diasCriado = Math.floor(
+                  (Date.now() - new Date(c.created_at).getTime()) / (1000 * 60 * 60 * 24)
+                );
+                return (
+                  <div key={c.id} className="rounded-md border p-3 space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm">{c.nome}</span>
+                      {diasCriado < 7 && (
+                        <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                          Novo
+                        </span>
+                      )}
+                      {c.tipo && (
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${TIPO_COLOR[c.tipo] ?? "bg-gray-100 text-gray-800 border-gray-300"}`}>
+                          {TIPO_LABEL[c.tipo] ?? c.tipo}
+                        </span>
+                      )}
+                    </div>
+                    {c.descricao && (
+                      <p className="text-xs text-muted-foreground">{c.descricao}</p>
+                    )}
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {c.valor != null && <span className="font-medium text-foreground">{c.valor}%</span>}
+                      {c.data_fim && <span>Válida até {formatDate(c.data_fim)}</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Últimos 5 pedidos */}
       <Card>

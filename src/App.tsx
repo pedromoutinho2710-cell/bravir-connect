@@ -13,11 +13,14 @@ import NovoPedido from "./pages/NovoPedido";
 import MeusPedidos from "./pages/MeusPedidos";
 import MeuPainel from "./pages/MeuPainel";
 import MeusClientes from "./pages/MeusClientes";
+import CadastrarCliente from "./pages/CadastrarCliente";
 import Faturamento from "./pages/Faturamento";
 import Formularios from "./pages/admin/Formularios";
 import Equipe from "./pages/admin/Equipe";
 import Metas from "./pages/admin/Metas";
 import Dashboard from "./pages/Dashboard";
+import Trade from "./pages/Trade";
+import TradeCampanhas from "./pages/TradeCampanhas";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +49,7 @@ const App = () => (
               <Route path="/novo-pedido" element={<NovoPedido />} />
               <Route path="/meus-pedidos" element={<MeusPedidos />} />
               <Route path="/meus-clientes" element={<MeusClientes />} />
+              <Route path="/cadastrar-cliente" element={<CadastrarCliente />} />
             </Route>
 
             {/* Rotas de faturamento — acessíveis por faturamento e admin */}
@@ -58,9 +62,10 @@ const App = () => (
               <Route path="/logistica" element={<PlaceholderPage title="Painel de Entregas" />} />
             </Route>
 
-            {/* Trade */}
-            <Route element={<ProtectedRoute allow={["trade"]}><AppLayout /></ProtectedRoute>}>
-              <Route path="/trade" element={<PlaceholderPage title="Painel Trade" />} />
+            {/* Trade — acessível por trade e admin */}
+            <Route element={<ProtectedRoute allow={["trade", "admin"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/trade" element={<Trade />} />
+              <Route path="/trade/campanhas" element={<TradeCampanhas />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
