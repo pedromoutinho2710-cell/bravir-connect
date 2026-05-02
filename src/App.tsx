@@ -24,6 +24,7 @@ import TradeCampanhas from "./pages/TradeCampanhas";
 import FaturamentoClientesPendentes from "./pages/FaturamentoClientesPendentes";
 import PedidosAdmin from "./pages/admin/PedidosAdmin";
 import ClientesAdmin from "./pages/admin/ClientesAdmin";
+import ImportarClientes from "./pages/admin/ImportarClientes";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,7 @@ const App = () => (
               <Route path="/admin/formularios" element={<Formularios />} />
               <Route path="/admin/pedidos" element={<PedidosAdmin />} />
               <Route path="/admin/clientes" element={<ClientesAdmin />} />
+              <Route path="/admin/importar-clientes" element={<ImportarClientes />} />
             </Route>
 
             {/* Rotas de vendedor — acessíveis por vendedor e admin */}

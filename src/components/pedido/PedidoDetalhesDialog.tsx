@@ -39,6 +39,15 @@ type ItemDetalhe = {
   total: number;
 };
 
+type FaturamentoNF = {
+  id: string;
+  nota_fiscal: string | null;
+  nf_pdf_url: string | null;
+  rastreio: string | null;
+  obs: string | null;
+  faturado_em: string;
+};
+
 type PedidoDetalhe = {
   numero_pedido: number;
   tipo: string;
@@ -60,6 +69,7 @@ type PedidoDetalhe = {
   obs_faturamento: string | null;
   itens: ItemDetalhe[];
   historico: HistoricoItem[];
+  faturamentos: FaturamentoNF[];
 };
 
 const STATUS_LABEL: Record<string, string> = {
@@ -90,7 +100,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
     if (!open || !pedidoId) { setPedido(null); return; }
     setLoading(true);
     (async () => {
-      const [pRes, hRes] = await Promise.all([
+      const [pRes, hRes, fatRes] = await Promise.all([
         supabase
           .from("pedidos")
           .select(`
@@ -112,6 +122,11 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
           .select("id, acao, status_anterior, status_novo, motivo, usuario_nome, usuario_email, created_at")
           .eq("pedido_id", pedidoId)
           .order("created_at", { ascending: true }),
+        supabase
+          .from("faturamentos")
+          .select("id, nota_fiscal, nf_pdf_url, rastreio, obs, faturado_em")
+          .eq("pedido_id", pedidoId)
+          .order("faturado_em", { ascending: true }),
       ]);
 
       if (pRes.data) {
@@ -154,6 +169,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
             total: Number(i.total_item),
           })),
           historico: (hRes.data ?? []) as HistoricoItem[],
+          faturamentos: (fatRes.data ?? []) as FaturamentoNF[],
         });
       }
     })().finally(() => setLoading(false));
@@ -195,8 +211,51 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
               )}
             </div>
 
-            {/* Informações de faturamento */}
-            {pedido.status === "faturado" && (pedido.nota_fiscal || pedido.rastreio || pedido.obs_faturamento) && (
+            {/* Notas fiscais emitidas (new multi-NF model) */}
+            {pedido.faturamentos.length > 0 && (
+              <div className="space-y-2">
+                <div className="font-semibold">Notas Fiscais</div>
+                {pedido.faturamentos.map((fat) => (
+                  <div key={fat.id} className="rounded-md border border-green-200 bg-green-50 p-3 text-sm space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        {fat.nota_fiscal && (
+                          <span className="font-medium">NF {fat.nota_fiscal}</span>
+                        )}
+                        <div className="text-xs text-muted-foreground">
+                          {new Date(fat.faturado_em).toLocaleString("pt-BR")}
+                        </div>
+                        {fat.rastreio && (
+                          <div><span className="text-muted-foreground">Rastreio: </span>{fat.rastreio}</div>
+                        )}
+                        {fat.obs && (
+                          <div className="text-muted-foreground">{fat.obs}</div>
+                        )}
+                      </div>
+                      {fat.nf_pdf_url && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs flex-shrink-0"
+                          onClick={async () => {
+                            const { data } = await supabase.storage
+                              .from("notas_fiscais")
+                              .createSignedUrl(fat.nf_pdf_url!, 3600);
+                            if (data?.signedUrl) window.open(data.signedUrl, "_blank");
+                          }}
+                        >
+                          <Download className="h-3 w-3 mr-1" />
+                          Baixar NF
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Legacy single-NF fallback for orders billed before multi-NF migration */}
+            {pedido.faturamentos.length === 0 && (pedido.nota_fiscal || pedido.rastreio || pedido.obs_faturamento) && (
               <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm space-y-1.5">
                 <div className="font-semibold text-green-800 mb-2">Informações de Faturamento</div>
                 {pedido.nota_fiscal && (

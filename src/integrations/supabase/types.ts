@@ -14,26 +14,70 @@ export type Database = {
   }
   public: {
     Tables: {
+      campanhas: {
+        Row: {
+          ativa: boolean
+          created_at: string
+          data_fim: string | null
+          data_inicio: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          tipo: string | null
+          valor: number | null
+        }
+        Insert: {
+          ativa?: boolean
+          created_at?: string
+          data_fim?: string | null
+          data_inicio?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          tipo?: string | null
+          valor?: number | null
+        }
+        Update: {
+          ativa?: boolean
+          created_at?: string
+          data_fim?: string | null
+          data_inicio?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          tipo?: string | null
+          valor?: number | null
+        }
+        Relationships: []
+      }
       clientes: {
         Row: {
           aceita_saldo: boolean
           assumido_por: string | null
           bairro: string | null
+          campanha_id: string | null
+          canal: string | null
           cep: string | null
           cidade: string | null
           cnpj: string
           codigo_cliente: string | null
+          codigo_parceiro: string | null
           comprador: string | null
           created_at: string
+          desconto_adicional: number | null
           email: string | null
           id: string
+          imposto: number | null
           inscricao_estadual: string | null
           negativado: boolean | null
+          nome_parceiro: string | null
           numero: string | null
+          observacoes_trade: string | null
           perfil_cliente: string | null
           razao_social: string
           rua: string | null
           status: string | null
+          suframa: boolean | null
           tabela_preco: string | null
           telefone: string | null
           uf: string | null
@@ -43,21 +87,29 @@ export type Database = {
           aceita_saldo?: boolean
           assumido_por?: string | null
           bairro?: string | null
+          campanha_id?: string | null
+          canal?: string | null
           cep?: string | null
           cidade?: string | null
           cnpj: string
           codigo_cliente?: string | null
+          codigo_parceiro?: string | null
           comprador?: string | null
           created_at?: string
+          desconto_adicional?: number | null
           email?: string | null
           id?: string
+          imposto?: number | null
           inscricao_estadual?: string | null
           negativado?: boolean | null
+          nome_parceiro?: string | null
           numero?: string | null
+          observacoes_trade?: string | null
           perfil_cliente?: string | null
           razao_social: string
           rua?: string | null
           status?: string | null
+          suframa?: boolean | null
           tabela_preco?: string | null
           telefone?: string | null
           uf?: string | null
@@ -67,27 +119,136 @@ export type Database = {
           aceita_saldo?: boolean
           assumido_por?: string | null
           bairro?: string | null
+          campanha_id?: string | null
+          canal?: string | null
           cep?: string | null
           cidade?: string | null
           cnpj?: string
           codigo_cliente?: string | null
+          codigo_parceiro?: string | null
           comprador?: string | null
           created_at?: string
+          desconto_adicional?: number | null
           email?: string | null
           id?: string
+          imposto?: number | null
           inscricao_estadual?: string | null
           negativado?: boolean | null
+          nome_parceiro?: string | null
           numero?: string | null
+          observacoes_trade?: string | null
           perfil_cliente?: string | null
           razao_social?: string
           rua?: string | null
           status?: string | null
+          suframa?: boolean | null
           tabela_preco?: string | null
           telefone?: string | null
           uf?: string | null
           vendedor_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clientes_campanha_id_fkey"
+            columns: ["campanha_id"]
+            isOneToOne: false
+            referencedRelation: "campanhas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      faturamentos: {
+        Row: {
+          created_at: string
+          faturado_em: string
+          id: string
+          nf_pdf_url: string | null
+          nota_fiscal: string | null
+          obs: string | null
+          pedido_id: string
+          rastreio: string | null
+          usuario_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          faturado_em?: string
+          id?: string
+          nf_pdf_url?: string | null
+          nota_fiscal?: string | null
+          obs?: string | null
+          pedido_id: string
+          rastreio?: string | null
+          usuario_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          faturado_em?: string
+          id?: string
+          nf_pdf_url?: string | null
+          nota_fiscal?: string | null
+          obs?: string | null
+          pedido_id?: string
+          rastreio?: string | null
+          usuario_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faturamentos_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      itens_faturados: {
+        Row: {
+          created_at: string
+          faturamento_id: string
+          id: string
+          item_pedido_id: string
+          pedido_id: string
+          quantidade_faturada: number
+        }
+        Insert: {
+          created_at?: string
+          faturamento_id: string
+          id?: string
+          item_pedido_id: string
+          pedido_id: string
+          quantidade_faturada: number
+        }
+        Update: {
+          created_at?: string
+          faturamento_id?: string
+          id?: string
+          item_pedido_id?: string
+          pedido_id?: string
+          quantidade_faturada?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itens_faturados_faturamento_id_fkey"
+            columns: ["faturamento_id"]
+            isOneToOne: false
+            referencedRelation: "faturamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itens_faturados_item_pedido_id_fkey"
+            columns: ["item_pedido_id"]
+            isOneToOne: false
+            referencedRelation: "itens_pedido"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itens_faturados_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       descontos: {
         Row: {
@@ -440,7 +601,15 @@ export type Database = {
           titulo?: string
           vendedor_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "tarefas_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -479,9 +648,19 @@ export type Database = {
         }
         Returns: boolean
       }
+      vendedor_ltv_clientes: {
+        Args: { _vendedor_id: string }
+        Returns: {
+          cliente_id: string
+          razao_social: string
+          ltv: number
+          ultima_compra: string
+          dias_sem_compra: number
+        }[]
+      }
     }
     Enums: {
-      app_role: "admin" | "vendedor" | "faturamento" | "logistica"
+      app_role: "admin" | "vendedor" | "faturamento" | "logistica" | "trade"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -609,7 +788,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "vendedor", "faturamento", "logistica"],
+      app_role: ["admin", "vendedor", "faturamento", "logistica", "trade"],
     },
   },
 } as const

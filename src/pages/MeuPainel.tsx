@@ -128,73 +128,55 @@ export default function MeuPainel() {
 
       setKpis({ faturamento, numPedidos, ticketMedio, rascunhos, meta });
 
-      // Load campanhas ativas
+      // Second wave: campanhas, reativação via RPC, tarefas — all in parallel
       const hoje = agora.toISOString().slice(0, 10);
-      const { data: campData } = await supabase
-        .from("campanhas")
-        .select("id, nome, descricao, tipo, valor, data_fim, created_at")
-        .eq("ativa", true)
-        .or(`data_fim.is.null,data_fim.gte.${hoje}`);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setCampanhas((campData ?? []) as any[]);
 
-      // Clientes para reativar (sem pedido há 30+ dias)
-      const limite30 = new Date(agora);
-      limite30.setDate(limite30.getDate() - 30);
-      const limite30Str = limite30.toISOString().slice(0, 10);
-      const { data: pedidosTodos } = await supabase
-        .from("pedidos")
-        .select("cliente_id, data_pedido, itens_pedido(total_item), clientes(razao_social)")
-        .eq("vendedor_id", user.id)
-        .not("status", "in", '("rascunho","cancelado")');
+      const [campRes, ltvRes, tarRes] = await Promise.all([
+        supabase
+          .from("campanhas")
+          .select("id, nome, descricao, tipo, valor, data_fim, created_at")
+          .eq("ativa", true)
+          .or(`data_fim.is.null,data_fim.gte.${hoje}`),
+        // RPC returns aggregated rows (≤10) instead of entire order history
+        supabase.rpc("vendedor_ltv_clientes", { _vendedor_id: user.id }),
+        supabase
+          .from("tarefas")
+          .select("id, titulo, data_vencimento, concluida, cliente_id, clientes(razao_social)")
+          .eq("vendedor_id", user.id)
+          .eq("concluida", false)
+          .or(`data_vencimento.is.null,data_vencimento.lte.${hoje}`)
+          .order("data_vencimento", { ascending: true }),
+      ]);
 
-      if (pedidosTodos) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const clienteMap = new Map<string, { razao_social: string; ltv: number; ultima_compra: string }>();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (pedidosTodos as any[]).forEach((p: any) => {
-          if (!p.cliente_id) return;
-          const entry = clienteMap.get(p.cliente_id) ?? {
-            razao_social: p.clientes?.razao_social ?? "—",
-            ltv: 0,
-            ultima_compra: p.data_pedido,
-          };
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          entry.ltv += (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
-          if (p.data_pedido > entry.ultima_compra) entry.ultima_compra = p.data_pedido;
-          entry.razao_social = p.clientes?.razao_social ?? entry.razao_social;
-          clienteMap.set(p.cliente_id, entry);
-        });
+      if (campRes.error) toast.error("Erro ao carregar campanhas");
+      else setCampanhas((campRes.data ?? []) as Campanha[]);
 
-        const reativar: ClienteReativar[] = Array.from(clienteMap.entries())
-          .filter(([, v]) => v.ultima_compra < limite30Str)
-          .map(([cliente_id, v]) => {
-            const dias = Math.floor((agora.getTime() - new Date(v.ultima_compra).getTime()) / (1000 * 60 * 60 * 24));
-            return { cliente_id, razao_social: v.razao_social, ltv: v.ltv, ultima_compra: v.ultima_compra, dias_sem_compra: dias };
-          })
-          .sort((a, b) => b.ltv - a.ltv)
-          .slice(0, 10);
-        setClientesReativar(reativar);
+      if (ltvRes.error) toast.error("Erro ao carregar clientes para reativar");
+      else {
+        setClientesReativar(
+          (ltvRes.data ?? []).map((r) => ({
+            cliente_id: r.cliente_id,
+            razao_social: r.razao_social,
+            ltv: Number(r.ltv),
+            ultima_compra: r.ultima_compra,
+            dias_sem_compra: r.dias_sem_compra,
+          })),
+        );
       }
 
-      // Tarefas do dia (vencendo hoje ou sem data, não concluídas)
-      const { data: tarData } = await supabase
-        .from("tarefas")
-        .select("id, titulo, data_vencimento, concluida, cliente_id, clientes(razao_social)")
-        .eq("vendedor_id", user.id)
-        .eq("concluida", false)
-        .or(`data_vencimento.is.null,data_vencimento.lte.${hoje}`)
-        .order("data_vencimento", { ascending: true });
-      if (tarData) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        setTarefasDia((tarData as any[]).map((t: any) => ({
-          id: t.id,
-          titulo: t.titulo,
-          data_vencimento: t.data_vencimento,
-          concluida: t.concluida,
-          cliente_id: t.cliente_id,
-          cliente_nome: t.clientes?.razao_social,
-        })));
+      if (tarRes.error) toast.error("Erro ao carregar tarefas");
+      else if (tarRes.data) {
+        setTarefasDia(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (tarRes.data as any[]).map((t) => ({
+            id: t.id,
+            titulo: t.titulo,
+            data_vencimento: t.data_vencimento,
+            concluida: t.concluida,
+            cliente_id: t.cliente_id,
+            cliente_nome: (t.clientes as { razao_social: string } | null)?.razao_social,
+          })),
+        );
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

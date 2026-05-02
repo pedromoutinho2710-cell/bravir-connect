@@ -47,16 +47,14 @@ export default function Trade() {
       .eq("status", "aguardando_trade")
       .order("created_at", { ascending: true });
     if (error) toast.error("Erro ao carregar clientes");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    else setClientes((data ?? []) as any[]);
+    else setClientes((data ?? []) as ClientePendente[]);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     carregar();
     supabase.from("campanhas").select("id, nome").eq("ativa", true).then(({ data }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setCampanhas((data ?? []) as any[]);
+      setCampanhas((data ?? []) as Campanha[]);
     });
     supabase.from("profiles").select("id, full_name, email").then(({ data }) => {
       if (!data) return;
@@ -85,6 +83,9 @@ export default function Trade() {
       status: "ativo",
       perfil_cliente: perfil,
       tabela_preco: tabela,
+      desconto_adicional: desconto ? Number(desconto) : null,
+      campanha_id: campanhaId !== "nenhuma" ? campanhaId : null,
+      observacoes_trade: observacoes.trim() || null,
     }).eq("id", modalCliente.id);
 
     if (error) { toast.error("Erro: " + error.message); setSalvando(false); return; }

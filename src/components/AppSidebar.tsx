@@ -13,6 +13,7 @@ import {
   UserPlus,
   Megaphone,
   Store,
+  Upload,
 } from "lucide-react";
 import {
   Sidebar,
@@ -67,6 +68,7 @@ const ADMIN_SECTIONS: Section[] = [
       { title: "Equipe", url: "/admin/equipe", icon: UserCog },
       { title: "Metas", url: "/admin/metas", icon: Target },
       { title: "Formulários", url: "/admin/formularios", icon: FileStack },
+      { title: "Importar Clientes", url: "/admin/importar-clientes", icon: Upload },
     ],
   },
 ];

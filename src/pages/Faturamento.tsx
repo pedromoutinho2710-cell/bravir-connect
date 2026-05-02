@@ -47,6 +47,7 @@ type PedidoFat = {
 };
 
 type ExcelItemRaw = {
+  id: string;
   nome: string;
   codigo: string;
   marca: string;
@@ -116,7 +117,7 @@ export default function Faturamento() {
   const [detalhesOpen, setDetalhesOpen] = useState(false);
 
   // Dialog faturar NF
-  type ItemFat = { marcar: boolean; qtd: number };
+  type ItemFat = { marcar: boolean; qtd: number; alreadyFaturado: number };
   const [faturarDialog, setFaturarDialog] = useState<PedidoFat | null>(null);
   const [nfData, setNfData] = useState<{ numero: string; rastreio: string; obs: string; file: File | null }>({
     numero: "", rastreio: "", obs: "", file: null,
@@ -186,7 +187,7 @@ export default function Faturamento() {
           responsavel_id, motivo, vendedor_id, perfil_cliente, tabela_preco, agendamento,
           clientes(razao_social, cnpj, cidade, uf, comprador, cep),
           itens_pedido(
-            total_item, quantidade, preco_unitario_bruto, preco_unitario_liquido,
+            id, total_item, quantidade, preco_unitario_bruto, preco_unitario_liquido,
             desconto_perfil, desconto_comercial, desconto_trade,
             preco_apos_perfil, preco_apos_comercial, preco_final,
             produtos(nome, codigo_jiva, marca, cx_embarque, peso_unitario)
@@ -236,6 +237,7 @@ export default function Faturamento() {
           aberto_por: null,
           ultima_acao: null,
           itens: itensList.map((i) => ({
+            id: i.id,
             nome: i.produtos?.nome ?? "—",
             codigo: i.produtos?.codigo_jiva ?? "—",
             marca: i.produtos?.marca ?? "—",
@@ -318,11 +320,27 @@ export default function Faturamento() {
 
   const assumir = (id: string) => atualizar(id, { status: "em_faturamento", responsavel_id: user?.id });
 
-  const abrirFaturarDialog = (p: PedidoFat) => {
+  const abrirFaturarDialog = async (p: PedidoFat) => {
     setFaturarDialog(p);
     setNfData({ numero: "", rastreio: "", obs: "", file: null });
+
+    // Fetch quantities already billed in prior NFs for partially-billed orders
+    const { data: existingFat } = await supabase
+      .from("itens_faturados")
+      .select("item_pedido_id, quantidade_faturada")
+      .eq("pedido_id", p.id);
+
+    const fatMap: Record<string, number> = {};
+    (existingFat ?? []).forEach((f) => {
+      fatMap[f.item_pedido_id] = (fatMap[f.item_pedido_id] ?? 0) + f.quantidade_faturada;
+    });
+
     const fat: Record<number, ItemFat> = {};
-    p.itens.forEach((item, idx) => { fat[idx] = { marcar: true, qtd: item.quantidade }; });
+    p.itens.forEach((item, idx) => {
+      const alreadyFaturado = fatMap[item.id] ?? 0;
+      const remaining = item.quantidade - alreadyFaturado;
+      fat[idx] = { marcar: remaining > 0, qtd: Math.max(remaining, 0), alreadyFaturado };
+    });
     setItensFat(fat);
   };
 
@@ -340,20 +358,22 @@ export default function Faturamento() {
   const confirmarFaturamento = async () => {
     if (!faturarDialog) return;
 
-    const marcados = Object.values(itensFat).filter((v) => v.marcar);
-    if (marcados.length === 0) {
+    const marcadosEntries = Object.entries(itensFat).filter(([, v]) => v.marcar && v.qtd > 0);
+    if (marcadosEntries.length === 0) {
       toast.error("Selecione ao menos um produto para faturar");
       return;
     }
 
     setSubmetendoNf(true);
 
+    // Use timestamp in path so a second NF never overwrites the first
     let nf_pdf_url: string | null = null;
-    if (nfData.file && nfData.numero.trim()) {
-      const path = `${faturarDialog.id}/${nfData.numero.trim()}.pdf`;
+    if (nfData.file) {
+      const nfSuffix = nfData.numero.trim() ? `_${nfData.numero.trim()}` : "";
+      const path = `${faturarDialog.id}/${Date.now()}${nfSuffix}.pdf`;
       const { data: upData, error: upErr } = await supabase.storage
         .from("notas_fiscais")
-        .upload(path, nfData.file, { upsert: true });
+        .upload(path, nfData.file);
       if (upErr) {
         toast.error("Erro ao enviar PDF da NF: " + upErr.message);
         setSubmetendoNf(false);
@@ -362,27 +382,71 @@ export default function Faturamento() {
       nf_pdf_url = upData?.path ?? null;
     }
 
-    const total = faturarDialog.itens.length;
-    const novoStatus = marcados.length === total ? "faturado" : "parcialmente_faturado";
-
-    const { error } = await supabase
-      .from("pedidos")
-      .update({
-        status: novoStatus,
+    // Insert one faturamentos row per NF submission
+    const { data: fatData, error: fatErr } = await supabase
+      .from("faturamentos")
+      .insert({
+        pedido_id: faturarDialog.id,
         nota_fiscal: nfData.numero.trim() || null,
         nf_pdf_url,
         rastreio: nfData.rastreio.trim() || null,
-        obs_faturamento: nfData.obs.trim() || null,
-        faturado_em: new Date().toISOString(),
+        obs: nfData.obs.trim() || null,
+        usuario_id: user?.id ?? null,
       })
+      .select("id")
+      .single();
+
+    if (fatErr || !fatData) {
+      toast.error("Erro ao registrar faturamento: " + (fatErr?.message ?? ""));
+      setSubmetendoNf(false);
+      return;
+    }
+
+    // Insert one itens_faturados row per checked item with the typed qty
+    const itensFaturadosPayload = marcadosEntries.map(([idx, v]) => ({
+      faturamento_id: fatData.id,
+      pedido_id: faturarDialog.id,
+      item_pedido_id: faturarDialog.itens[Number(idx)].id,
+      quantidade_faturada: v.qtd,
+    }));
+
+    const { error: itensErr } = await supabase
+      .from("itens_faturados")
+      .insert(itensFaturadosPayload);
+
+    if (itensErr) {
+      toast.error("Erro ao registrar itens faturados: " + itensErr.message);
+      setSubmetendoNf(false);
+      return;
+    }
+
+    // Recompute pedido status: compare total billed qty against ordered qty
+    const { data: allFaturados } = await supabase
+      .from("itens_faturados")
+      .select("item_pedido_id, quantidade_faturada")
+      .eq("pedido_id", faturarDialog.id);
+
+    const totalFaturadoMap: Record<string, number> = {};
+    (allFaturados ?? []).forEach((f) => {
+      totalFaturadoMap[f.item_pedido_id] = (totalFaturadoMap[f.item_pedido_id] ?? 0) + f.quantidade_faturada;
+    });
+
+    const todosCompletos = faturarDialog.itens.every(
+      (item) => (totalFaturadoMap[item.id] ?? 0) >= item.quantidade,
+    );
+    const novoStatus = todosCompletos ? "faturado" : "parcialmente_faturado";
+
+    const { error: updErr } = await supabase
+      .from("pedidos")
+      .update({ status: novoStatus, faturado_em: new Date().toISOString() })
       .eq("id", faturarDialog.id);
 
     setSubmetendoNf(false);
-    if (error) { toast.error("Erro ao faturar: " + error.message); return; }
+    if (updErr) { toast.error("Erro ao atualizar status: " + updErr.message); return; }
 
     const msg = novoStatus === "faturado"
       ? `Pedido #${faturarDialog.numero_pedido} faturado completamente`
-      : `Pedido #${faturarDialog.numero_pedido} parcialmente faturado (${marcados.length}/${total} produtos)`;
+      : `Pedido #${faturarDialog.numero_pedido} parcialmente faturado`;
     toast.success(msg);
     setFaturarDialog(null);
     setRefreshKey((k) => k + 1);
@@ -805,11 +869,15 @@ export default function Faturamento() {
                 <Label>Produtos a faturar</Label>
                 {(() => {
                   const total = faturarDialog?.itens.length ?? 0;
-                  const marcados = Object.values(itensFat).filter((v) => v.marcar).length;
+                  const marcados = Object.entries(itensFat).filter(([, v]) => v.marcar && v.qtd > 0).length;
+                  const jaCompletos = Object.values(itensFat).filter((v) => {
+                    const item = faturarDialog?.itens[Object.values(itensFat).indexOf(v)];
+                    return item && v.alreadyFaturado >= item.quantidade;
+                  }).length;
                   return (
                     <span className="text-xs text-muted-foreground">
-                      {marcados}/{total} selecionados
-                      {marcados > 0 && marcados < total && (
+                      {marcados}/{total - jaCompletos} pendentes selecionados
+                      {marcados > 0 && marcados < total - jaCompletos && (
                         <span className="ml-2 text-teal-700 font-medium">— faturamento parcial</span>
                       )}
                     </span>
@@ -824,13 +892,14 @@ export default function Faturamento() {
                         <Checkbox
                           checked={
                             Object.values(itensFat).length > 0 &&
-                            Object.values(itensFat).every((v) => v.marcar)
+                            Object.values(itensFat).every((v) => v.marcar || v.alreadyFaturado >= (faturarDialog?.itens[0]?.quantidade ?? 0))
                           }
                           onCheckedChange={(c) =>
                             setItensFat((prev) => {
                               const next = { ...prev };
                               Object.keys(next).forEach((k) => {
-                                next[Number(k)] = { ...next[Number(k)], marcar: !!c };
+                                const remaining = (faturarDialog?.itens[Number(k)]?.quantidade ?? 0) - next[Number(k)].alreadyFaturado;
+                                if (remaining > 0) next[Number(k)] = { ...next[Number(k)], marcar: !!c };
                               });
                               return next;
                             })
@@ -839,21 +908,25 @@ export default function Faturamento() {
                       </th>
                       <th className="text-left px-3 py-2">Produto</th>
                       <th className="text-center px-3 py-2 w-16">Pedido</th>
+                      <th className="text-center px-3 py-2 w-20">Já fat.</th>
                       <th className="text-center px-3 py-2 w-24">Qtd. faturar</th>
                       <th className="text-center px-3 py-2 w-24">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(faturarDialog?.itens ?? []).map((item, idx) => {
-                      const fat = itensFat[idx] ?? { marcar: true, qtd: item.quantidade };
+                      const fat = itensFat[idx] ?? { marcar: true, qtd: item.quantidade, alreadyFaturado: 0 };
+                      const remaining = item.quantidade - fat.alreadyFaturado;
+                      const fullyBilled = remaining <= 0;
                       return (
                         <tr
                           key={idx}
-                          className={`border-b last:border-0 transition-opacity ${!fat.marcar ? "opacity-40" : ""}`}
+                          className={`border-b last:border-0 transition-opacity ${!fat.marcar || fullyBilled ? "opacity-40" : ""}`}
                         >
                           <td className="px-3 py-2">
                             <Checkbox
-                              checked={fat.marcar}
+                              checked={fat.marcar && !fullyBilled}
+                              disabled={fullyBilled}
                               onCheckedChange={(c) =>
                                 setItensFat((prev) => ({
                                   ...prev,
@@ -869,15 +942,18 @@ export default function Faturamento() {
                           <td className="text-center px-3 py-2 text-muted-foreground">
                             {item.quantidade}
                           </td>
+                          <td className="text-center px-3 py-2 text-muted-foreground">
+                            {fat.alreadyFaturado > 0 ? fat.alreadyFaturado : "—"}
+                          </td>
                           <td className="px-3 py-2">
                             <Input
                               type="number"
                               min={1}
-                              max={item.quantidade}
+                              max={remaining}
                               value={fat.qtd}
-                              disabled={!fat.marcar}
+                              disabled={!fat.marcar || fullyBilled}
                               onChange={(e) => {
-                                const v = Math.max(1, Math.min(item.quantidade, Number(e.target.value) || 1));
+                                const v = Math.max(1, Math.min(remaining, Number(e.target.value) || 1));
                                 setItensFat((prev) => ({
                                   ...prev,
                                   [idx]: { ...prev[idx], qtd: v },
@@ -889,12 +965,14 @@ export default function Faturamento() {
                           <td className="text-center px-3 py-2">
                             <span
                               className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
-                                fat.marcar
+                                fullyBilled
                                   ? "bg-green-100 text-green-800"
+                                  : fat.marcar
+                                  ? "bg-blue-100 text-blue-800"
                                   : "bg-gray-100 text-gray-500"
                               }`}
                             >
-                              {fat.marcar ? "Faturar" : "Pendente"}
+                              {fullyBilled ? "Concluído" : fat.marcar ? "Faturar" : "Pendente"}
                             </span>
                           </td>
                         </tr>
@@ -944,7 +1022,7 @@ export default function Faturamento() {
             <Button onClick={confirmarFaturamento} disabled={submetendoNf}>
               {submetendoNf && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               {(() => {
-                const marcados = Object.values(itensFat).filter((v) => v.marcar).length;
+                const marcados = Object.entries(itensFat).filter(([, v]) => v.marcar && v.qtd > 0).length;
                 const total = faturarDialog?.itens.length ?? 0;
                 if (marcados === 0) return "Selecione produtos";
                 if (marcados === total) return "Confirmar faturamento";

@@ -53,8 +53,7 @@ export default function TradeCampanhas() {
       .select("*")
       .order("created_at", { ascending: false });
     if (error) toast.error("Erro ao carregar campanhas");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    else setCampanhas((data ?? []) as any[]);
+    else setCampanhas((data ?? []) as Campanha[]);
     setLoading(false);
   };
 

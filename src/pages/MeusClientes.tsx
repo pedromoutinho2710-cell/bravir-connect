@@ -47,6 +47,8 @@ type ClienteAgregado = {
   ciclo_medio: number | null;
   ultima_compra: string | null;
   proxima_compra: Date | null;
+  canal: string | null;
+  nome_parceiro: string | null;
 };
 
 type OrdemCampo = "ltv" | "ticket_medio" | "razao_social" | "num_pedidos";
@@ -81,6 +83,9 @@ export default function MeusClientes() {
   const [busca, setBusca] = useState("");
   const [ordem, setOrdem] = useState<OrdemCampo>("ltv");
 
+  const hoje = new Date();
+  const DIA_MS = 1000 * 60 * 60 * 24;
+
   const [sheetCliente, setSheetCliente] = useState<ClienteAgregado | null>(null);
   const [historico, setHistorico] = useState<PedidoHistorico[]>([]);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
@@ -92,18 +97,25 @@ export default function MeusClientes() {
   useEffect(() => {
     if (!user) return;
     (async () => {
-      const { data, error } = await supabase
-        .from("pedidos")
-        .select(`
-          cliente_id,
-          data_pedido,
-          itens_pedido(total_item, produtos(marca)),
-          clientes(razao_social, cnpj, codigo_cliente, aceita_saldo)
-        `)
-        .eq("vendedor_id", user.id)
-        .not("status", "in", '("rascunho","cancelado")');
+      const [pedidosRes, carteiraRes] = await Promise.all([
+        supabase
+          .from("pedidos")
+          .select(`
+            cliente_id,
+            data_pedido,
+            itens_pedido(total_item, produtos(marca)),
+            clientes(razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro)
+          `)
+          .eq("vendedor_id", user.id)
+          .not("status", "in", '("rascunho","cancelado")'),
+        supabase
+          .from("clientes")
+          .select("id, razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro")
+          .eq("vendedor_id", user.id)
+          .eq("status", "ativo"),
+      ]);
 
-      if (error) {
+      if (pedidosRes.error) {
         toast.error("Erro ao carregar clientes");
         return;
       }
@@ -114,6 +126,8 @@ export default function MeusClientes() {
         cnpj: string | null;
         codigo_cliente: string | null;
         aceita_saldo: boolean;
+        canal: string | null;
+        nome_parceiro: string | null;
         ltv: number;
         num_pedidos: number;
         marcas: Set<string>;
@@ -121,7 +135,7 @@ export default function MeusClientes() {
       }>();
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (data ?? []).forEach((p: any) => {
+      (pedidosRes.data ?? []).forEach((p: any) => {
         if (!p.cliente_id) return;
         const cl = p.clientes;
         if (!map.has(p.cliente_id)) {
@@ -130,6 +144,8 @@ export default function MeusClientes() {
             cnpj: cl?.cnpj ?? null,
             codigo_cliente: cl?.codigo_cliente ?? null,
             aceita_saldo: cl?.aceita_saldo ?? false,
+            canal: cl?.canal ?? null,
+            nome_parceiro: cl?.nome_parceiro ?? null,
             ltv: 0,
             num_pedidos: 0,
             marcas: new Set(),
@@ -146,7 +162,25 @@ export default function MeusClientes() {
         });
       });
 
-      // ABC classification by num_pedidos rank
+      // Merge clientes sem pedido da carteira
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (carteiraRes.data ?? []).forEach((cl: any) => {
+        if (map.has(cl.id)) return;
+        map.set(cl.id, {
+          razao_social: cl.razao_social ?? "—",
+          cnpj: cl.cnpj ?? null,
+          codigo_cliente: cl.codigo_cliente ?? null,
+          aceita_saldo: cl.aceita_saldo ?? false,
+          canal: cl.canal ?? null,
+          nome_parceiro: cl.nome_parceiro ?? null,
+          ltv: 0,
+          num_pedidos: 0,
+          marcas: new Set(),
+          dates: [],
+        });
+      });
+
+      // ABC classification by descending LTV (Pareto-based revenue ranking)
       const rawList = Array.from(map.entries()).map(([cliente_id, v]) => ({
         cliente_id,
         ...v,
@@ -154,7 +188,7 @@ export default function MeusClientes() {
         marcas_compradas: Array.from(v.marcas),
       }));
 
-      rawList.sort((a, b) => b.num_pedidos - a.num_pedidos);
+      rawList.sort((a, b) => b.ltv - a.ltv);
       const total = rawList.length;
       const cutA = Math.ceil(total * 0.2);
       const cutB = Math.ceil(total * 0.5);
@@ -175,6 +209,8 @@ export default function MeusClientes() {
             cnpj: c.cnpj,
             codigo_cliente: c.codigo_cliente,
             aceita_saldo: c.aceita_saldo,
+            canal: c.canal,
+            nome_parceiro: c.nome_parceiro,
             ltv: c.ltv,
             num_pedidos: c.num_pedidos,
             ticket_medio: c.ticket_medio,
@@ -273,8 +309,6 @@ export default function MeusClientes() {
     });
   }, [clientes, busca, ordem]);
 
-  const hoje = new Date();
-
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -327,6 +361,7 @@ export default function MeusClientes() {
                 <TableHead className="w-12">#</TableHead>
                 <TableHead className="w-10">ABC</TableHead>
                 <TableHead>Cliente</TableHead>
+                <TableHead>Canal</TableHead>
                 <TableHead>CNPJ</TableHead>
                 <TableHead className="text-right">LTV</TableHead>
                 <TableHead className="text-right">Pedidos</TableHead>
@@ -342,15 +377,25 @@ export default function MeusClientes() {
                 const proximaStr = c.proxima_compra
                   ? c.proxima_compra.toLocaleDateString("pt-BR")
                   : "—";
+                const inativo30 = !c.ultima_compra || (hoje.getTime() - new Date(c.ultima_compra).getTime()) / DIA_MS >= 30;
                 return (
                   <TableRow
                     key={c.cliente_id}
-                    className="cursor-pointer hover:bg-muted/50"
+                    className={`cursor-pointer ${inativo30 ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-muted/50"}`}
                     onClick={() => abrirSheet(c)}
                   >
                     <TableCell className="font-mono text-muted-foreground text-sm">{c.rank}</TableCell>
                     <TableCell>{abcBadge(c.abc)}</TableCell>
                     <TableCell className="font-medium">{c.razao_social}</TableCell>
+                    <TableCell>
+                      {c.canal ? (
+                        <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300 text-xs">
+                          {c.canal}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground font-mono">
                       {c.cnpj ? formatCNPJ(c.cnpj) : "—"}
                     </TableCell>
