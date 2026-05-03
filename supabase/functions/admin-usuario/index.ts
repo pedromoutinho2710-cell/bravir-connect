@@ -5,15 +5,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Always 200 — supabase-js v2 loses the body for non-2xx responses.
-// Errors are signalled via { error: "..." } in the JSON body.
+// Always HTTP 200 — supabase-js v2 loses the JSON body for non-2xx responses.
 function ok(data: Record<string, unknown>): Response {
   return new Response(JSON.stringify(data), {
     status: 200,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 }
-
 function err(message: string): Response {
   return ok({ error: message });
 }
@@ -24,31 +22,29 @@ Deno.serve(async (req) => {
   }
 
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-  const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
   const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  // ── Verify caller identity ────────────────────────────────────────
-  const authHeader = req.headers.get("Authorization") ?? "";
-  if (!authHeader || authHeader === `Bearer ${ANON_KEY}`) {
-    // Plain anon key with no real user session — reject immediately
-    return err("Unauthorized: no user session");
-  }
-
-  // Use anon client + forwarded user JWT to get the calling user
-  const supabaseUser = createClient(SUPABASE_URL, ANON_KEY, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  const { data: { user }, error: userErr } = await supabaseUser.auth.getUser();
-  if (userErr || !user) {
-    return err("Unauthorized: " + (userErr?.message ?? "session inválida"));
-  }
-
-  // ── Admin client for privileged DB / Auth Admin ops ───────────────
+  // Admin client — used for auth.admin.* and privileged DB writes
   const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+
+  // ── Extract and verify the caller's JWT ───────────────────────────
+  // supabase.functions.invoke() sends Authorization: Bearer <user_access_token>
+  // when a user session is active. We pass that token to auth.getUser(jwt)
+  // which calls GET /auth/v1/user with it — works for real user JWTs,
+  // correctly rejects anon key and service role key.
+  const authHeader = req.headers.get("Authorization") ?? "";
+  const jwt = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+  if (!jwt) {
+    return err("Unauthorized: missing Authorization header");
+  }
+
+  const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(jwt);
+  if (userErr || !user) {
+    return err("Unauthorized: " + (userErr?.message ?? "invalid token"));
+  }
 
   // ── Verify caller has admin role ──────────────────────────────────
   const { data: roleRow } = await supabaseAdmin
