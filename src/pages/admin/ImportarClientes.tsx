@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { Loader2, Upload, Users, UserCheck, Award, ArrowLeft, ChevronRight } from "lucide-react";
-import ExcelJS from "exceljs";
+import * as XLSX from "xlsx";
 import { onlyDigits } from "@/lib/format";
 
 type Etapa = "upload" | "mapear" | "importar" | "concluido";
@@ -112,47 +112,72 @@ export default function ImportarClientes() {
     setErroHeader(null);
     setLinhas([]);
 
-    const buffer = await file.arrayBuffer();
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buffer);
+    let data: string;
+    try {
+      data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Falha ao ler o arquivo"));
+        reader.readAsBinaryString(file);
+      });
+    } catch {
+      toast.error("Não foi possível ler o arquivo. Verifique se está corrompido.");
+      return;
+    }
 
-    const ws = wb.worksheets[0];
-    if (!ws) { toast.error("Planilha vazia ou inválida"); return; }
+    let workbook: XLSX.WorkBook;
+    try {
+      workbook = XLSX.read(data, { type: "binary", cellDates: false, raw: false });
+    } catch {
+      toast.error("Não foi possível ler o arquivo. Verifique se está corrompido.");
+      return;
+    }
+
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) { toast.error("Planilha vazia ou inválida"); return; }
+
+    const ws = workbook.Sheets[firstSheetName];
+    const allRows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", blankrows: false, raw: false });
 
     // Detectar linha de cabeçalho
-    let headerRowNum = -1;
+    let headerRowIdx = -1;
     const colMap: Partial<Record<keyof LinhaRaw, number>> = {};
 
-    ws.eachRow((row, rowNum) => {
-      if (headerRowNum !== -1) return;
+    for (let rowIdx = 0; rowIdx < allRows.length; rowIdx++) {
+      const row = allRows[rowIdx];
       let found = 0;
-      row.eachCell((cell, colNum) => {
-        const key = mapearCabecalho(String(cell.value ?? ""));
-        if (key) { colMap[key] = colNum; found++; }
-      });
-      if (found >= 3) headerRowNum = rowNum;
-    });
+      const tmpMap: Partial<Record<keyof LinhaRaw, number>> = {};
+      for (let colIdx = 0; colIdx < row.length; colIdx++) {
+        const key = mapearCabecalho(String(row[colIdx] ?? ""));
+        if (key) { tmpMap[key] = colIdx; found++; }
+      }
+      if (found >= 3) {
+        Object.assign(colMap, tmpMap);
+        headerRowIdx = rowIdx;
+        break;
+      }
+    }
 
-    if (headerRowNum === -1) {
+    if (headerRowIdx === -1) {
       setErroHeader("Não foi possível detectar o cabeçalho. Verifique se o arquivo é a planilha Sankhya.");
       return;
     }
 
     const obrigatorias: (keyof LinhaRaw)[] = ["cnpj", "razao_social"];
-    const faltando = obrigatorias.filter((k) => !colMap[k]);
+    const faltando = obrigatorias.filter((k) => colMap[k] === undefined);
     if (faltando.length > 0) {
       setErroHeader(`Colunas obrigatórias não encontradas: ${faltando.join(", ")}`);
       return;
     }
 
     const rows: LinhaRaw[] = [];
-    ws.eachRow((row, rowNum) => {
-      if (rowNum <= headerRowNum) return;
-      const cnpjVal = String(row.getCell(colMap.cnpj ?? 0).value ?? "").trim();
-      if (!cnpjVal) return;
+    for (let rowIdx = headerRowIdx + 1; rowIdx < allRows.length; rowIdx++) {
+      const row = allRows[rowIdx];
+      const cnpjVal = String(row[colMap.cnpj!] ?? "").trim();
+      if (!cnpjVal) continue;
 
       const get = (k: keyof LinhaRaw) =>
-        colMap[k] ? String(row.getCell(colMap[k]!).value ?? "").trim() : "";
+        colMap[k] !== undefined ? String(row[colMap[k]!] ?? "").trim() : "";
 
       rows.push({
         codigo_parceiro: get("codigo_parceiro"),
@@ -167,7 +192,7 @@ export default function ImportarClientes() {
         imposto: get("imposto"),
         suframa: get("suframa"),
       });
-    });
+    }
 
     setLinhas(rows);
   };
@@ -291,7 +316,7 @@ export default function ImportarClientes() {
         </Button>
         <div>
           <h1 className="text-2xl font-bold">Importar Clientes</h1>
-          <p className="text-sm text-muted-foreground">Importação em massa via planilha Sankhya (.xlsx)</p>
+          <p className="text-sm text-muted-foreground">Importação em massa via planilha Sankhya (.xls ou .xlsx)</p>
         </div>
       </div>
 
