@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ALLOWED_ORIGIN = Deno.env.get("CORS_ORIGIN") ?? "https://bravir-connect.vercel.app";
+const ALLOWED_ORIGIN = Deno.env.get("CORS_ORIGIN") ?? "*";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": ALLOWED_ORIGIN,

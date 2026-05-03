@@ -41,6 +41,7 @@ type Sugestao = {
   perfil_cliente: string | null;
   tabela_preco: string | null;
   codigo_cliente: string | null;
+  codigo_parceiro: string | null;
   aceita_saldo: boolean | null;
   negativado: boolean | null;
 };
@@ -117,7 +118,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       comprador: cl.comprador ?? "",
       perfil_cliente: cl.perfil_cliente ?? value.perfil_cliente,
       tabela_preco: cl.tabela_preco ?? value.tabela_preco,
-      codigo_cliente: cl.codigo_cliente ?? "",
+      codigo_cliente: cl.codigo_parceiro ?? cl.codigo_cliente ?? "",
       aceita_saldo: cl.aceita_saldo ?? false,
     });
   };
@@ -168,6 +169,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           perfil_cliente: cl.perfil_cliente,
           tabela_preco: cl.tabela_preco,
           codigo_cliente: cl.codigo_cliente,
+          codigo_parceiro: cl.codigo_parceiro,
           aceita_saldo: cl.aceita_saldo,
           negativado: cl.negativado,
         });
@@ -233,7 +235,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       searchTimerRef.current = setTimeout(async () => {
         const { data } = await supabase
           .from("clientes")
-          .select("id, razao_social, cnpj, cidade, uf, cep, comprador, perfil_cliente, tabela_preco, codigo_cliente, aceita_saldo, negativado")
+          .select("id, razao_social, cnpj, cidade, uf, cep, comprador, perfil_cliente, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado")
           .ilike("razao_social", `%${text.trim()}%`)
           .limit(10);
         setSugestoes((data ?? []) as Sugestao[]);
@@ -260,7 +262,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       comprador: s.comprador ?? "",
       perfil_cliente: s.perfil_cliente ?? value.perfil_cliente,
       tabela_preco: s.tabela_preco ?? value.tabela_preco,
-      codigo_cliente: s.codigo_cliente ?? "",
+      codigo_cliente: s.codigo_parceiro ?? s.codigo_cliente ?? "",
       aceita_saldo: s.aceita_saldo ?? false,
     });
 
