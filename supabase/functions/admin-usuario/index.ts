@@ -5,11 +5,17 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-function json(data: unknown, status = 200): Response {
+// Always 200 — supabase-js v2 loses the body for non-2xx responses.
+// Errors are signalled via { error: "..." } in the JSON body.
+function ok(data: Record<string, unknown>): Response {
   return new Response(JSON.stringify(data), {
-    status,
+    status: 200,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
+}
+
+function err(message: string): Response {
+  return ok({ error: message });
 }
 
 Deno.serve(async (req) => {
@@ -21,13 +27,14 @@ Deno.serve(async (req) => {
   const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
   const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-  // ── Verify caller identity via their JWT ──────────────────────────
-  // Pattern: anon client + forwarded user JWT → auth.getUser()
+  // ── Verify caller identity ────────────────────────────────────────
   const authHeader = req.headers.get("Authorization") ?? "";
-  if (!authHeader) {
-    return json({ error: "Missing Authorization header" }, 401);
+  if (!authHeader || authHeader === `Bearer ${ANON_KEY}`) {
+    // Plain anon key with no real user session — reject immediately
+    return err("Unauthorized: no user session");
   }
 
+  // Use anon client + forwarded user JWT to get the calling user
   const supabaseUser = createClient(SUPABASE_URL, ANON_KEY, {
     global: { headers: { Authorization: authHeader } },
     auth: { autoRefreshToken: false, persistSession: false },
@@ -35,10 +42,10 @@ Deno.serve(async (req) => {
 
   const { data: { user }, error: userErr } = await supabaseUser.auth.getUser();
   if (userErr || !user) {
-    return json({ error: "Invalid or expired token: " + (userErr?.message ?? "no user") }, 401);
+    return err("Unauthorized: " + (userErr?.message ?? "session inválida"));
   }
 
-  // ── Admin client for privileged operations ────────────────────────
+  // ── Admin client for privileged DB / Auth Admin ops ───────────────
   const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
@@ -52,7 +59,7 @@ Deno.serve(async (req) => {
     .maybeSingle();
 
   if (!roleRow) {
-    return json({ error: "Forbidden: admin role required" }, 403);
+    return err("Forbidden: admin role required");
   }
 
   // ── Parse body ────────────────────────────────────────────────────
@@ -60,7 +67,7 @@ Deno.serve(async (req) => {
   try {
     body = await req.json();
   } catch {
-    return json({ error: "Invalid JSON body" }, 400);
+    return err("Invalid JSON body");
   }
 
   const { acao } = body;
@@ -73,7 +80,7 @@ Deno.serve(async (req) => {
     const role = body.role as string;
 
     if (!email || !senha || !full_name || !role) {
-      return json({ error: "Campos obrigatórios: email, senha, full_name, role" }, 400);
+      return err("Campos obrigatórios: email, senha, full_name, role");
     }
 
     const { data, error } = await supabaseAdmin.auth.admin.createUser({
@@ -83,9 +90,7 @@ Deno.serve(async (req) => {
       user_metadata: { full_name },
     });
 
-    if (error) {
-      return json({ error: error.message }, 400);
-    }
+    if (error) return err(error.message);
 
     const userId = data.user.id;
 
@@ -94,14 +99,10 @@ Deno.serve(async (req) => {
       supabaseAdmin.from("profiles").upsert({ id: userId, email, full_name, ativo: true }, { onConflict: "id" }),
     ]);
 
-    if (rolesResult.error) {
-      return json({ error: "Usuário criado mas erro ao definir role: " + rolesResult.error.message }, 500);
-    }
-    if (profilesResult.error) {
-      return json({ error: "Usuário criado mas erro ao criar profile: " + profilesResult.error.message }, 500);
-    }
+    if (rolesResult.error) return err("Usuário criado mas erro ao definir role: " + rolesResult.error.message);
+    if (profilesResult.error) return err("Usuário criado mas erro ao criar profile: " + profilesResult.error.message);
 
-    return json({ ok: true, user_id: userId });
+    return ok({ ok: true, user_id: userId });
   }
 
   // ── atualizar_role ────────────────────────────────────────────────
@@ -110,8 +111,8 @@ Deno.serve(async (req) => {
     const { error } = await supabaseAdmin
       .from("user_roles")
       .upsert({ user_id, role }, { onConflict: "user_id" });
-    if (error) return json({ error: error.message }, 500);
-    return json({ ok: true });
+    if (error) return err(error.message);
+    return ok({ ok: true });
   }
 
   // ── toggle_ativo ──────────────────────────────────────────────────
@@ -122,15 +123,15 @@ Deno.serve(async (req) => {
       .from("profiles")
       .update({ ativo })
       .eq("id", user_id);
-    if (profErr) return json({ error: profErr.message }, 500);
+    if (profErr) return err(profErr.message);
 
     const { error: banErr } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
       ban_duration: ativo ? "none" : "87600h",
     });
-    if (banErr) return json({ error: banErr.message }, 500);
+    if (banErr) return err(banErr.message);
 
-    return json({ ok: true });
+    return ok({ ok: true });
   }
 
-  return json({ error: "Ação desconhecida: " + acao }, 400);
+  return err("Ação desconhecida: " + String(acao));
 });
