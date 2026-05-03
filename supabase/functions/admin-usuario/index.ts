@@ -1,3 +1,5 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+
 const corsHeaders = {
   "Access-Control-Allow-Origin": Deno.env.get("CORS_ORIGIN") ?? "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -15,30 +17,33 @@ Deno.serve(async (req) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
-  // ── Imports inline to avoid top-level await issues ────────────────
-  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
-
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+  const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
   const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+  // ── Verify caller identity via their JWT ──────────────────────────
+  // Pattern: anon client + forwarded user JWT → auth.getUser()
+  const authHeader = req.headers.get("Authorization") ?? "";
+  if (!authHeader) {
+    return json({ error: "Missing Authorization header" }, 401);
+  }
+
+  const supabaseUser = createClient(SUPABASE_URL, ANON_KEY, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  const { data: { user }, error: userErr } = await supabaseUser.auth.getUser();
+  if (userErr || !user) {
+    return json({ error: "Invalid or expired token: " + (userErr?.message ?? "no user") }, 401);
+  }
+
+  // ── Admin client for privileged operations ────────────────────────
   const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // ── Verify caller JWT ─────────────────────────────────────────────
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const jwt = authHeader.replace(/^Bearer\s+/i, "");
-
-  if (!jwt) {
-    return json({ error: "Missing Authorization header" }, 401);
-  }
-
-  const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(jwt);
-  if (userErr || !user) {
-    return json({ error: "Invalid or expired token" }, 401);
-  }
-
-  // ── Verify admin role ─────────────────────────────────────────────
+  // ── Verify caller has admin role ──────────────────────────────────
   const { data: roleRow } = await supabaseAdmin
     .from("user_roles")
     .select("role")
@@ -90,7 +95,7 @@ Deno.serve(async (req) => {
     ]);
 
     if (rolesResult.error) {
-      return json({ error: "Usuário criado mas erro ao definir perfil: " + rolesResult.error.message }, 500);
+      return json({ error: "Usuário criado mas erro ao definir role: " + rolesResult.error.message }, 500);
     }
     if (profilesResult.error) {
       return json({ error: "Usuário criado mas erro ao criar profile: " + profilesResult.error.message }, 500);
@@ -117,13 +122,11 @@ Deno.serve(async (req) => {
       .from("profiles")
       .update({ ativo })
       .eq("id", user_id);
-
     if (profErr) return json({ error: profErr.message }, 500);
 
     const { error: banErr } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
       ban_duration: ativo ? "none" : "87600h",
     });
-
     if (banErr) return json({ error: banErr.message }, 500);
 
     return json({ ok: true });
