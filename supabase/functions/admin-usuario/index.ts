@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
 
     const [rolesResult, profilesResult] = await Promise.all([
       supabaseAdmin.from("user_roles").upsert({ user_id: userId, role }, { onConflict: "user_id" }),
-      supabaseAdmin.from("profiles").upsert({ id: userId, email, full_name, ativo: true }, { onConflict: "id" }),
+      supabaseAdmin.from("profiles").upsert({ id: userId, email, name: full_name, role, ativo: true }, { onConflict: "id" }),
     ]);
 
     if (rolesResult.error) return err("Usuário criado mas erro ao definir role: " + rolesResult.error.message);
