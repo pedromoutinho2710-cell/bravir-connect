@@ -68,10 +68,6 @@ type PedidoDetalhe = {
   codigo_parceiro: string | null;
   negativado: boolean;
   responsavel_nome: string | null;
-  nota_fiscal: string | null;
-  nf_pdf_url: string | null;
-  rastreio: string | null;
-  obs_faturamento: string | null;
   itens: ItemDetalhe[];
   historico: HistoricoItem[];
   faturamentos: FaturamentoNF[];
@@ -139,7 +135,6 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
     if (!open || !pedidoId) { setPedido(null); return; }
     setLoading(true);
     (async () => {
-      // Queries independentes — falha em uma não bloqueia as outras
       const pRes = await supabase
         .from("pedidos")
         .select(`
@@ -155,7 +150,6 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
           agendamento,
           observacoes,
           motivo,
-          obs_faturamento,
           responsavel_id,
           cliente_id,
           vendedor_id,
@@ -235,10 +229,6 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
         codigo_parceiro: cl?.codigo_parceiro ?? null,
         negativado: cl?.negativado ?? false,
         responsavel_nome: responsavelNome,
-        nota_fiscal: null,
-        nf_pdf_url: null,
-        rastreio: null,
-        obs_faturamento: d.obs_faturamento ?? null,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         itens: (d.itens_pedido ?? []).map((i: any) => ({
           nome: i.produtos?.nome ?? "—",
@@ -338,7 +328,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
               )}
             </div>
 
-            {/* Notas fiscais (multi-NF) */}
+            {/* Notas fiscais — vêm de faturamentos */}
             {pedido.faturamentos.length > 0 && (
               <div className="space-y-2">
                 <div className="font-semibold">Notas Fiscais</div>
@@ -378,43 +368,6 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-
-            {/* Legacy single-NF fallback */}
-            {pedido.faturamentos.length === 0 && (pedido.nota_fiscal || pedido.rastreio || pedido.obs_faturamento) && (
-              <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm space-y-1.5">
-                <div className="font-semibold text-green-800 mb-2">Informações de Faturamento</div>
-                {pedido.nota_fiscal && (
-                  <div className="flex items-center justify-between">
-                    <span>
-                      <span className="text-muted-foreground">NF: </span>
-                      <span className="font-medium">{pedido.nota_fiscal}</span>
-                    </span>
-                    {pedido.nf_pdf_url && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 text-xs"
-                        onClick={async () => {
-                          const { data } = await supabase.storage
-                            .from("notas_fiscais")
-                            .createSignedUrl(pedido.nf_pdf_url!, 3600);
-                          if (data?.signedUrl) window.open(data.signedUrl, "_blank");
-                        }}
-                      >
-                        <Download className="h-3 w-3 mr-1" />
-                        Baixar NF
-                      </Button>
-                    )}
-                  </div>
-                )}
-                {pedido.rastreio && (
-                  <div><span className="text-muted-foreground">Rastreio: </span><span className="font-medium">{pedido.rastreio}</span></div>
-                )}
-                {pedido.obs_faturamento && (
-                  <div><span className="text-muted-foreground">Obs faturamento: </span>{pedido.obs_faturamento}</div>
-                )}
               </div>
             )}
 
