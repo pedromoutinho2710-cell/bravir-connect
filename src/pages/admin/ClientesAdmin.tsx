@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -47,6 +48,7 @@ type Cliente = {
 };
 
 export default function ClientesAdmin() {
+  const navigate = useNavigate();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
@@ -277,7 +279,7 @@ export default function ClientesAdmin() {
                 </TableHeader>
                 <TableBody>
                   {filtrados.map((c) => (
-                    <TableRow key={c.id}>
+                    <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${c.id}`)}>
                       <TableCell className="font-medium">{c.razao_social}</TableCell>
                       <TableCell className="font-mono text-sm text-muted-foreground">
                         {formatCNPJ(c.cnpj)}
@@ -377,7 +379,7 @@ export default function ClientesAdmin() {
                 </TableHeader>
                 <TableBody>
                   {carteira.map((c) => (
-                    <TableRow key={c.id}>
+                    <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${c.id}`)}>
                       <TableCell className="font-medium">{c.razao_social}</TableCell>
                       <TableCell className="font-mono text-sm text-muted-foreground">
                         {formatCNPJ(c.cnpj)}
@@ -396,7 +398,7 @@ export default function ClientesAdmin() {
                       </TableCell>
                       <TableCell className="text-sm">{c.tabela_preco ?? "—"}</TableCell>
                       <TableCell className="text-sm">{c.uf ?? "—"}</TableCell>
-                      <TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex gap-1">
                           <Button
                             size="icon"

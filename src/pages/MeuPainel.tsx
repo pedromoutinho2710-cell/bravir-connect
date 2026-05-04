@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -69,6 +70,7 @@ const TIPO_LABEL: Record<string, string> = {
 
 export default function MeuPainel() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0 });
   const [ultimosPedidos, setUltimosPedidos] = useState<UltimoPedido[]>([]);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
@@ -406,14 +408,21 @@ export default function MeuPainel() {
           <CardContent>
             <div className="space-y-1.5">
               {clientesReativar.map((c) => (
-                <div key={c.cliente_id} className="flex items-center justify-between rounded-md border px-3 py-2">
-                  <div>
-                    <div className="text-sm font-medium">{c.razao_social}</div>
+                <div key={c.cliente_id} className="flex items-center justify-between rounded-md border px-3 py-2 gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{c.razao_social}</div>
                     <div className="text-xs text-muted-foreground">
-                      Último pedido: {new Date(c.ultima_compra).toLocaleDateString("pt-BR")} ({c.dias_sem_compra} dias)
+                      {c.dias_sem_compra} dias sem compra · LTV {formatBRL(c.ltv)}
                     </div>
                   </div>
-                  <div className="text-sm font-semibold text-muted-foreground">{formatBRL(c.ltv)}</div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs shrink-0"
+                    onClick={() => navigate(`/clientes/${c.cliente_id}`)}
+                  >
+                    Ver cliente
+                  </Button>
                 </div>
               ))}
             </div>

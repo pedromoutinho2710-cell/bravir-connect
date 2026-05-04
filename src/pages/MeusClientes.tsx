@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -78,6 +79,7 @@ function abcBadge(abc: "A" | "B" | "C") {
 
 export default function MeusClientes() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [clientes, setClientes] = useState<ClienteAgregado[]>([]);
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
@@ -445,7 +447,17 @@ export default function MeusClientes() {
       <Sheet open={!!sheetCliente} onOpenChange={(o) => !o && setSheetCliente(null)}>
         <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>{sheetCliente?.razao_social}</SheetTitle>
+            <SheetTitle className="flex items-center justify-between gap-2">
+              <span className="truncate">{sheetCliente?.razao_social}</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0"
+                onClick={() => sheetCliente && navigate(`/clientes/${sheetCliente.cliente_id}`)}
+              >
+                Ficha completa
+              </Button>
+            </SheetTitle>
           </SheetHeader>
 
           {sheetCliente && (

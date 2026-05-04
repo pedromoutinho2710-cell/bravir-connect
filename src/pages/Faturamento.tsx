@@ -121,6 +121,26 @@ function urgencyClass(p: PedidoFat): string {
   return "";
 }
 
+function calcScore(p: PedidoFat): number {
+  const horas = STATUS_ACTIVE.has(p.status)
+    ? horasDesde(p.status_atualizado_em ?? p.data_pedido)
+    : 0;
+  return p.total / 100 + horas * 2;
+}
+
+type PrioLevel = "alto" | "medio" | "normal";
+function prioLevel(score: number): PrioLevel {
+  if (score >= 300) return "alto";
+  if (score >= 100) return "medio";
+  return "normal";
+}
+const PRIO_LABEL: Record<PrioLevel, string> = { alto: "Alto", medio: "Médio", normal: "Normal" };
+const PRIO_COLOR: Record<PrioLevel, string> = {
+  alto: "bg-red-100 text-red-800 border-red-300",
+  medio: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  normal: "bg-gray-100 text-gray-700 border-gray-300",
+};
+
 // ── Componente ────────────────────────────────────────────────────
 export default function Faturamento() {
   const { user } = useAuth();
@@ -303,8 +323,8 @@ export default function Faturamento() {
       const valorMin = parseFloat(filtroValorMin);
       if (!isNaN(valorMin) && valorMin > 0) mapped = mapped.filter((p) => p.total >= valorMin);
 
-      // Ordenar por maior valor
-      mapped.sort((a, b) => b.total - a.total);
+      // Ordenar por score de prioridade decrescente
+      mapped.sort((a, b) => calcScore(b) - calcScore(a));
 
       // Historico em batch
       if (mapped.length > 0) {
@@ -834,6 +854,7 @@ export default function Faturamento() {
                   <TableHead>Marcas</TableHead>
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Aguardando</TableHead>
+                  <TableHead>Prioridade</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="min-w-[260px]">Ações</TableHead>
                 </TableRow>
@@ -841,7 +862,7 @@ export default function Faturamento() {
               <TableBody>
                 {pedidos.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-muted-foreground py-12">Nenhum pedido encontrado</TableCell>
+                    <TableCell colSpan={10} className="text-center text-muted-foreground py-12">Nenhum pedido encontrado</TableCell>
                   </TableRow>
                 )}
                 {pedidos.map((p) => (
@@ -871,6 +892,17 @@ export default function Faturamento() {
                     <TableCell className="text-right font-bold text-sm text-green-700">{formatBRL(p.total)}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {STATUS_ACTIVE.has(p.status) ? (tempoAguardando(p.status_atualizado_em) ?? "—") : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const score = calcScore(p);
+                        const prio = prioLevel(score);
+                        return (
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${PRIO_COLOR[prio]}`}>
+                            {PRIO_LABEL[prio]}
+                          </span>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={p.status} />

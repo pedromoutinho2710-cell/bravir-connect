@@ -146,7 +146,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
             perfil_cliente, tabela_preco, cond_pagamento, agendamento, observacoes, motivo,
             nota_fiscal, nf_pdf_url, rastreio, obs_faturamento,
             responsavel_id,
-            clientes(razao_social, cnpj, cidade, uf, comprador, telefone, codigo_parceiro, negativado),
+            clientes(razao_social, cnpj, cidade, uf, cep, rua, numero, bairro, comprador, telefone, codigo_parceiro, negativado),
             itens_pedido(
               quantidade, preco_unitario_bruto, preco_unitario_liquido,
               desconto_perfil, desconto_comercial, desconto_trade,
@@ -156,7 +156,8 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
           `)
           .eq("id", pedidoId)
           .single(),
-        supabase
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
           .from("historico_status")
           .select("id, acao, status_anterior, status_novo, motivo, usuario_nome, usuario_email, created_at")
           .eq("pedido_id", pedidoId)
