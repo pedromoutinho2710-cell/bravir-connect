@@ -458,6 +458,32 @@ export default function NovoPedido() {
         toast.warning("Pedido salvo, mas houve falha ao enviar o email de notificação.");
       }
 
+      // Notificar todos os usuários de faturamento
+      try {
+        const { data: fatRoles } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("role", "faturamento");
+        const fatIds = (fatRoles ?? []).map((r) => r.user_id);
+        if (fatIds.length > 0) {
+          const { data: pedData2 } = await supabase
+            .from("pedidos")
+            .select("numero_pedido")
+            .eq("id", id)
+            .single();
+          const numPed = pedData2?.numero_pedido ?? "";
+          const nomeVendedor = user?.email ?? "Vendedor";
+          await supabase.from("notificacoes").insert(
+            fatIds.map((uid: string) => ({
+              destinatario_id: uid,
+              destinatario_role: "faturamento",
+              tipo: "novo_pedido",
+              mensagem: `Novo pedido #${numPed} de ${nomeVendedor}`,
+            }))
+          );
+        }
+      } catch { /* best-effort */ }
+
       toast.success("Pedido enviado para faturamento!");
       localStorage.removeItem(RASCUNHO_KEY);
       navigate("/meus-pedidos");

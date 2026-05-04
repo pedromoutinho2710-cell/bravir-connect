@@ -180,15 +180,13 @@ export default function ClientesAdmin() {
     setExcluindo(true);
     const { error } = await supabase
       .from("clientes")
-      .update({ status: "inativo" })
+      .delete()
       .eq("id", excluirCliente.id);
     setExcluindo(false);
-    if (error) { toast.error("Erro ao inativar: " + error.message); return; }
-    toast.success(`${excluirCliente.razao_social} inativado`);
+    if (error) { toast.error("Erro ao excluir: " + error.message); return; }
+    toast.success(`${excluirCliente.razao_social} excluído`);
     setExcluirCliente(null);
-    setClientes((prev) =>
-      prev.map((c) => c.id === excluirCliente.id ? { ...c, status: "inativo" } : c)
-    );
+    setClientes((prev) => prev.filter((c) => c.id !== excluirCliente.id));
   };
 
   if (loading) {
@@ -463,16 +461,16 @@ export default function ClientesAdmin() {
       <AlertDialog open={!!excluirCliente} onOpenChange={(o) => !o && setExcluirCliente(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Inativar cliente</AlertDialogTitle>
+            <AlertDialogTitle>Excluir cliente permanentemente?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja inativar <strong>{excluirCliente?.razao_social}</strong>? O cliente ficará com status "inativo".
+              Esta ação é irreversível. <strong>{excluirCliente?.razao_social}</strong> e todos os seus dados serão removidos do banco.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={excluir} disabled={excluindo} className="bg-red-600 hover:bg-red-700">
               {excluindo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Inativar
+              Excluir permanentemente
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

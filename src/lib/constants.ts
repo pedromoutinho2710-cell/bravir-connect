@@ -3,14 +3,14 @@ export const PERFIS_CLIENTE = [
   "Atacado Alimentício",
   "Cash & Carry",
   "Distribuidor Alimentício",
-  "Varejo Ind. + Pequeno",
-  "Varejo Rede Média e Grande",
+  "Varejo Pequeno Independente (1 a 10 lojas)",
+  "Varejo Médio (10 a 50 lojas)",
   "Varejo Perfumaria",
-  "Varejo Abrafarma",
+  "Varejo Rede Grande (Acima de 50 lojas)",
   "Atacado Generalista",
-  "Atacado Distribuidor Base",
-  "Atacado Distribuidor Foco",
-  "Atacado Distribuidor Parceiro",
+  "Distribuidor Base",
+  "Distribuidor Foco",
+  "Distribuidor Parceiro",
 ] as const;
 
 export const TABELAS_PRECO = [

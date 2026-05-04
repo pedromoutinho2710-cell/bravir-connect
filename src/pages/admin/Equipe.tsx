@@ -8,7 +8,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, UserPlus, Pencil, PowerOff, Power } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Loader2, UserPlus, Pencil, PowerOff, Power, Trash2 } from "lucide-react";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 
 type UsuarioRow = {
@@ -49,6 +50,10 @@ export default function Equipe() {
   // Confirmação toggle ativo
   const [toggleTarget, setToggleTarget] = useState<UsuarioRow | null>(null);
   const [toggling, setToggling] = useState(false);
+
+  // Excluir usuário
+  const [excluirTarget, setExcluirTarget] = useState<UsuarioRow | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const carregar = async () => {
     setLoading(true);
@@ -121,6 +126,19 @@ export default function Equipe() {
     carregar();
   };
 
+  const excluirUsuario = async () => {
+    if (!excluirTarget) return;
+    setExcluindo(true);
+    const { data, error } = await supabase.functions.invoke("admin-usuario", {
+      body: { acao: "excluir", user_id: excluirTarget.id },
+    });
+    setExcluindo(false);
+    if (error || data?.error) { toast.error("Erro ao excluir: " + (data?.error ?? error?.message)); return; }
+    toast.success(`${excluirTarget.full_name ?? excluirTarget.email} excluído`);
+    setExcluirTarget(null);
+    carregar();
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -189,6 +207,11 @@ export default function Equipe() {
                         {(u.ativo ?? true)
                           ? <PowerOff className="h-3 w-3 text-red-500" />
                           : <Power className="h-3 w-3 text-green-600" />}
+                      </Button>
+                      <Button size="icon" variant="outline" className="h-7 w-7"
+                        onClick={() => setExcluirTarget(u)}
+                        title="Excluir usuário">
+                        <Trash2 className="h-3 w-3 text-red-600" />
                       </Button>
                     </div>
                   </TableCell>
@@ -260,6 +283,29 @@ export default function Equipe() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* AlertDialog: excluir usuário */}
+      <AlertDialog open={!!excluirTarget} onOpenChange={(o) => !o && setExcluirTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir usuário permanentemente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação é irreversível. O usuário <strong>{excluirTarget?.full_name ?? excluirTarget?.email}</strong> será removido do sistema, incluindo dados de autenticação e permissões.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={excluirUsuario}
+              disabled={excluindo}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {excluindo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Excluir permanentemente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modal: confirmar toggle ativo */}
       <Dialog open={!!toggleTarget} onOpenChange={(o) => !o && setToggleTarget(null)}>

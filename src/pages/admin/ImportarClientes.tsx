@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Upload, Users, UserCheck, Award, ArrowLeft, ChevronRight } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Loader2, Upload, Users, UserCheck, Award, ArrowLeft, ChevronRight, Trash2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { onlyDigits } from "@/lib/format";
 
@@ -106,6 +107,10 @@ export default function ImportarClientes() {
   const [progresso, setProgresso] = useState(0);
   const [total, setTotal] = useState(0);
   const [resultados, setResultados] = useState<{ importados: number; descartados: number; erros: number } | null>(null);
+
+  const [limparDialog1, setLimparDialog1] = useState(false);
+  const [limparDialog2, setLimparDialog2] = useState(false);
+  const [limpando, setLimpando] = useState(false);
 
   const handleFile = async (file: File) => {
     setArquivo(file);
@@ -304,20 +309,39 @@ export default function ImportarClientes() {
     toast.success(`${importados} clientes importados com sucesso!`);
   };
 
+  const limparClientes = async () => {
+    setLimpando(true);
+    const { error } = await supabase.from("clientes").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    setLimpando(false);
+    setLimparDialog2(false);
+    if (error) { toast.error("Erro ao limpar: " + error.message); return; }
+    toast.success("Todos os clientes foram removidos");
+  };
+
   const vendedoresUnicos = Array.from(new Set(linhas.map((l) => l.vendedor_nome).filter(Boolean)));
   const totalSuframa = linhas.filter((l) => normalizar(l.suframa) === "sim").length;
 
   return (
     <div className="space-y-6 max-w-4xl">
-      <div className="flex items-center gap-3">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/admin/clientes")}>
-          <ArrowLeft className="h-4 w-4 mr-1" />
-          Voltar
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Importar Clientes</h1>
-          <p className="text-sm text-muted-foreground">Importação em massa via planilha Sankhya (.xls ou .xlsx)</p>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => navigate("/admin/clientes")}>
+            <ArrowLeft className="h-4 w-4 mr-1" />
+            Voltar
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Importar Clientes</h1>
+            <p className="text-sm text-muted-foreground">Importação em massa via planilha Sankhya (.xls ou .xlsx)</p>
+          </div>
         </div>
+        <Button
+          variant="destructive"
+          size="sm"
+          onClick={() => setLimparDialog1(true)}
+        >
+          <Trash2 className="h-4 w-4 mr-1" />
+          Limpar todos
+        </Button>
       </div>
 
       {/* Indicador de etapas */}
@@ -562,6 +586,50 @@ export default function ImportarClientes() {
           </Button>
         </div>
       )}
+
+      {/* 1ª confirmação */}
+      <AlertDialog open={limparDialog1} onOpenChange={setLimparDialog1}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Limpar todos os clientes?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação removerá <strong>todos</strong> os clientes do banco de dados. Você precisará confirmar novamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={() => { setLimparDialog1(false); setLimparDialog2(true); }}
+            >
+              Continuar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 2ª confirmação */}
+      <AlertDialog open={limparDialog2} onOpenChange={setLimparDialog2}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar exclusão total?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem <strong>certeza absoluta</strong>? Todos os clientes serão apagados permanentemente. Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700"
+              onClick={limparClientes}
+              disabled={limpando}
+            >
+              {limpando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Sim, apagar tudo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

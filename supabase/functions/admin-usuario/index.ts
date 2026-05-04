@@ -129,5 +129,23 @@ Deno.serve(async (req) => {
     return ok({ ok: true });
   }
 
+  // ── excluir ───────────────────────────────────────────────────────────────
+  if (acao === "excluir") {
+    const { user_id } = body as { user_id: string };
+    if (!user_id) return err("user_id obrigatório");
+
+    const [authErr, profErr, roleErr] = await Promise.all([
+      supabaseAdmin.auth.admin.deleteUser(user_id).then((r) => r.error),
+      supabaseAdmin.from("profiles").delete().eq("id", user_id).then((r) => r.error),
+      supabaseAdmin.from("user_roles").delete().eq("user_id", user_id).then((r) => r.error),
+    ]);
+
+    if (authErr) return err("Erro ao excluir auth: " + authErr.message);
+    if (profErr) return err("Erro ao excluir profile: " + profErr.message);
+    if (roleErr) return err("Erro ao excluir role: " + roleErr.message);
+
+    return ok({ ok: true });
+  }
+
   return err("Ação desconhecida: " + String(acao));
 });

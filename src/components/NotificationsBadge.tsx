@@ -12,10 +12,26 @@ interface Notificacao {
   mensagem: string;
   lida: boolean;
   created_at: string;
+  tipo: string | null;
+}
+
+const ROLE_HOME: Record<string, string> = {
+  admin: "/dashboard",
+  vendedor: "/meu-painel",
+  faturamento: "/faturamento",
+  trade: "/trade",
+  logistica: "/logistica",
+};
+
+function destinoNotificacao(n: Notificacao, role: string): string {
+  if (n.tipo === "pedido_faturado" || n.tipo === "pedido_devolvido") return "/meus-pedidos";
+  if (n.tipo === "novo_pedido") return "/faturamento";
+  if (n.tipo === "cliente_ativo" || n.tipo === "perfil_definido") return "/meus-clientes";
+  return ROLE_HOME[role] ?? "/";
 }
 
 export function NotificationsBadge() {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
   const navigate = useNavigate();
   const [count, setCount] = useState(0);
   const [notifications, setNotifications] = useState<Notificacao[]>([]);
@@ -25,7 +41,7 @@ export function NotificationsBadge() {
     const { count: c } = await supabase
       .from("notificacoes")
       .select("id", { count: "exact", head: true })
-      .eq("user_id", uid)
+      .eq("destinatario_id", uid)
       .eq("lida", false);
     setCount(c ?? 0);
   };
@@ -33,8 +49,8 @@ export function NotificationsBadge() {
   const fetchNotifications = async (uid: string) => {
     const { data } = await supabase
       .from("notificacoes")
-      .select("id, mensagem, lida, created_at")
-      .eq("user_id", uid)
+      .select("id, mensagem, lida, created_at, tipo")
+      .eq("destinatario_id", uid)
       .order("created_at", { ascending: false })
       .limit(10);
     setNotifications((data as Notificacao[]) ?? []);
@@ -49,7 +65,7 @@ export function NotificationsBadge() {
       .channel("notificacoes-badge")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "notificacoes", filter: `user_id=eq.${user.id}` },
+        { event: "*", schema: "public", table: "notificacoes", filter: `destinatario_id=eq.${user.id}` },
         () => {
           fetchCount(user.id);
           if (open) fetchNotifications(user.id);
@@ -72,7 +88,7 @@ export function NotificationsBadge() {
       setNotifications((prev) => prev.map((x) => x.id === n.id ? { ...x, lida: true } : x));
     }
     setOpen(false);
-    navigate("/faturamento");
+    navigate(destinoNotificacao(n, role ?? ""));
   };
 
   return (

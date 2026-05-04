@@ -444,6 +444,17 @@ export default function Faturamento() {
     setSubmetendoNf(false);
     if (updErr) { toast.error("Erro ao atualizar status: " + updErr.message); return; }
 
+    // Notificar vendedor do pedido
+    const nfNumero = nfData.numero.trim();
+    await supabase.from("notificacoes").insert({
+      destinatario_id: faturarDialog.vendedor_id,
+      destinatario_role: "vendedor",
+      tipo: "pedido_faturado",
+      mensagem: novoStatus === "faturado"
+        ? `Pedido #${faturarDialog.numero_pedido} faturado!${nfNumero ? ` NF: ${nfNumero}` : ""}`
+        : `Pedido #${faturarDialog.numero_pedido} parcialmente faturado${nfNumero ? ` — NF: ${nfNumero}` : ""}`,
+    });
+
     const msg = novoStatus === "faturado"
       ? `Pedido #${faturarDialog.numero_pedido} faturado completamente`
       : `Pedido #${faturarDialog.numero_pedido} parcialmente faturado`;
@@ -462,6 +473,17 @@ export default function Faturamento() {
     const status = motivoDialog.type === "devolver" ? "devolvido" : "cancelado";
     const ok = await atualizar(motivoDialog.id, { status, motivo: motivo.trim() });
     if (ok) {
+      if (motivoDialog.type === "devolver") {
+        const pedido = pedidos.find((p) => p.id === motivoDialog.id);
+        if (pedido) {
+          await supabase.from("notificacoes").insert({
+            destinatario_id: pedido.vendedor_id,
+            destinatario_role: "vendedor",
+            tipo: "pedido_devolvido",
+            mensagem: `Pedido #${pedido.numero_pedido} devolvido: ${motivo.trim()}`,
+          });
+        }
+      }
       setMotivoDialog(null);
       toast.success(motivoDialog.type === "devolver" ? "Pedido devolvido ao vendedor" : "Pedido cancelado");
     }
