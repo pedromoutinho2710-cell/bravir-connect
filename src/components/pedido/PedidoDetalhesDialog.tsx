@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -53,7 +53,7 @@ type PedidoDetalhe = {
   data_pedido: string;
   status: string;
   status_atualizado_em: string | null;
-  perfil_cliente: string;
+  cluster: string;
   tabela_preco: string;
   cond_pagamento: string | null;
   agendamento: boolean;
@@ -144,7 +144,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
           data_pedido,
           status,
           status_atualizado_em,
-          perfil_cliente,
+          cluster,
           tabela_preco,
           cond_pagamento,
           agendamento,
@@ -214,7 +214,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
         data_pedido: d.data_pedido,
         status: d.status,
         status_atualizado_em: d.status_atualizado_em ?? null,
-        perfil_cliente: d.perfil_cliente,
+        cluster: d.cluster,
         tabela_preco: d.tabela_preco,
         cond_pagamento: d.cond_pagamento,
         agendamento: d.agendamento,
@@ -318,7 +318,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
               <div><span className="text-muted-foreground">Cidade/UF: </span>{pedido.cidade && pedido.uf ? `${pedido.cidade}/${pedido.uf}` : "—"}</div>
               <div><span className="text-muted-foreground">Comprador: </span>{pedido.comprador || "—"}</div>
               <div><span className="text-muted-foreground">Tabela: </span>{pedido.tabela_preco}</div>
-              <div><span className="text-muted-foreground">Perfil: </span>{pedido.perfil_cliente}</div>
+              <div><span className="text-muted-foreground">Perfil: </span>{pedido.cluster}</div>
               <div><span className="text-muted-foreground">Tipo: </span>{pedido.tipo}</div>
               <div><span className="text-muted-foreground">Data: </span>{formatDate(pedido.data_pedido)}</div>
               <div><span className="text-muted-foreground">Pagamento: </span>{pedido.cond_pagamento || "—"}</div>

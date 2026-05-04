@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -132,7 +132,7 @@ export function AppSidebar() {
     supabase
       .from("clientes")
       .select("id", { count: "exact", head: true })
-      .is("perfil_cliente", null)
+      .is("cluster", null)
       .then(({ count }) => setSemPerfilCount(count ?? 0));
   }, [role]);
 

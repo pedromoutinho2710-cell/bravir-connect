@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+﻿import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
@@ -35,7 +35,7 @@ type Cliente = {
   razao_social: string;
   cnpj: string;
   status: string | null;
-  perfil_cliente: string | null;
+  cluster: string | null;
   tabela_preco: string | null;
   vendedor_id: string | null;
   negativado: boolean | null;
@@ -74,7 +74,7 @@ export default function ClientesAdmin() {
     const [clRes, prRes, roleRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, cnpj, status, perfil_cliente, tabela_preco, vendedor_id, negativado, cidade, uf, codigo_parceiro, nome_parceiro, canal, suframa")
+        .select("id, razao_social, cnpj, status, cluster, tabela_preco, vendedor_id, negativado, cidade, uf, codigo_parceiro, nome_parceiro, canal, suframa")
         .order("razao_social"),
       supabase.from("profiles").select("id, full_name, email"),
       supabase.from("user_roles").select("user_id").in("role", ["vendedor", "admin"]),
@@ -293,8 +293,8 @@ export default function ClientesAdmin() {
                         </span>
                       </TableCell>
                       <TableCell className="text-sm">
-                        {c.perfil_cliente ? (
-                          <Badge variant="outline">{c.perfil_cliente}</Badge>
+                        {c.cluster ? (
+                          <Badge variant="outline">{c.cluster}</Badge>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}

@@ -1,4 +1,4 @@
-export type Json =
+﻿export type Json =
   | string
   | number
   | boolean
@@ -73,7 +73,7 @@ export type Database = {
           nome_parceiro: string | null
           numero: string | null
           observacoes_trade: string | null
-          perfil_cliente: string | null
+          cluster: string | null
           razao_social: string
           rua: string | null
           status: string | null
@@ -105,7 +105,7 @@ export type Database = {
           nome_parceiro?: string | null
           numero?: string | null
           observacoes_trade?: string | null
-          perfil_cliente?: string | null
+          cluster?: string | null
           razao_social: string
           rua?: string | null
           status?: string | null
@@ -137,7 +137,7 @@ export type Database = {
           nome_parceiro?: string | null
           numero?: string | null
           observacoes_trade?: string | null
-          perfil_cliente?: string | null
+          cluster?: string | null
           razao_social?: string
           rua?: string | null
           status?: string | null
@@ -254,19 +254,19 @@ export type Database = {
         Row: {
           id: string
           percentual_desconto: number
-          perfil_cliente: string
+          cluster: string
           produto_id: string
         }
         Insert: {
           id?: string
           percentual_desconto?: number
-          perfil_cliente: string
+          cluster: string
           produto_id: string
         }
         Update: {
           id?: string
           percentual_desconto?: number
-          perfil_cliente?: string
+          cluster?: string
           produto_id?: string
         }
         Relationships: [
@@ -425,7 +425,7 @@ export type Database = {
           numero_pedido: number
           obs_faturamento: string | null
           observacoes: string | null
-          perfil_cliente: string
+          cluster: string
           rastreio: string | null
           responsavel_id: string | null
           status: string
@@ -447,7 +447,7 @@ export type Database = {
           numero_pedido?: number
           obs_faturamento?: string | null
           observacoes?: string | null
-          perfil_cliente: string
+          cluster: string
           rastreio?: string | null
           responsavel_id?: string | null
           status?: string
@@ -469,7 +469,7 @@ export type Database = {
           numero_pedido?: number
           obs_faturamento?: string | null
           observacoes?: string | null
-          perfil_cliente?: string
+          cluster?: string
           rastreio?: string | null
           responsavel_id?: string | null
           status?: string

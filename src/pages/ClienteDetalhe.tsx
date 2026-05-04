@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, formatDate, formatCNPJ, formatCEP } from "@/lib/format";
@@ -47,7 +47,7 @@ type ClienteInfo = {
   razao_social: string;
   cnpj: string;
   codigo_parceiro: string | null;
-  perfil_cliente: string | null;
+  cluster: string | null;
   tabela_preco: string | null;
   cidade: string | null;
   uf: string | null;
@@ -111,7 +111,7 @@ export default function ClienteDetalhe() {
       const [cRes, pRes] = await Promise.all([
         supabase
           .from("clientes")
-          .select("id, razao_social, cnpj, codigo_parceiro, perfil_cliente, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa")
+          .select("id, razao_social, cnpj, codigo_parceiro, cluster, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa")
           .eq("id", id)
           .single(),
         supabase
@@ -130,7 +130,7 @@ export default function ClienteDetalhe() {
           razao_social: c.razao_social,
           cnpj: c.cnpj,
           codigo_parceiro: c.codigo_parceiro,
-          perfil_cliente: c.perfil_cliente,
+          cluster: c.cluster,
           tabela_preco: c.tabela_preco,
           cidade: c.cidade,
           uf: c.uf,
@@ -228,7 +228,7 @@ export default function ClienteDetalhe() {
               {cliente.codigo_parceiro && (
                 <InfoRow label="Código Sankhya" value={cliente.codigo_parceiro} />
               )}
-              <InfoRow label="Perfil" value={cliente.perfil_cliente} />
+              <InfoRow label="Perfil" value={cliente.cluster} />
               <InfoRow label="Tabela de preço" value={cliente.tabela_preco} />
               <InfoRow label="Comprador" value={cliente.comprador} />
 

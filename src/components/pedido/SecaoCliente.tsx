@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,7 @@ export type DadosCliente = {
   uf: string;
   cep: string;
   comprador: string;
-  perfil_cliente: string;
+  cluster: string;
   tabela_preco: string;
   tipo: string;
   cond_pagamento: string;
@@ -42,7 +42,7 @@ type Sugestao = {
   bairro: string | null;
   telefone: string | null;
   comprador: string | null;
-  perfil_cliente: string | null;
+  cluster: string | null;
   tabela_preco: string | null;
   codigo_cliente: string | null;
   codigo_parceiro: string | null;
@@ -125,7 +125,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       uf: cl.uf ?? "",
       cep: cl.cep ? formatCEP(cl.cep) : "",
       comprador: cl.comprador ?? "",
-      perfil_cliente: cl.perfil_cliente ?? value.perfil_cliente,
+      cluster: cl.cluster ?? value.cluster,
       tabela_preco: cl.tabela_preco ?? value.tabela_preco,
       codigo_cliente: cl.codigo_parceiro ?? cl.codigo_cliente ?? "",
       aceita_saldo: cl.aceita_saldo ?? false,
@@ -179,7 +179,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           bairro: cl.bairro ?? null,
           telefone: cl.telefone ?? null,
           comprador: cl.comprador,
-          perfil_cliente: cl.perfil_cliente,
+          cluster: cl.cluster,
           tabela_preco: cl.tabela_preco,
           codigo_cliente: cl.codigo_cliente,
           codigo_parceiro: cl.codigo_parceiro,
@@ -248,7 +248,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       searchTimerRef.current = setTimeout(async () => {
         const { data } = await supabase
           .from("clientes")
-          .select("id, razao_social, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, perfil_cliente, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado")
+          .select("id, razao_social, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, cluster, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado")
           .ilike("razao_social", `%${text.trim()}%`)
           .limit(10);
         setSugestoes((data ?? []) as Sugestao[]);
@@ -273,7 +273,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       uf: s.uf ?? "",
       cep: s.cep ? formatCEP(s.cep) : "",
       comprador: s.comprador ?? "",
-      perfil_cliente: s.perfil_cliente ?? value.perfil_cliente,
+      cluster: s.cluster ?? value.cluster,
       tabela_preco: s.tabela_preco ?? value.tabela_preco,
       codigo_cliente: s.codigo_parceiro ?? s.codigo_cliente ?? "",
       aceita_saldo: s.aceita_saldo ?? false,
@@ -419,13 +419,13 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-base font-semibold">
-              Perfil do cliente *
+              Cluster *
               {cnpjStatus === "encontrado" && (
                 <span className="ml-2 text-xs font-normal text-muted-foreground">(definido pelo cadastro)</span>
               )}
             </Label>
             <Input
-              value={value.perfil_cliente}
+              value={value.cluster}
               readOnly
               disabled={cnpjStatus === "encontrado"}
               placeholder="Definido pelo faturamento"

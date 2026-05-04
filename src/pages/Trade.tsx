@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+﻿import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ type ClientePendente = {
   cidade: string | null;
   uf: string | null;
   vendedor_id: string | null;
-  perfil_cliente: string | null;
+  cluster: string | null;
   created_at: string;
 };
 
@@ -30,7 +30,7 @@ export default function Trade() {
     setLoading(true);
     const { data, error } = await supabase
       .from("clientes")
-      .select("id, razao_social, cnpj, cidade, uf, vendedor_id, perfil_cliente, created_at")
+      .select("id, razao_social, cnpj, cidade, uf, vendedor_id, cluster, created_at")
       .eq("status", "aguardando_trade")
       .order("created_at", { ascending: true });
     if (error) toast.error("Erro ao carregar clientes");
@@ -111,8 +111,8 @@ export default function Trade() {
                     {c.vendedor_id ? (profiles[c.vendedor_id] ?? "—") : "—"}
                   </TableCell>
                   <TableCell>
-                    {c.perfil_cliente ? (
-                      <Badge variant="outline" className="text-xs">{c.perfil_cliente}</Badge>
+                    {c.cluster ? (
+                      <Badge variant="outline" className="text-xs">{c.cluster}</Badge>
                     ) : (
                       <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-300">
                         Sem perfil

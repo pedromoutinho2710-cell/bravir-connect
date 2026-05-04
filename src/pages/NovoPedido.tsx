@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -29,7 +29,7 @@ const initialCliente: DadosCliente = {
   uf: "",
   cep: "",
   comprador: "",
-  perfil_cliente: "",
+  cluster: "",
   tabela_preco: "",
   tipo: "Pedido",
   cond_pagamento: "",
@@ -117,7 +117,7 @@ export default function NovoPedido() {
       }
       if (dRes.data) {
         const map: Record<string, Record<string, number>> = {};
-        dRes.data.forEach((d) => { (map[d.produto_id] ||= {})[d.perfil_cliente] = Number(d.percentual_desconto); });
+        dRes.data.forEach((d) => { (map[d.produto_id] ||= {})[d.cluster] = Number(d.percentual_desconto); });
         setDescontos(map);
       }
 
@@ -155,7 +155,7 @@ export default function NovoPedido() {
   const podeSalvar = useMemo(() => (
     onlyDigits(cliente.cnpj).length === 14 &&
     cliente.razao_social.trim().length > 0 &&
-    !!cliente.perfil_cliente &&
+    !!cliente.cluster &&
     !!cliente.tabela_preco
   ), [cliente]);
 
@@ -202,7 +202,7 @@ export default function NovoPedido() {
         .update({
           tipo: cliente.tipo,
           cliente_id,
-          perfil_cliente: cliente.perfil_cliente,
+          cluster: cliente.cluster,
           tabela_preco: cliente.tabela_preco,
           cond_pagamento: cliente.cond_pagamento || null,
           agendamento: cliente.agendamento,
@@ -221,7 +221,7 @@ export default function NovoPedido() {
           tipo: cliente.tipo,
           vendedor_id: user.id,
           cliente_id,
-          perfil_cliente: cliente.perfil_cliente,
+          cluster: cliente.cluster,
           tabela_preco: cliente.tabela_preco,
           cond_pagamento: cliente.cond_pagamento || null,
           agendamento: cliente.agendamento,
@@ -298,7 +298,7 @@ export default function NovoPedido() {
     const { data, error } = await supabase
       .from("pedidos")
       .select(`
-        id, tipo, cond_pagamento, agendamento, observacoes, perfil_cliente, tabela_preco,
+        id, tipo, cond_pagamento, agendamento, observacoes, cluster, tabela_preco,
         clientes(id, cnpj, razao_social, cidade, uf, cep, comprador),
         itens_pedido(produto_id, quantidade, preco_unitario_bruto, total_item,
           desconto_perfil, desconto_comercial, desconto_trade,
@@ -324,7 +324,7 @@ export default function NovoPedido() {
       uf: cl.uf ?? "",
       cep: cl.cep ? formatCEP(cl.cep) : "",
       comprador: cl.comprador ?? "",
-      perfil_cliente: data.perfil_cliente,
+      cluster: data.cluster,
       tabela_preco: data.tabela_preco,
       tipo: data.tipo,
       cond_pagamento: data.cond_pagamento ?? "",
@@ -338,7 +338,7 @@ export default function NovoPedido() {
     setItens(((data.itens_pedido as any[]) ?? []).map((item) => {
       const p = item.produtos;
       const bruto = precos[item.produto_id]?.[data.tabela_preco] ?? Number(item.preco_unitario_bruto);
-      const dPerfil = descontos[item.produto_id]?.[data.perfil_cliente] ?? Number(item.desconto_perfil ?? 0);
+      const dPerfil = descontos[item.produto_id]?.[data.cluster] ?? Number(item.desconto_perfil ?? 0);
       const dCom = Number(item.desconto_comercial ?? 0);
       const dTrade = Number(item.desconto_trade ?? 0);
       const apos_perfil = bruto * (1 - dPerfil / 100);
@@ -516,7 +516,7 @@ export default function NovoPedido() {
         uf: cliente.uf,
         comprador: cliente.comprador,
       },
-      perfil_cliente: cliente.perfil_cliente,
+      cluster: cliente.cluster,
       tabela_preco: cliente.tabela_preco,
       cond_pagamento: cliente.cond_pagamento,
       agendamento: cliente.agendamento,
@@ -572,7 +572,7 @@ export default function NovoPedido() {
         precos={precos}
         descontos={descontos}
         tabelaPreco={cliente.tabela_preco}
-        perfilCliente={cliente.perfil_cliente}
+        perfilCliente={cliente.cluster}
         itens={itens}
         onChange={setItens}
       />
@@ -668,7 +668,7 @@ export default function NovoPedido() {
                 CNPJ {cliente.cnpj} • {cliente.cidade || "—"}/{cliente.uf || "—"}
               </div>
               <div className="text-muted-foreground">
-                {cliente.tipo} • Tabela {cliente.tabela_preco} • {cliente.perfil_cliente}
+                {cliente.tipo} • Tabela {cliente.tabela_preco} • {cliente.cluster}
               </div>
             </div>
             {Object.entries(

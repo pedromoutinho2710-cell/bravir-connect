@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+﻿import { useEffect, useState, useMemo, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { formatCNPJ } from "@/lib/format";
-import { PERFIS_CLIENTE, TABELAS_PRECO } from "@/lib/constants";
+import { CLUSTERS, TABELAS_PRECO } from "@/lib/constants";
 import { Loader2, Search, Users } from "lucide-react";
 
 type Cliente = {
@@ -21,7 +21,7 @@ type Cliente = {
   cnpj: string | null;
   cidade: string | null;
   uf: string | null;
-  perfil_cliente: string | null;
+  cluster: string | null;
   tabela_preco: string | null;
   vendedor_id: string | null;
   negativado: boolean;
@@ -61,7 +61,7 @@ export default function FaturamentoClientes() {
     const [clientesRes, vendedoresRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, cnpj, cidade, uf, perfil_cliente, tabela_preco, vendedor_id, negativado, aceita_saldo, observacoes_trade")
+        .select("id, razao_social, cnpj, cidade, uf, cluster, tabela_preco, vendedor_id, negativado, aceita_saldo, observacoes_trade")
         .order("razao_social"),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (supabase as any)
@@ -109,15 +109,15 @@ export default function FaturamentoClientes() {
         || c.razao_social.toLowerCase().includes(buscaLow)
         || (buscaDigits.length > 0 && cnpjDigits.includes(buscaDigits));
       const matchPerfil = filtroPerfil === "todos"
-        || (filtroPerfil === "sem" && !c.perfil_cliente)
-        || (filtroPerfil === "com" && !!c.perfil_cliente);
+        || (filtroPerfil === "sem" && !c.cluster)
+        || (filtroPerfil === "com" && !!c.cluster);
       const matchUF = filtroUF === "todas" || c.uf === filtroUF;
       return matchBusca && matchPerfil && matchUF;
     });
 
     lista.sort((a, b) => {
-      if (!a.perfil_cliente && b.perfil_cliente) return -1;
-      if (a.perfil_cliente && !b.perfil_cliente) return 1;
+      if (!a.cluster && b.cluster) return -1;
+      if (a.cluster && !b.cluster) return 1;
       return a.razao_social.localeCompare(b.razao_social, "pt-BR");
     });
 
@@ -126,7 +126,7 @@ export default function FaturamentoClientes() {
 
   const abrirModal = (c: Cliente) => {
     setModalCliente(c);
-    setEditPerfil(c.perfil_cliente ?? "");
+    setEditPerfil(c.cluster ?? "");
     setEditTabela(c.tabela_preco ?? "");
     setEditVendedorId(c.vendedor_id ?? "");
     setEditNegativado(c.negativado);
@@ -138,12 +138,12 @@ export default function FaturamentoClientes() {
     if (!modalCliente) return;
     setSalvando(true);
 
-    const eraSeemPerfil = !modalCliente.perfil_cliente;
+    const eraSeemPerfil = !modalCliente.cluster;
 
     const { error } = await supabase
       .from("clientes")
       .update({
-        perfil_cliente: editPerfil || null,
+        cluster: editPerfil || null,
         tabela_preco: editTabela || null,
         vendedor_id: editVendedorId || null,
         negativado: editNegativado,
@@ -174,7 +174,7 @@ export default function FaturamentoClientes() {
     await carregar();
   };
 
-  const semPerfilCount = clientes.filter((c) => !c.perfil_cliente).length;
+  const semPerfilCount = clientes.filter((c) => !c.cluster).length;
 
   return (
     <div className="space-y-6">
@@ -273,8 +273,8 @@ export default function FaturamentoClientes() {
                     {[c.cidade, c.uf].filter(Boolean).join(" / ") || "—"}
                   </TableCell>
                   <TableCell>
-                    {c.perfil_cliente ? (
-                      <Badge variant="outline" className="text-xs">{c.perfil_cliente}</Badge>
+                    {c.cluster ? (
+                      <Badge variant="outline" className="text-xs">{c.cluster}</Badge>
                     ) : (
                       <Badge variant="outline" className="text-xs bg-red-100 text-red-800 border-red-300">
                         Sem perfil
@@ -315,14 +315,14 @@ export default function FaturamentoClientes() {
           <div className="space-y-4 py-2">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label>Perfil do cliente</Label>
+                <Label>Cluster</Label>
                 <Select value={editPerfil || "__none__"} onValueChange={(v) => setEditPerfil(v === "__none__" ? "" : v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione o perfil" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">— Sem perfil —</SelectItem>
-                    {PERFIS_CLIENTE.map((p) => (
+                    {CLUSTERS.map((p) => (
                       <SelectItem key={p} value={p}>{p}</SelectItem>
                     ))}
                   </SelectContent>

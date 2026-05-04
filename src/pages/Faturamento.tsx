@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+﻿import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -44,7 +44,7 @@ type PedidoFat = {
   comprador: string | null;
   cep: string | null;
   codigo_parceiro: string | null;
-  perfil_cliente: string;
+  cluster: string;
   tabela_preco: string;
   agendamento: boolean;
   aceita_saldo_cliente: boolean;
@@ -242,7 +242,7 @@ export default function Faturamento() {
         .select(`
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, observacoes, responsavel_id, motivo, vendedor_id,
-          cliente_id, perfil_cliente, tabela_preco, agendamento,
+          cliente_id, cluster, tabela_preco, agendamento,
           clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, aceita_saldo),
           itens_pedido(
             id, total_item, quantidade, preco_unitario_bruto, preco_unitario_liquido,
@@ -283,7 +283,7 @@ export default function Faturamento() {
           motivo: p.motivo,
           vendedor_id: p.vendedor_id,
           cliente_id: p.cliente_id ?? null,
-          perfil_cliente: p.perfil_cliente,
+          cluster: p.cluster,
           tabela_preco: p.tabela_preco,
           agendamento: p.agendamento,
           razao_social: cl?.razao_social ?? "—",
@@ -592,7 +592,7 @@ export default function Faturamento() {
         data_pedido: p.data_pedido,
         cliente: { razao_social: p.razao_social, cnpj: p.cnpj, comprador: p.comprador ?? "", cidade: p.cidade ?? "", uf: p.uf ?? "", cep: p.cep ?? "" },
         vendedor: profiles[p.vendedor_id] ?? "",
-        perfil: p.perfil_cliente,
+        perfil: p.cluster,
         tabela_preco: p.tabela_preco,
         cond_pagamento: p.cond_pagamento ?? "",
         agendamento: p.agendamento,

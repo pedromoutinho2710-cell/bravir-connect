@@ -1,4 +1,4 @@
-import jsPDF from "jspdf";
+﻿import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { formatBRL, formatDate, formatCNPJ } from "./format";
 
@@ -20,7 +20,7 @@ export type PdfData = {
   data: Date;
   tipo: string;
   cliente: { cnpj: string; razao_social: string; cidade?: string; uf?: string; comprador?: string };
-  perfil_cliente: string;
+  cluster: string;
   tabela_preco: string;
   cond_pagamento?: string;
   agendamento: boolean;
