@@ -397,9 +397,9 @@ export function SecaoProdutos({
                             type="number"
                             min={0}
                             max={100}
-                            step={0.1}
+                            step={1}
                             value={i.desconto_perfil}
-                            onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                            onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))))}
                             className={cn("w-20 ml-auto")}
                             placeholder="0"
                           />
@@ -413,13 +413,14 @@ export function SecaoProdutos({
                           <Input
                             type="number"
                             min={0}
-                            max={100}
+                            max={3}
                             step={0.1}
                             value={i.desconto_comercial}
-                            onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.max(0, Number(e.target.value) || 0))}
+                            onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.min(3, Math.max(0, Number(e.target.value) || 0)))}
                             className={cn("w-20 ml-auto")}
                             placeholder="0"
                           />
+                          <div className="text-[10px] text-muted-foreground mt-0.5 text-right">Máximo 3%</div>
                         </TableCell>
                       )}
                       {!descontoLivre && <TableCell className="text-right text-sm">{formatBRL(i.preco_apos_comercial)}</TableCell>}
