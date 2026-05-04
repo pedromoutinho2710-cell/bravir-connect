@@ -59,17 +59,6 @@ type Props = {
   vendedorId: string;
 };
 
-const COND_PAGAMENTO = [
-  "À vista",
-  "7 dias",
-  "14 dias",
-  "21 dias",
-  "28 dias",
-  "30 dias",
-  "30/60 dias",
-  "30/60/90 dias",
-  "30/60/90/120 dias",
-];
 
 export function SecaoCliente({ value, onChange, vendedorId }: Props) {
   const [cnpjStatus, setCnpjStatus] = useState<"idle" | "buscando" | "encontrado" | "novo" | "invalido">("idle");
@@ -309,8 +298,6 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       });
   };
 
-  const condOpcoes = negativado ? ["À vista"] : COND_PAGAMENTO;
-
   return (
     <Card className="bg-[#EFF6FF] border-blue-200">
       <CardHeader>
@@ -534,17 +521,12 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           </div>
           <div className="space-y-1.5">
             <Label className="text-base font-semibold">Condição de pagamento</Label>
-            <Select
+            <Input
               value={value.cond_pagamento}
-              onValueChange={(v) => set("cond_pagamento", v)}
-            >
-              <SelectTrigger className="h-11 text-base">
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {condOpcoes.map((op) => <SelectItem key={op} value={op}>{op}</SelectItem>)}
-              </SelectContent>
-            </Select>
+              onChange={(e) => set("cond_pagamento", e.target.value)}
+              placeholder="Ex: 28/35/42 DDL, 30/60 dias..."
+              className="h-11 text-base"
+            />
           </div>
         </div>
 

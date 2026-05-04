@@ -11,7 +11,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FileDown, Eye, Send, Loader2, FileText, Save, CalendarRange } from "lucide-react";
+import { FileDown, Eye, Send, Loader2, FileText, Save, CalendarRange, RotateCcw } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { onlyDigits, formatBRL, formatDate, formatCNPJ, formatCEP } from "@/lib/format";
 import { gerarPedidoPDF, type PdfItem } from "@/lib/pdf";
@@ -39,7 +49,7 @@ const initialCliente: DadosCliente = {
   agendamento: false,
   observacoes: "",
   codigo_cliente: "",
-  aceita_saldo: false,
+  aceita_saldo: true,
   ordem_compra: "",
   email_xml: "",
 };
@@ -74,7 +84,7 @@ export default function NovoPedido() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pedidoId, setPedidoId] = useState<string | null>(null);
 
-  const [saldoBolsao, setSaldoBolsao] = useState(0);
+  const [showLimpar, setShowLimpar] = useState(false);
 
   // Rascunho
   const [draftInfo, setDraftInfo] = useState<DraftInfo | null>(null);
@@ -190,30 +200,6 @@ export default function NovoPedido() {
       tabela_preco: fc.tabela_preco ?? "",
     }));
   }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Bolsão saldo do cliente ───────────────────────────────────────────────
-  useEffect(() => {
-    const id = cliente.cliente_id;
-    if (!id) { setSaldoBolsao(0); return; }
-    let cancel = false;
-    (async () => {
-      const { data: pedIds } = await supabase
-        .from("pedidos")
-        .select("id")
-        .eq("cliente_id", id)
-        .neq("status", "rascunho");
-      if (cancel || !pedIds?.length) { setSaldoBolsao(0); return; }
-      const ids = pedIds.map((p) => p.id);
-      const { data: items } = await supabase
-        .from("itens_pedido")
-        .select("bolsao")
-        .in("pedido_id", ids);
-      if (!cancel) {
-        setSaldoBolsao((items ?? []).reduce((s, i) => s + (i.bolsao ?? 0), 0));
-      }
-    })();
-    return () => { cancel = true; };
-  }, [cliente.cliente_id]);
 
   // ── podeSalvar / podeEnviar ────────────────────────────────────────────────
   const podeSalvar = useMemo(() => (
@@ -468,6 +454,15 @@ export default function NovoPedido() {
     setShowDraftModal(false);
   };
 
+  // ── Limpar pedido ─────────────────────────────────────────────────────────
+  const limparPedido = () => {
+    setItens([]);
+    setCliente(initialCliente);
+    setPedidoId(null);
+    localStorage.removeItem(RASCUNHO_KEY);
+    setShowLimpar(false);
+  };
+
   // ── Salvar rascunho manualmente ────────────────────────────────────────────
   const salvarRascunhoManual = async () => {
     if (!podeSalvar) {
@@ -687,7 +682,7 @@ export default function NovoPedido() {
         descontoLivre={vigencias.find((v) => v.id === vigenciaId)?.desconto_livre ?? false}
       />
 
-      <ResumoFinanceiro itens={itens} uf={cliente.uf} saldoBolsao={saldoBolsao} />
+      <ResumoFinanceiro itens={itens} uf={cliente.uf} />
 
       {/* Barra de pedido mínimo + ações — sticky no rodapé */}
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t z-10 -mx-4 px-4 py-3 space-y-3">
@@ -718,6 +713,10 @@ export default function NovoPedido() {
           <Button variant="outline" onClick={baixarPDF} disabled={itens.length === 0}>
             <FileDown className="h-4 w-4" />
             Baixar PDF
+          </Button>
+          <Button variant="outline" onClick={() => setShowLimpar(true)} disabled={itens.length === 0 && !cliente.razao_social}>
+            <RotateCcw className="h-4 w-4" />
+            Limpar pedido
           </Button>
           <Button variant="outline" onClick={salvarRascunhoManual} disabled={!podeSalvar || salvandoRascunho}>
             {salvandoRascunho ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
@@ -846,6 +845,27 @@ export default function NovoPedido() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* AlertDialog: confirmar limpeza */}
+      <AlertDialog open={showLimpar} onOpenChange={setShowLimpar}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Limpar pedido?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Todos os itens e dados do cliente serão removidos. A vigência selecionada será mantida.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={limparPedido}
+            >
+              Limpar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -333,134 +333,145 @@ export function SecaoProdutos({
         </div>
 
         {itensRecalculados.length > 0 && (
-          <div className="rounded-md border overflow-x-auto">
+          <div className="rounded-lg border overflow-x-auto shadow-sm">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Produto</TableHead>
-                  <TableHead className="text-right">Cx</TableHead>
-                  <TableHead className="text-right">{isVendedorLivre ? "Qtd" : "Qtd Caixas"}</TableHead>
-                  {!isVendedorLivre && <TableHead className="text-right">Qtd Un.</TableHead>}
-                  <TableHead className="text-right">P. Bruto</TableHead>
-                  <TableHead className="text-right">Desc. Perfil %</TableHead>
-                  <TableHead className="text-right">P. Após Perfil</TableHead>
-                  {!descontoLivre && <TableHead className="text-right">Desc. Comercial %</TableHead>}
-                  {!descontoLivre && <TableHead className="text-right">P. Após Comercial</TableHead>}
-                  <TableHead className="text-right">Desc. Trade %</TableHead>
-                  <TableHead className="text-right">P. Final</TableHead>
-                  <TableHead className="text-right">Bolsão</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead></TableHead>
+                <TableRow style={{ backgroundColor: '#1a5c38' }} className="hover:bg-[#1a5c38]">
+                  <TableHead className="text-white text-[11px] font-semibold py-2">Produto</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-28">Qtd</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">Bruto & Desc.</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. c/ Perfil</TableHead>
+                  {!descontoLivre && <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Com. %</TableHead>}
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Trade %</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Final</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Bolsão</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">Total</TableHead>
+                  <TableHead className="text-white w-8 py-2"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {itensRecalculados.map((i) => {
-                  return (
-                    <TableRow key={i.produto_id}>
-                      <TableCell>
-                        <div className="font-mono text-xs text-muted-foreground">{i.codigo}</div>
-                        <div className="text-sm">{i.nome}</div>
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">{i.cx_embarque}</TableCell>
-                      <TableCell className="text-right">
-                        {isVendedorLivre ? (
+                {itensRecalculados.map((i, idx) => (
+                  <TableRow
+                    key={i.produto_id}
+                    style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8faf9' }}
+                    className="hover:bg-green-50/70 transition-colors"
+                  >
+                    {/* Produto */}
+                    <TableCell className="py-2 align-top">
+                      <div className="font-mono text-[10px] text-muted-foreground leading-none mb-0.5">{i.codigo}</div>
+                      <div className="text-xs font-medium leading-snug">{i.nome}</div>
+                    </TableCell>
+
+                    {/* Quantidade */}
+                    <TableCell className="text-right py-2 align-top">
+                      {isVendedorLivre ? (
+                        <Input
+                          type="number" min={1}
+                          value={i.quantidade}
+                          onChange={(e) => atualizarQtd(i.produto_id, Math.max(1, Number(e.target.value) || 1))}
+                          className={cn("w-16 ml-auto h-7 text-xs")}
+                        />
+                      ) : (
+                        <div className="space-y-0.5">
                           <Input
-                            type="number"
-                            min={1}
-                            value={i.quantidade}
-                            onChange={(e) => atualizarQtd(i.produto_id, Math.max(1, Number(e.target.value) || 1))}
-                            className={cn("w-20 ml-auto")}
-                          />
-                        ) : (
-                          <Input
-                            type="number"
-                            min={1}
-                            step={1}
+                            type="number" min={1} step={1}
                             value={Math.round(i.quantidade / i.cx_embarque)}
                             onChange={(e) => {
                               const caixas = Math.max(1, Math.floor(Number(e.target.value) || 1));
                               atualizarQtd(i.produto_id, caixas * i.cx_embarque);
                             }}
-                            className={cn("w-20 ml-auto")}
+                            className={cn("w-16 ml-auto h-7 text-xs")}
                           />
-                        )}
-                      </TableCell>
-                      {!isVendedorLivre && (
-                        <TableCell className="text-right text-muted-foreground text-sm">
-                          {i.quantidade}
-                        </TableCell>
+                          <div className="text-[10px] text-muted-foreground text-right leading-none">
+                            Cx:{i.cx_embarque} · {i.quantidade}un
+                          </div>
+                        </div>
                       )}
-                      <TableCell className="text-right text-sm">{formatBRL(i.preco_bruto)}</TableCell>
-                      <TableCell className="text-right">
+                    </TableCell>
+
+                    {/* Bruto & Desc. Perfil (merged) */}
+                    <TableCell className="text-right py-2 align-top">
+                      <div className="text-xs font-medium">{formatBRL(i.preco_bruto)}</div>
+                      <div className="mt-0.5">
                         {descontoLivre ? (
                           <Input
-                            type="number"
-                            min={0}
-                            max={100}
-                            step={1}
+                            type="number" min={0} max={100} step={1}
                             value={i.desconto_perfil}
                             onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))))}
-                            className={cn("w-20 ml-auto")}
-                            placeholder="0"
+                            className={cn("w-14 ml-auto h-6 text-[10px]")}
+                            placeholder="0%"
                           />
                         ) : (
-                          <span className="text-muted-foreground text-sm">{i.desconto_perfil}%</span>
+                          <span className="text-[10px] text-muted-foreground">↓ {i.desconto_perfil}%</span>
                         )}
-                      </TableCell>
-                      <TableCell className="text-right text-sm">{formatBRL(i.preco_apos_perfil)}</TableCell>
-                      {!descontoLivre && (
-                        <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            min={0}
-                            max={3}
-                            step={0.1}
-                            value={i.desconto_comercial}
-                            onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.min(3, Math.max(0, Number(e.target.value) || 0)))}
-                            className={cn("w-20 ml-auto")}
-                            placeholder="0"
-                          />
-                          <div className="text-[10px] text-muted-foreground mt-0.5 text-right">Máximo 3%</div>
-                        </TableCell>
-                      )}
-                      {!descontoLivre && <TableCell className="text-right text-sm">{formatBRL(i.preco_apos_comercial)}</TableCell>}
-                      <TableCell className="text-right">
+                      </div>
+                    </TableCell>
+
+                    {/* P. Após Perfil */}
+                    <TableCell className="text-right text-xs py-2 align-top">{formatBRL(i.preco_apos_perfil)}</TableCell>
+
+                    {/* Desc. Comercial */}
+                    {!descontoLivre && (
+                      <TableCell className="text-right py-2 align-top">
                         <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={0.1}
-                          value={i.desconto_trade}
-                          onChange={(e) => atualizarDesconto(i.produto_id, "trade", Math.max(0, Number(e.target.value) || 0))}
-                          className={cn("w-20 ml-auto")}
+                          type="number" min={0} max={3} step={0.1}
+                          value={i.desconto_comercial}
+                          onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.min(3, Math.max(0, Number(e.target.value) || 0)))}
+                          className={cn("w-14 ml-auto h-7 text-xs")}
                           placeholder="0"
                         />
+                        <div className="text-[9px] text-muted-foreground mt-0.5 text-right">máx 3%</div>
                       </TableCell>
-                      <TableCell className="text-right font-semibold text-sm">{formatBRL(i.preco_final)}</TableCell>
-                      <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min={0}
-                          value={i.bolsao}
-                          onChange={(e) => atualizarBolsao(i.produto_id, Math.max(0, Number(e.target.value) || 0))}
-                          className={cn("w-20 ml-auto")}
-                          placeholder="0"
-                        />
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">{formatBRL(i.total)}</TableCell>
-                      <TableCell>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => remover(i.produto_id)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+                    )}
+
+                    {/* Desc. Trade */}
+                    <TableCell className="text-right py-2 align-top">
+                      <Input
+                        type="number" min={0} max={100} step={0.1}
+                        value={i.desconto_trade}
+                        onChange={(e) => atualizarDesconto(i.produto_id, "trade", Math.max(0, Number(e.target.value) || 0))}
+                        className={cn("w-14 ml-auto h-7 text-xs")}
+                        placeholder="0"
+                      />
+                    </TableCell>
+
+                    {/* P. Final */}
+                    <TableCell className="text-right py-2 align-top">
+                      <span className="text-sm font-bold" style={{ color: '#1a5c38' }}>
+                        {formatBRL(i.preco_final)}
+                      </span>
+                    </TableCell>
+
+                    {/* Bolsão */}
+                    <TableCell className="text-right py-2 align-top">
+                      <Input
+                        type="number" min={0}
+                        value={i.bolsao}
+                        onChange={(e) => atualizarBolsao(i.produto_id, Math.max(0, Number(e.target.value) || 0))}
+                        className={cn("w-16 ml-auto h-7 text-xs")}
+                        placeholder="0"
+                      />
+                    </TableCell>
+
+                    {/* Total */}
+                    <TableCell className="text-right py-2 align-top">
+                      <span className="text-sm font-bold" style={{ color: '#1a5c38' }}>
+                        {formatBRL(i.total)}
+                      </span>
+                    </TableCell>
+
+                    {/* Remover */}
+                    <TableCell className="py-2 align-top">
+                      <button
+                        type="button"
+                        onClick={() => remover(i.produto_id)}
+                        className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>

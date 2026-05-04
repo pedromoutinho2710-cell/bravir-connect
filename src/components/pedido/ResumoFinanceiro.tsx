@@ -1,12 +1,14 @@
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatBRL, formatNum } from "@/lib/format";
+import { supabase } from "@/integrations/supabase/client";
 import type { ItemPedido } from "./SecaoProdutos";
 
 type Props = {
   itens: ItemPedido[];
   uf: string;
-  saldoBolsao?: number;
+  isPDF?: boolean;
 };
 
 function icmsPct(uf: string): number {
@@ -15,7 +17,22 @@ function icmsPct(uf: string): number {
   return 0.07;
 }
 
-export function ResumoFinanceiro({ itens, uf, saldoBolsao = 0 }: Props) {
+export function ResumoFinanceiro({ itens, uf, isPDF = false }: Props) {
+  const [bolsaoPct, setBolsaoPct] = useState(1.0);
+
+  useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from("configuracoes")
+      .select("value")
+      .eq("key", "bolsao_percentual")
+      .maybeSingle()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .then(({ data }: { data: any }) => {
+        if (data?.value) setBolsaoPct(Number(data.value));
+      });
+  }, []);
+
   const qtdTotal = itens.reduce((s, i) => s + i.quantidade, 0);
   const pesoTotal = itens.reduce((s, i) => s + i.quantidade * i.peso_unitario, 0);
   const totalBruto = itens.reduce((s, i) => s + i.preco_bruto * i.quantidade, 0);
@@ -26,9 +43,9 @@ export function ResumoFinanceiro({ itens, uf, saldoBolsao = 0 }: Props) {
   const icmsValue = totalLiquido * pct;
   const totalComIcms = totalLiquido + icmsValue;
 
+  const bolsaoGerado = totalLiquido * (bolsaoPct / 100);
   const bolsaoGasto = itens.reduce((s, i) => s + (i.bolsao ?? 0), 0);
-  const bolsaoSaldo = saldoBolsao - bolsaoGasto;
-  const mostrarBolsao = saldoBolsao > 0 || bolsaoGasto > 0;
+  const bolsaoSaldo = bolsaoGerado - bolsaoGasto;
 
   return (
     <Card className="bg-[#FFF7ED] border-orange-200">
@@ -36,12 +53,6 @@ export function ResumoFinanceiro({ itens, uf, saldoBolsao = 0 }: Props) {
         <CardTitle>Resumo financeiro</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {saldoBolsao > 0 && (
-          <div className="rounded-md border border-amber-400 bg-amber-50 p-3 text-sm text-amber-900 font-medium">
-            Cliente tem {formatBRL(saldoBolsao)} de bolsão disponível
-          </div>
-        )}
-
         <Tabs defaultValue="sem">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="sem">Sem impostos</TabsTrigger>
@@ -72,13 +83,15 @@ export function ResumoFinanceiro({ itens, uf, saldoBolsao = 0 }: Props) {
           </TabsContent>
         </Tabs>
 
-        {mostrarBolsao && (
-          <div className="rounded-md border bg-muted/30 p-3 space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Bolsão</div>
+        {!isPDF && (
+          <div className="rounded-md border bg-muted/30 p-3 space-y-2 no-print">
+            <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Bolsão do pedido ({bolsaoPct}%)
+            </div>
             <div className="grid grid-cols-3 gap-2 text-sm text-center">
               <div>
                 <div className="text-muted-foreground text-xs mb-0.5">Gerado</div>
-                <div className="font-semibold">{formatBRL(saldoBolsao)}</div>
+                <div className="font-semibold">{formatBRL(bolsaoGerado)}</div>
               </div>
               <div>
                 <div className="text-muted-foreground text-xs mb-0.5">Gasto</div>
