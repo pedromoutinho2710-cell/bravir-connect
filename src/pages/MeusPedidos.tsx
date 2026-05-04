@@ -11,7 +11,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/format";
-import { Loader2, PlusCircle, Clock } from "lucide-react";
+import { Loader2, PlusCircle, Clock, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -98,6 +108,9 @@ export default function MeusPedidos() {
 
   const [detalhesId, setDetalhesId] = useState<string | null>(null);
   const [detalhesOpen, setDetalhesOpen] = useState(false);
+
+  const [excluirId, setExcluirId] = useState<string | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const carregar = () => setRefreshKey((k) => k + 1);
   usePullToRefresh(carregar);
@@ -194,6 +207,17 @@ export default function MeusPedidos() {
   const abrirDetalhes = (id: string) => {
     setDetalhesId(id);
     setDetalhesOpen(true);
+  };
+
+  const excluirRascunho = async () => {
+    if (!excluirId) return;
+    setExcluindo(true);
+    const { error } = await supabase.from("pedidos").delete().eq("id", excluirId);
+    setExcluindo(false);
+    if (error) { toast.error("Erro ao excluir rascunho"); return; }
+    toast.success("Rascunho excluído");
+    setPedidos((prev) => prev.filter((p) => p.id !== excluirId));
+    setExcluirId(null);
   };
 
   function StatusBadge({ status }: { status: string }) {
@@ -293,7 +317,18 @@ export default function MeusPedidos() {
                       <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
                       <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
                     </div>
-                    <StatusBadge status={p.status} />
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={p.status} />
+                      {p.status === "rascunho" && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setExcluirId(p.id); }}
+                          className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span>{formatDate(p.data_pedido)} · {p.tipo}</span>
@@ -326,6 +361,7 @@ export default function MeusPedidos() {
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>No status há</TableHead>
+                  <TableHead className="w-8"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -355,6 +391,17 @@ export default function MeusPedidos() {
                     <TableCell className="text-xs text-muted-foreground">
                       {tempoNoStatus(p.status_atualizado_em) ?? "—"}
                     </TableCell>
+                    <TableCell>
+                      {p.status === "rascunho" && (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setExcluirId(p.id); }}
+                          className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -376,6 +423,27 @@ export default function MeusPedidos() {
         open={detalhesOpen}
         onOpenChange={setDetalhesOpen}
       />
+
+      <AlertDialog open={!!excluirId} onOpenChange={(o) => { if (!o) setExcluirId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir rascunho?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja excluir este rascunho? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={excluirRascunho}
+              disabled={excluindo}
+            >
+              {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

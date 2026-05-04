@@ -95,6 +95,7 @@ export default function NovoPedido() {
   const localSaveTimer = useRef<number | null>(null);
   const dbSaveTimer = useRef<number | null>(null);
   const dbSaveInProgress = useRef(false);
+  const pedidoEnviadoRef = useRef(false); // bloqueia auto-saves após envio bem-sucedido
 
   // Ref "latest" para o auto-save de banco em segundo plano
   // (atualizado a cada render, evita closure stale)
@@ -333,7 +334,7 @@ export default function NovoPedido() {
   // ── Atualiza ref "latest" a cada render ────────────────────────────────────
   // (padrão latest-ref: evita closure stale no auto-save assíncrono)
   doDbSaveRef.current = async () => {
-    if (!podeSalvar || dbSaveInProgress.current || showDraftModal) return;
+    if (pedidoEnviadoRef.current || !podeSalvar || dbSaveInProgress.current || showDraftModal) return;
     dbSaveInProgress.current = true;
     await salvarPedido("rascunho");
     dbSaveInProgress.current = false;
@@ -341,16 +342,17 @@ export default function NovoPedido() {
 
   // ── Auto-save LOCAL (500ms) ────────────────────────────────────────────────
   useEffect(() => {
-    if (loading) return;
+    if (loading || pedidoEnviadoRef.current) return;
     if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
     localSaveTimer.current = window.setTimeout(() => {
+      if (pedidoEnviadoRef.current) return;
       localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ cliente, itens, pedidoId, vigenciaId }));
     }, 500);
   }, [cliente, itens, pedidoId, loading]);
 
   // ── Auto-save BANCO em segundo plano (5s debounce) ─────────────────────────
   useEffect(() => {
-    if (loading || showDraftModal) return;
+    if (loading || showDraftModal || pedidoEnviadoRef.current) return;
     if (dbSaveTimer.current) window.clearTimeout(dbSaveTimer.current);
     dbSaveTimer.current = window.setTimeout(() => {
       doDbSaveRef.current();
@@ -565,8 +567,11 @@ export default function NovoPedido() {
         }
       } catch { /* best-effort */ }
 
-      toast.success("Pedido enviado para faturamento!");
+      pedidoEnviadoRef.current = true;
+      if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
+      if (dbSaveTimer.current) window.clearTimeout(dbSaveTimer.current);
       localStorage.removeItem(RASCUNHO_KEY);
+      toast.success("Pedido enviado para faturamento!");
       navigate("/meus-pedidos");
     }
     setEnviando(false);
