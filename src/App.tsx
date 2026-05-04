@@ -22,6 +22,7 @@ import Dashboard from "./pages/Dashboard";
 import Trade from "./pages/Trade";
 import TradeCampanhas from "./pages/TradeCampanhas";
 import FaturamentoClientesPendentes from "./pages/FaturamentoClientesPendentes";
+import FaturamentoClientes from "./pages/FaturamentoClientes";
 import PedidosAdmin from "./pages/admin/PedidosAdmin";
 import ClientesAdmin from "./pages/admin/ClientesAdmin";
 import ImportarClientes from "./pages/admin/ImportarClientes";
@@ -64,6 +65,7 @@ const App = () => (
             <Route element={<ProtectedRoute allow={["faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/faturamento" element={<Faturamento />} />
               <Route path="/faturamento/clientes-pendentes" element={<FaturamentoClientesPendentes />} />
+              <Route path="/faturamento/clientes" element={<FaturamentoClientes />} />
             </Route>
 
             {/* Detalhe de cliente — acessível por vendedor, admin, faturamento, trade */}

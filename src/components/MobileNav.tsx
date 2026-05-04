@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -17,8 +18,9 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
+import { supabase } from "@/integrations/supabase/client";
 
-type Item = { title: string; url: string; icon: typeof LayoutDashboard };
+type Item = { title: string; url: string; icon: typeof LayoutDashboard; badge?: number };
 type Section = { label: string; items: Item[] };
 
 const ADMIN_SECTIONS: Section[] = [
@@ -39,6 +41,7 @@ const ADMIN_SECTIONS: Section[] = [
     label: "Faturamento",
     items: [
       { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
+      { title: "Clientes", url: "/faturamento/clientes", icon: Users },
       { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
     ],
   },
@@ -59,17 +62,19 @@ const ADMIN_SECTIONS: Section[] = [
   },
 ];
 
-const FLAT_MENU: Partial<Record<AppRole, Item[]>> = {
+const BASE_FATURAMENTO_ITEMS: Item[] = [
+  { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
+  { title: "Clientes", url: "/faturamento/clientes", icon: Users },
+  { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
+];
+
+const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
   vendedor: [
     { title: "Meu Painel", url: "/meu-painel", icon: LayoutDashboard },
     { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
     { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
     { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
-  ],
-  faturamento: [
-    { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
-    { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
   ],
   logistica: [
     { title: "Painel de Entregas", url: "/logistica", icon: Truck },
@@ -84,6 +89,40 @@ type Props = { onNavigate: () => void };
 
 export function MobileNav({ onNavigate }: Props) {
   const { role, user, fullName, signOut } = useAuth();
+  const [semPerfilCount, setSemPerfilCount] = useState(0);
+
+  useEffect(() => {
+    if (role !== "faturamento" && role !== "admin") return;
+    supabase
+      .from("clientes")
+      .select("id", { count: "exact", head: true })
+      .is("perfil_cliente", null)
+      .then(({ count }) => setSemPerfilCount(count ?? 0));
+  }, [role]);
+
+  const faturamentoItems: Item[] = BASE_FATURAMENTO_ITEMS.map((item) =>
+    item.url === "/faturamento/clientes" && semPerfilCount > 0
+      ? { ...item, badge: semPerfilCount }
+      : item
+  );
+
+  const getFlatItems = (): Item[] => {
+    if (role === "faturamento") return faturamentoItems;
+    return FLAT_MENU_STATIC[role as AppRole] ?? [];
+  };
+
+  const adminSections: Section[] = ADMIN_SECTIONS.map((section) =>
+    section.label === "Faturamento"
+      ? {
+          ...section,
+          items: section.items.map((item) =>
+            item.url === "/faturamento/clientes" && semPerfilCount > 0
+              ? { ...item, badge: semPerfilCount }
+              : item
+          ),
+        }
+      : section
+  );
 
   const navLink = (item: Item) => (
     <NavLink
@@ -99,7 +138,12 @@ export function MobileNav({ onNavigate }: Props) {
       }
     >
       <item.icon className="h-4 w-4 flex-shrink-0" />
-      {item.title}
+      <span className="flex-1">{item.title}</span>
+      {item.badge != null && item.badge > 0 && (
+        <span className="inline-flex items-center rounded-full bg-red-100 text-red-800 border border-red-300 px-1.5 py-0.5 text-[10px] font-bold leading-none">
+          {item.badge}
+        </span>
+      )}
     </NavLink>
   );
 
@@ -116,7 +160,7 @@ export function MobileNav({ onNavigate }: Props) {
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
         {role === "admin" ? (
-          ADMIN_SECTIONS.map((section) => (
+          adminSections.map((section) => (
             <div key={section.label} className="mb-3">
               <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-sidebar-foreground/50 font-semibold">
                 {section.label}
@@ -125,7 +169,7 @@ export function MobileNav({ onNavigate }: Props) {
             </div>
           ))
         ) : (
-          (role ? FLAT_MENU[role] ?? [] : []).map(navLink)
+          getFlatItems().map(navLink)
         )}
       </nav>
 
