@@ -1,5 +1,6 @@
 // SQL para adicionar coluna vigencia_id em pedidos (rodar no Supabase):
 // ALTER TABLE pedidos ADD COLUMN IF NOT EXISTS vigencia_id UUID REFERENCES tabelas_vigencia(id);
+// ALTER TABLE tabelas_vigencia ADD COLUMN IF NOT EXISTS desconto_livre boolean DEFAULT false;
 
 import { useEffect, useRef, useState } from "react";
 import * as XLSX from "xlsx";
@@ -17,6 +18,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -37,6 +39,7 @@ type Vigencia = {
   nome: string;
   descricao: string | null;
   ativa: boolean;
+  desconto_livre: boolean;
   created_at: string;
   total_produtos: number;
   tem_pedidos: boolean;
@@ -50,6 +53,7 @@ export default function TabelasPreco() {
   const [showImportar, setShowImportar] = useState(false);
   const [importNome, setImportNome] = useState("");
   const [importDesc, setImportDesc] = useState("");
+  const [importDescontoLivre, setImportDescontoLivre] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importando, setImportando] = useState(false);
   const [importResultado, setImportResultado] = useState<{ importados: number; naoEncontrados: string[] } | null>(null);
@@ -63,7 +67,7 @@ export default function TabelasPreco() {
     setCarregando(true);
     const { data: vigs } = await supabase
       .from("tabelas_vigencia")
-      .select("id, nome, descricao, ativa, created_at")
+      .select("id, nome, descricao, ativa, desconto_livre, created_at")
       .order("created_at", { ascending: false });
 
     if (!vigs) { setCarregando(false); return; }
@@ -83,6 +87,7 @@ export default function TabelasPreco() {
         ]);
         return {
           ...v,
+          desconto_livre: v.desconto_livre ?? false,
           total_produtos: totalProd ?? 0,
           tem_pedidos: (totalPed ?? 0) > 0,
         };
@@ -168,7 +173,7 @@ export default function TabelasPreco() {
       // Cria a vigência
       const { data: vigData, error: vigErr } = await supabase
         .from("tabelas_vigencia")
-        .insert({ nome: importNome.trim(), descricao: importDesc.trim() || null, ativa: true })
+        .insert({ nome: importNome.trim(), descricao: importDesc.trim() || null, ativa: true, desconto_livre: importDescontoLivre })
         .select("id")
         .single();
 
@@ -255,6 +260,7 @@ export default function TabelasPreco() {
     setShowImportar(false);
     setImportNome("");
     setImportDesc("");
+    setImportDescontoLivre(false);
     setImportFile(null);
     setImportResultado(null);
     if (fileRef.current) fileRef.current.value = "";
@@ -290,6 +296,7 @@ export default function TabelasPreco() {
                   <TableHead>Nome</TableHead>
                   <TableHead>Descrição</TableHead>
                   <TableHead className="text-center">Status</TableHead>
+                  <TableHead className="text-center">Modo desconto</TableHead>
                   <TableHead className="text-right">Produtos</TableHead>
                   <TableHead>Criada em</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -303,6 +310,11 @@ export default function TabelasPreco() {
                     <TableCell className="text-center">
                       <Badge className={v.ativa ? "bg-green-100 text-green-800 border-green-300" : "bg-gray-100 text-gray-600 border-gray-300"}>
                         {v.ativa ? "Ativa" : "Inativa"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Badge className={v.desconto_livre ? "bg-blue-100 text-blue-800 border-blue-300" : "bg-gray-100 text-gray-600 border-gray-300"}>
+                        {v.desconto_livre ? "Livre" : "Por cluster"}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">{v.total_produtos.toLocaleString("pt-BR")}</TableCell>
@@ -366,6 +378,17 @@ export default function TabelasPreco() {
                 rows={2}
                 disabled={importando}
               />
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                id="desconto-livre"
+                checked={importDescontoLivre}
+                onCheckedChange={setImportDescontoLivre}
+                disabled={importando}
+              />
+              <Label htmlFor="desconto-livre" className="cursor-pointer">
+                Desconto livre <span className="text-muted-foreground font-normal">(vendedor define o percentual)</span>
+              </Label>
             </div>
             <div className="space-y-1.5">
               <Label>Arquivo Excel (.xlsx) *</Label>

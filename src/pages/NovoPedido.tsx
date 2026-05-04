@@ -65,7 +65,7 @@ export default function NovoPedido() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [descontos, setDescontos] = useState<Record<string, Record<string, number>>>({});
 
-  type Vigencia = { id: string; nome: string; created_at: string };
+  type Vigencia = { id: string; nome: string; created_at: string; desconto_livre: boolean };
   const [vigencias, setVigencias] = useState<Vigencia[]>([]);
   const [vigenciaId, setVigenciaId] = useState<string>("");
   const [loading, setLoading] = useState(true);
@@ -122,7 +122,7 @@ export default function NovoPedido() {
           .maybeSingle(),
         supabase
           .from("tabelas_vigencia")
-          .select("id, nome, created_at")
+          .select("id, nome, created_at, desconto_livre")
           .eq("ativa", true)
           .order("created_at", { ascending: false }),
       ]);
@@ -684,6 +684,7 @@ export default function NovoPedido() {
         onChange={setItens}
         vendedorEmail={user?.email ?? ""}
         vigenciaId={vigenciaId}
+        descontoLivre={vigencias.find((v) => v.id === vigenciaId)?.desconto_livre ?? false}
       />
 
       <ResumoFinanceiro itens={itens} uf={cliente.uf} saldoBolsao={saldoBolsao} />

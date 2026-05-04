@@ -70,6 +70,7 @@ type Props = {
   onChange: (itens: ItemPedido[]) => void;
   vendedorEmail: string;
   vigenciaId: string;
+  descontoLivre?: boolean;
 };
 
 export function SecaoProdutos({
@@ -81,6 +82,7 @@ export function SecaoProdutos({
   onChange,
   vendedorEmail,
   vigenciaId,
+  descontoLivre = false,
 }: Props) {
   const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
@@ -104,7 +106,7 @@ export function SecaoProdutos({
 
   const calcItem = (p: Produto, qtd: number): ItemPedido => {
     const bruto = precos[p.id]?.[tabelaPreco] ?? 0;
-    const dPerfil = descontos[p.id]?.[perfilCliente] ?? 0;
+    const dPerfil = descontoLivre ? 0 : (descontos[p.id]?.[perfilCliente] ?? 0);
     const precos_calc = calcularPrecos(bruto, dPerfil, 0, 0, qtd);
     
     return {
@@ -160,6 +162,23 @@ export function SecaoProdutos({
     );
   };
 
+  const atualizarDescontoPerfil = (produto_id: string, valor: number) => {
+    onChange(
+      itens.map((i) => {
+        if (i.produto_id !== produto_id) return i;
+        const precos_calc = calcularPrecos(i.preco_bruto, valor, 0, i.desconto_trade, i.quantidade);
+        return {
+          ...i,
+          desconto_perfil: valor,
+          preco_apos_perfil: precos_calc.preco_apos_perfil,
+          preco_apos_comercial: precos_calc.preco_apos_comercial,
+          preco_final: precos_calc.preco_final,
+          total: precos_calc.total,
+        };
+      }),
+    );
+  };
+
   const atualizarDesconto = (produto_id: string, tipo: "comercial" | "trade", valor: number) => {
     onChange(
       itens.map((i) => {
@@ -200,20 +219,24 @@ export function SecaoProdutos({
   const itensRecalculados = useMemo(() => {
     return itens.map((i) => {
       const bruto = precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto;
-      const dPerfil = descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_perfil;
-      const precos_calc = calcularPrecos(bruto, dPerfil, i.desconto_comercial, i.desconto_trade, i.quantidade);
-      
+      const dPerfil = descontoLivre
+        ? i.desconto_perfil
+        : (descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_perfil);
+      const dCom = descontoLivre ? 0 : i.desconto_comercial;
+      const precos_calc = calcularPrecos(bruto, dPerfil, dCom, i.desconto_trade, i.quantidade);
+
       return {
         ...i,
         preco_bruto: bruto,
         desconto_perfil: dPerfil,
+        desconto_comercial: dCom,
         preco_apos_perfil: precos_calc.preco_apos_perfil,
         preco_apos_comercial: precos_calc.preco_apos_comercial,
         preco_final: precos_calc.preco_final,
         total: precos_calc.total,
       };
     });
-  }, [itens, precos, descontos, tabelaPreco, perfilCliente]);
+  }, [itens, precos, descontos, tabelaPreco, perfilCliente, descontoLivre]);
 
   // Sincroniza recálculo (apenas quando os números efetivamente mudam)
   useMemoEffect(itensRecalculados, itens, onChange);
@@ -321,8 +344,8 @@ export function SecaoProdutos({
                   <TableHead className="text-right">P. Bruto</TableHead>
                   <TableHead className="text-right">Desc. Perfil %</TableHead>
                   <TableHead className="text-right">P. Após Perfil</TableHead>
-                  <TableHead className="text-right">Desc. Comercial %</TableHead>
-                  <TableHead className="text-right">P. Após Comercial</TableHead>
+                  {!descontoLivre && <TableHead className="text-right">Desc. Comercial %</TableHead>}
+                  {!descontoLivre && <TableHead className="text-right">P. Após Comercial</TableHead>}
                   <TableHead className="text-right">Desc. Trade %</TableHead>
                   <TableHead className="text-right">P. Final</TableHead>
                   <TableHead className="text-right">Bolsão</TableHead>
@@ -368,21 +391,38 @@ export function SecaoProdutos({
                         </TableCell>
                       )}
                       <TableCell className="text-right text-sm">{formatBRL(i.preco_bruto)}</TableCell>
-                      <TableCell className="text-right text-muted-foreground text-sm">{i.desconto_perfil}%</TableCell>
-                      <TableCell className="text-right text-sm">{formatBRL(i.preco_apos_perfil)}</TableCell>
                       <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={100}
-                          step={0.1}
-                          value={i.desconto_comercial}
-                          onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.max(0, Number(e.target.value) || 0))}
-                          className={cn("w-20 ml-auto")}
-                          placeholder="0"
-                        />
+                        {descontoLivre ? (
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={i.desconto_perfil}
+                            onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(100, Math.max(0, Number(e.target.value) || 0)))}
+                            className={cn("w-20 ml-auto")}
+                            placeholder="0"
+                          />
+                        ) : (
+                          <span className="text-muted-foreground text-sm">{i.desconto_perfil}%</span>
+                        )}
                       </TableCell>
-                      <TableCell className="text-right text-sm">{formatBRL(i.preco_apos_comercial)}</TableCell>
+                      <TableCell className="text-right text-sm">{formatBRL(i.preco_apos_perfil)}</TableCell>
+                      {!descontoLivre && (
+                        <TableCell className="text-right">
+                          <Input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={i.desconto_comercial}
+                            onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.max(0, Number(e.target.value) || 0))}
+                            className={cn("w-20 ml-auto")}
+                            placeholder="0"
+                          />
+                        </TableCell>
+                      )}
+                      {!descontoLivre && <TableCell className="text-right text-sm">{formatBRL(i.preco_apos_comercial)}</TableCell>}
                       <TableCell className="text-right">
                         <Input
                           type="number"
