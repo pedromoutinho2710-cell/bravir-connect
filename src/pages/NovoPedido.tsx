@@ -202,7 +202,7 @@ export default function NovoPedido() {
         .update({
           tipo: cliente.tipo,
           cliente_id,
-          cluster: cliente.cluster,
+          perfil_cliente: cliente.cluster,
           tabela_preco: cliente.tabela_preco,
           cond_pagamento: cliente.cond_pagamento || null,
           agendamento: cliente.agendamento,
@@ -221,7 +221,7 @@ export default function NovoPedido() {
           tipo: cliente.tipo,
           vendedor_id: user.id,
           cliente_id,
-          cluster: cliente.cluster,
+          perfil_cliente: cliente.cluster,
           tabela_preco: cliente.tabela_preco,
           cond_pagamento: cliente.cond_pagamento || null,
           agendamento: cliente.agendamento,
@@ -298,7 +298,7 @@ export default function NovoPedido() {
     const { data, error } = await supabase
       .from("pedidos")
       .select(`
-        id, tipo, cond_pagamento, agendamento, observacoes, cluster, tabela_preco,
+        id, tipo, cond_pagamento, agendamento, observacoes, perfil_cliente, tabela_preco,
         clientes(id, cnpj, razao_social, cidade, uf, cep, comprador),
         itens_pedido(produto_id, quantidade, preco_unitario_bruto, total_item,
           desconto_perfil, desconto_comercial, desconto_trade,
@@ -324,7 +324,7 @@ export default function NovoPedido() {
       uf: cl.uf ?? "",
       cep: cl.cep ? formatCEP(cl.cep) : "",
       comprador: cl.comprador ?? "",
-      cluster: data.cluster,
+      cluster: data.perfil_cliente,
       tabela_preco: data.tabela_preco,
       tipo: data.tipo,
       cond_pagamento: data.cond_pagamento ?? "",
@@ -338,7 +338,7 @@ export default function NovoPedido() {
     setItens(((data.itens_pedido as any[]) ?? []).map((item) => {
       const p = item.produtos;
       const bruto = precos[item.produto_id]?.[data.tabela_preco] ?? Number(item.preco_unitario_bruto);
-      const dPerfil = descontos[item.produto_id]?.[data.cluster] ?? Number(item.desconto_perfil ?? 0);
+      const dPerfil = descontos[item.produto_id]?.[data.perfil_cliente] ?? Number(item.desconto_perfil ?? 0);
       const dCom = Number(item.desconto_comercial ?? 0);
       const dTrade = Number(item.desconto_trade ?? 0);
       const apos_perfil = bruto * (1 - dPerfil / 100);

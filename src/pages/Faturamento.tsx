@@ -242,7 +242,7 @@ export default function Faturamento() {
         .select(`
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, observacoes, responsavel_id, motivo, vendedor_id,
-          cliente_id, cluster, tabela_preco, agendamento,
+          cliente_id, perfil_cliente, tabela_preco, agendamento,
           clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, aceita_saldo),
           itens_pedido(
             id, total_item, quantidade, preco_unitario_bruto, preco_unitario_liquido,
@@ -283,7 +283,7 @@ export default function Faturamento() {
           motivo: p.motivo,
           vendedor_id: p.vendedor_id,
           cliente_id: p.cliente_id ?? null,
-          cluster: p.cluster,
+          cluster: p.perfil_cliente,
           tabela_preco: p.tabela_preco,
           agendamento: p.agendamento,
           razao_social: cl?.razao_social ?? "—",

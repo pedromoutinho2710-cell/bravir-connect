@@ -425,7 +425,7 @@ export type Database = {
           numero_pedido: number
           obs_faturamento: string | null
           observacoes: string | null
-          cluster: string
+          perfil_cliente: string
           rastreio: string | null
           responsavel_id: string | null
           status: string
@@ -447,7 +447,7 @@ export type Database = {
           numero_pedido?: number
           obs_faturamento?: string | null
           observacoes?: string | null
-          cluster: string
+          perfil_cliente: string
           rastreio?: string | null
           responsavel_id?: string | null
           status?: string
@@ -469,7 +469,7 @@ export type Database = {
           numero_pedido?: number
           obs_faturamento?: string | null
           observacoes?: string | null
-          cluster?: string
+          perfil_cliente?: string
           rastreio?: string | null
           responsavel_id?: string | null
           status?: string
