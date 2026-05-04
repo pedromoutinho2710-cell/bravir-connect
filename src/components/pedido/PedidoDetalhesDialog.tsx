@@ -7,10 +7,10 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { Loader2, Download } from "lucide-react";
+import { AlertCircle, Clock, Download, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { formatDistanceToNow } from "date-fns";
+import { Loader2 } from "lucide-react";
+import { formatDistanceToNow, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 type HistoricoItem = {
@@ -33,8 +33,6 @@ type ItemDetalhe = {
   desconto_perfil: number;
   desconto_comercial: number;
   desconto_trade: number;
-  preco_apos_perfil: number;
-  preco_apos_comercial: number;
   preco_final: number;
   total: number;
 };
@@ -53,16 +51,22 @@ type PedidoDetalhe = {
   tipo: string;
   data_pedido: string;
   status: string;
+  status_atualizado_em: string | null;
   perfil_cliente: string;
   tabela_preco: string;
   cond_pagamento: string | null;
   agendamento: boolean;
   observacoes: string | null;
+  motivo: string | null;
   razao_social: string;
   cnpj: string;
   cidade: string | null;
   uf: string | null;
   comprador: string | null;
+  telefone: string | null;
+  codigo_parceiro: string | null;
+  negativado: boolean;
+  responsavel_nome: string | null;
   nota_fiscal: string | null;
   nf_pdf_url: string | null;
   rastreio: string | null;
@@ -74,16 +78,36 @@ type PedidoDetalhe = {
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
-  em_cadastro: "Em cadastro",
   aguardando_faturamento: "Aguardando faturamento",
-  pendente: "Pendente",
-  em_faturamento: "Em faturamento",
-  em_rota: "Em rota",
+  no_sankhya: "Cadastrado no Sankhya",
   faturado: "Faturado",
-  entregue: "Entregue",
-  revisao_necessaria: "Revisão necessária",
+  parcialmente_faturado: "Parc. faturado",
+  com_problema: "Com problema",
   devolvido: "Devolvido",
   cancelado: "Cancelado",
+  em_faturamento: "Em faturamento",
+  em_cadastro: "Em cadastro",
+  pendente: "Pendente",
+  revisao_necessaria: "Revisão necessária",
+  em_rota: "Em rota",
+  entregue: "Entregue",
+};
+
+const STATUS_COLOR: Record<string, string> = {
+  rascunho: "bg-gray-100 text-gray-600 border-gray-300",
+  aguardando_faturamento: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
+  faturado: "bg-green-100 text-green-800 border-green-300",
+  parcialmente_faturado: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  com_problema: "bg-red-100 text-red-800 border-red-300",
+  devolvido: "bg-orange-100 text-orange-800 border-orange-300",
+  cancelado: "bg-gray-800 text-gray-100 border-gray-700",
+  em_faturamento: "bg-blue-100 text-blue-800 border-blue-300",
+  em_cadastro: "bg-blue-100 text-blue-800 border-blue-300",
+  pendente: "bg-orange-100 text-orange-800 border-orange-300",
+  revisao_necessaria: "bg-red-100 text-red-800 border-red-300",
+  em_rota: "bg-gray-700 text-gray-100 border-gray-800",
+  entregue: "bg-lime-100 text-lime-800 border-lime-300",
 };
 
 type Props = {
@@ -91,6 +115,20 @@ type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
 };
+
+function tempoNaEtapa(dt: string | null): { texto: string; urgente: boolean } | null {
+  if (!dt) return null;
+  try {
+    const d = new Date(dt);
+    const horas = differenceInHours(new Date(), d);
+    return {
+      texto: formatDistanceToNow(d, { addSuffix: true, locale: ptBR }),
+      urgente: horas >= 48,
+    };
+  } catch {
+    return null;
+  }
+}
 
 export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
   const [pedido, setPedido] = useState<PedidoDetalhe | null>(null);
@@ -104,10 +142,11 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
         supabase
           .from("pedidos")
           .select(`
-            numero_pedido, tipo, data_pedido, status, perfil_cliente, tabela_preco,
-            cond_pagamento, agendamento, observacoes,
+            numero_pedido, tipo, data_pedido, status, status_atualizado_em,
+            perfil_cliente, tabela_preco, cond_pagamento, agendamento, observacoes, motivo,
             nota_fiscal, nf_pdf_url, rastreio, obs_faturamento,
-            clientes(razao_social, cnpj, cidade, uf, comprador),
+            responsavel_id,
+            clientes(razao_social, cnpj, cidade, uf, comprador, telefone, codigo_parceiro, negativado),
             itens_pedido(
               quantidade, preco_unitario_bruto, preco_unitario_liquido,
               desconto_perfil, desconto_comercial, desconto_trade,
@@ -134,21 +173,43 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
         const d = pRes.data as any;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cl = d.clientes as any;
+
+        // Fetch responsavel name separately to avoid FK naming issues
+        let responsavelNome: string | null = null;
+        if (d.responsavel_id) {
+          const { data: prof } = await supabase
+            .from("profiles")
+            .select("full_name, email")
+            .eq("id", d.responsavel_id)
+            .maybeSingle();
+          if (prof) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const p = prof as any;
+            responsavelNome = p.full_name ?? p.email ?? null;
+          }
+        }
+
         setPedido({
           numero_pedido: d.numero_pedido,
           tipo: d.tipo,
           data_pedido: d.data_pedido,
           status: d.status,
+          status_atualizado_em: d.status_atualizado_em ?? null,
           perfil_cliente: d.perfil_cliente,
           tabela_preco: d.tabela_preco,
           cond_pagamento: d.cond_pagamento,
           agendamento: d.agendamento,
           observacoes: d.observacoes,
+          motivo: d.motivo,
           razao_social: cl?.razao_social ?? "—",
           cnpj: cl?.cnpj ?? "—",
           cidade: cl?.cidade ?? null,
           uf: cl?.uf ?? null,
           comprador: cl?.comprador ?? null,
+          telefone: cl?.telefone ?? null,
+          codigo_parceiro: cl?.codigo_parceiro ?? null,
+          negativado: cl?.negativado ?? false,
+          responsavel_nome: responsavelNome,
           nota_fiscal: d.nota_fiscal ?? null,
           nf_pdf_url: d.nf_pdf_url ?? null,
           rastreio: d.rastreio ?? null,
@@ -163,8 +224,6 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
             desconto_perfil: Number(i.desconto_perfil ?? 0),
             desconto_comercial: Number(i.desconto_comercial ?? 0),
             desconto_trade: Number(i.desconto_trade ?? 0),
-            preco_apos_perfil: Number(i.preco_apos_perfil ?? i.preco_unitario_liquido ?? 0),
-            preco_apos_comercial: Number(i.preco_apos_comercial ?? i.preco_unitario_liquido ?? 0),
             preco_final: Number(i.preco_final ?? i.preco_unitario_liquido ?? 0),
             total: Number(i.total_item),
           })),
@@ -176,6 +235,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
   }, [open, pedidoId]);
 
   const totalGeral = pedido?.itens.reduce((s, i) => s + i.total, 0) ?? 0;
+  const etapa = pedido ? tempoNaEtapa(pedido.status_atualizado_em) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -194,16 +254,59 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
 
         {!loading && pedido && (
           <div className="space-y-5 text-sm">
-            {/* Cabeçalho do pedido */}
+
+            {/* Cabeçalho: status + tempo na etapa + responsável */}
+            <div className="flex flex-wrap items-center gap-3">
+              <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${STATUS_COLOR[pedido.status] ?? "bg-gray-100 text-gray-700 border-gray-300"}`}>
+                {STATUS_LABEL[pedido.status] ?? pedido.status}
+              </span>
+
+              {etapa && (
+                <span className={`flex items-center gap-1 text-xs ${etapa.urgente ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
+                  <Clock className="h-3 w-3" />
+                  Neste status {etapa.texto}
+                  {etapa.urgente && " ⚠"}
+                </span>
+              )}
+
+              {pedido.responsavel_nome && (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <User className="h-3 w-3" />
+                  Assumido por <span className="font-medium text-foreground">{pedido.responsavel_nome}</span>
+                </span>
+              )}
+
+              {pedido.motivo && (
+                <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
+                  {pedido.motivo}
+                </span>
+              )}
+            </div>
+
+            {/* Alerta negativado */}
+            {pedido.negativado && (
+              <div className="flex items-center gap-2 rounded-md border border-red-400 bg-red-50 p-3 text-sm text-red-800">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                Cliente negativado
+              </div>
+            )}
+
+            {/* Informações do pedido + cliente */}
             <div className="grid grid-cols-2 gap-x-6 gap-y-1.5 rounded-md border bg-muted/40 p-4 text-sm">
               <div><span className="text-muted-foreground">Cliente: </span><span className="font-medium">{pedido.razao_social}</span></div>
               <div><span className="text-muted-foreground">CNPJ: </span><span className="font-mono">{formatCNPJ(pedido.cnpj)}</span></div>
+              {pedido.codigo_parceiro && (
+                <div><span className="text-muted-foreground">Cód. Sankhya: </span><span className="font-mono font-medium">{pedido.codigo_parceiro}</span></div>
+              )}
+              {pedido.telefone && (
+                <div><span className="text-muted-foreground">Telefone: </span>{pedido.telefone}</div>
+              )}
               <div><span className="text-muted-foreground">Cidade/UF: </span>{pedido.cidade && pedido.uf ? `${pedido.cidade}/${pedido.uf}` : "—"}</div>
               <div><span className="text-muted-foreground">Comprador: </span>{pedido.comprador || "—"}</div>
-              <div><span className="text-muted-foreground">Tipo: </span>{pedido.tipo}</div>
-              <div><span className="text-muted-foreground">Data: </span>{formatDate(pedido.data_pedido)}</div>
               <div><span className="text-muted-foreground">Tabela: </span>{pedido.tabela_preco}</div>
               <div><span className="text-muted-foreground">Perfil: </span>{pedido.perfil_cliente}</div>
+              <div><span className="text-muted-foreground">Tipo: </span>{pedido.tipo}</div>
+              <div><span className="text-muted-foreground">Data: </span>{formatDate(pedido.data_pedido)}</div>
               <div><span className="text-muted-foreground">Pagamento: </span>{pedido.cond_pagamento || "—"}</div>
               <div><span className="text-muted-foreground">Agendamento: </span>{pedido.agendamento ? "Sim" : "Não"}</div>
               {pedido.observacoes && (
@@ -211,7 +314,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
               )}
             </div>
 
-            {/* Notas fiscais emitidas (new multi-NF model) */}
+            {/* Notas fiscais (multi-NF) */}
             {pedido.faturamentos.length > 0 && (
               <div className="space-y-2">
                 <div className="font-semibold">Notas Fiscais</div>
@@ -254,7 +357,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
               </div>
             )}
 
-            {/* Legacy single-NF fallback for orders billed before multi-NF migration */}
+            {/* Legacy single-NF fallback */}
             {pedido.faturamentos.length === 0 && (pedido.nota_fiscal || pedido.rastreio || pedido.obs_faturamento) && (
               <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm space-y-1.5">
                 <div className="font-semibold text-green-800 mb-2">Informações de Faturamento</div>
@@ -293,17 +396,18 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
 
             {/* Itens */}
             <div>
-              <div className="font-semibold mb-2">Itens</div>
+              <div className="font-semibold mb-2">Produtos</div>
               <div className="rounded-md border overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50">
                     <tr>
+                      <th className="text-left px-3 py-2 font-medium">SKU</th>
                       <th className="text-left px-3 py-2 font-medium">Produto</th>
                       <th className="text-right px-3 py-2 font-medium">Qtd</th>
-                      <th className="text-right px-3 py-2 font-medium">P. Bruto</th>
-                      <th className="text-right px-3 py-2 font-medium">Perf %</th>
-                      <th className="text-right px-3 py-2 font-medium">Com %</th>
-                      <th className="text-right px-3 py-2 font-medium">Trade %</th>
+                      <th className="text-right px-3 py-2 font-medium">P. Unit</th>
+                      <th className="text-right px-3 py-2 font-medium">Perf%</th>
+                      <th className="text-right px-3 py-2 font-medium">Com%</th>
+                      <th className="text-right px-3 py-2 font-medium">Trade%</th>
                       <th className="text-right px-3 py-2 font-medium">P. Final</th>
                       <th className="text-right px-3 py-2 font-medium">Total</th>
                     </tr>
@@ -311,8 +415,9 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
                   <tbody>
                     {pedido.itens.map((i, idx) => (
                       <tr key={idx} className="border-t">
+                        <td className="px-3 py-1.5 font-mono text-muted-foreground whitespace-nowrap">{i.codigo}</td>
                         <td className="px-3 py-1.5">
-                          <span className="font-mono text-muted-foreground">{i.codigo}</span>{" "}{i.nome}
+                          {i.nome}
                           <div className="text-muted-foreground text-[10px]">{i.marca}</div>
                         </td>
                         <td className="px-3 py-1.5 text-right">{i.quantidade}</td>
@@ -327,8 +432,8 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
                   </tbody>
                   <tfoot>
                     <tr className="border-t bg-primary/10">
-                      <td colSpan={7} className="px-3 py-2 text-right font-bold">Total geral</td>
-                      <td className="px-3 py-2 text-right font-bold">{formatBRL(totalGeral)}</td>
+                      <td colSpan={8} className="px-3 py-2 text-right font-bold">Total geral</td>
+                      <td className="px-3 py-2 text-right font-bold text-green-700">{formatBRL(totalGeral)}</td>
                     </tr>
                   </tfoot>
                 </table>

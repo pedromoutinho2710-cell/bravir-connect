@@ -37,6 +37,10 @@ type Sugestao = {
   cidade: string | null;
   uf: string | null;
   cep: string | null;
+  rua: string | null;
+  numero: string | null;
+  bairro: string | null;
+  telefone: string | null;
   comprador: string | null;
   perfil_cliente: string | null;
   tabela_preco: string | null;
@@ -69,6 +73,8 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
   const [ultimosPedidos, setUltimosPedidos] = useState<UltimoPedido[]>([]);
   const [alertaMesmoDia, setAlertaMesmoDia] = useState(false);
   const [negativado, setNegativado] = useState(false);
+  const [enderecoDisplay, setEnderecoDisplay] = useState<string | null>(null);
+  const [telefoneDisplay, setTelefoneDisplay] = useState<string | null>(null);
 
   // Search field state
   const [searchText, setSearchText] = useState(() => value.razao_social || "");
@@ -107,6 +113,9 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
     setSearchText(cl.razao_social);
     setSugestoes([]);
     setShowSugestoes(false);
+    const partes = [cl.rua, cl.numero ? `nº ${cl.numero}` : null, cl.bairro].filter(Boolean);
+    setEnderecoDisplay(partes.length > 0 ? partes.join(", ") : null);
+    setTelefoneDisplay(cl.telefone ?? null);
     onChange({
       ...value,
       cliente_id: cl.id,
@@ -235,7 +244,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       searchTimerRef.current = setTimeout(async () => {
         const { data } = await supabase
           .from("clientes")
-          .select("id, razao_social, cnpj, cidade, uf, cep, comprador, perfil_cliente, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado")
+          .select("id, razao_social, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, perfil_cliente, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado")
           .ilike("razao_social", `%${text.trim()}%`)
           .limit(10);
         setSugestoes((data ?? []) as Sugestao[]);
@@ -344,6 +353,18 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
             {cnpjStatus === "buscando" && <span className="text-muted-foreground">Buscando…</span>}
           </div>
         </div>
+
+        {/* Endereço e telefone do cliente encontrado */}
+        {cnpjStatus === "encontrado" && (enderecoDisplay || telefoneDisplay) && (
+          <div className="rounded-md border bg-muted/30 px-4 py-2.5 text-sm space-y-0.5">
+            {enderecoDisplay && (
+              <div><span className="text-muted-foreground">Endereço: </span>{enderecoDisplay}</div>
+            )}
+            {telefoneDisplay && (
+              <div><span className="text-muted-foreground">Telefone: </span>{telefoneDisplay}</div>
+            )}
+          </div>
+        )}
 
         {/* Alerta negativado */}
         {negativado && (

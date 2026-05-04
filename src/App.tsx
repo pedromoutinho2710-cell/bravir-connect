@@ -25,6 +25,7 @@ import FaturamentoClientesPendentes from "./pages/FaturamentoClientesPendentes";
 import PedidosAdmin from "./pages/admin/PedidosAdmin";
 import ClientesAdmin from "./pages/admin/ClientesAdmin";
 import ImportarClientes from "./pages/admin/ImportarClientes";
+import ClienteDetalhe from "./pages/ClienteDetalhe";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,11 @@ const App = () => (
             <Route element={<ProtectedRoute allow={["faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/faturamento" element={<Faturamento />} />
               <Route path="/faturamento/clientes-pendentes" element={<FaturamentoClientesPendentes />} />
+            </Route>
+
+            {/* Detalhe de cliente — acessível por vendedor, admin, faturamento, trade */}
+            <Route element={<ProtectedRoute allow={["vendedor", "admin", "faturamento", "trade"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/clientes/:id" element={<ClienteDetalhe />} />
             </Route>
 
             {/* Logística */}
