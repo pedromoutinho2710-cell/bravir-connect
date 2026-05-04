@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { formatDistanceToNow, differenceInHours } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 
 type HistoricoItem = {
   id: string;
@@ -146,7 +147,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
           perfil_cliente, tabela_preco, cond_pagamento, agendamento, observacoes, motivo,
           nota_fiscal, nf_pdf_url, rastreio, obs_faturamento,
           responsavel_id,
-          clientes(razao_social, cnpj, cidade, uf, cep, comprador, telefone, codigo_parceiro, negativado),
+          clientes(razao_social, cnpj, cidade, uf, comprador, telefone, codigo_parceiro, negativado),
           itens_pedido(
             quantidade, preco_unitario_bruto, preco_unitario_liquido,
             desconto_perfil, desconto_comercial, desconto_trade,
