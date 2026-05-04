@@ -26,6 +26,8 @@ export type DadosCliente = {
   observacoes: string;
   codigo_cliente: string;
   aceita_saldo: boolean;
+  ordem_compra: string;
+  email_xml: string;
 };
 
 type UltimoPedido = { id: string; numero_pedido: number; data_pedido: string; status: string; total: number };
@@ -48,6 +50,7 @@ type Sugestao = {
   codigo_parceiro: string | null;
   aceita_saldo: boolean | null;
   negativado: boolean | null;
+  email: string | null;
 };
 
 type Props = {
@@ -129,6 +132,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       tabela_preco: cl.tabela_preco ?? value.tabela_preco,
       codigo_cliente: cl.codigo_parceiro ?? cl.codigo_cliente ?? "",
       aceita_saldo: cl.aceita_saldo ?? false,
+      email_xml: cl.email ?? "",
     });
   };
 
@@ -185,6 +189,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
           codigo_parceiro: cl.codigo_parceiro,
           aceita_saldo: cl.aceita_saldo,
           negativado: cl.negativado,
+          email: cl.email ?? null,
         });
 
         const { data: peds } = await supabase
@@ -248,7 +253,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       searchTimerRef.current = setTimeout(async () => {
         const { data } = await supabase
           .from("clientes")
-          .select("id, razao_social, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, cluster, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado")
+          .select("id, razao_social, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, cluster, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado, email")
           .ilike("razao_social", `%${text.trim()}%`)
           .limit(10);
         setSugestoes((data ?? []) as Sugestao[]);
@@ -277,6 +282,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       tabela_preco: s.tabela_preco ?? value.tabela_preco,
       codigo_cliente: s.codigo_parceiro ?? s.codigo_cliente ?? "",
       aceita_saldo: s.aceita_saldo ?? false,
+      email_xml: s.email ?? "",
     });
 
     // Load last orders for selected client
@@ -487,6 +493,28 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
             <Input
               value={value.comprador}
               onChange={(e) => set("comprador", e.target.value)}
+              className="h-11 text-base"
+            />
+          </div>
+        </div>
+
+        {/* Ordem de Compra + Email XML/Boleto */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">Ordem de Compra</Label>
+            <Input
+              value={value.ordem_compra}
+              onChange={(e) => set("ordem_compra", e.target.value)}
+              placeholder="Número da OC do cliente"
+              className="h-11 text-base"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-base font-semibold">Email de XML/Boleto</Label>
+            <Input
+              value={value.email_xml}
+              onChange={(e) => set("email_xml", e.target.value)}
+              placeholder="email@empresa.com"
               className="h-11 text-base"
             />
           </div>

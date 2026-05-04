@@ -68,6 +68,7 @@ type Props = {
   perfilCliente: string;
   itens: ItemPedido[];
   onChange: (itens: ItemPedido[]) => void;
+  vendedorEmail: string;
 };
 
 export function SecaoProdutos({
@@ -78,7 +79,9 @@ export function SecaoProdutos({
   perfilCliente,
   itens,
   onChange,
+  vendedorEmail,
 }: Props) {
+  const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
   const [filtroMarca, setFiltroMarca] = useState<string>("Todas");
 
@@ -296,7 +299,8 @@ export function SecaoProdutos({
                 <TableRow>
                   <TableHead>Produto</TableHead>
                   <TableHead className="text-right">Cx</TableHead>
-                  <TableHead className="text-right">Qtd</TableHead>
+                  <TableHead className="text-right">{isVendedorLivre ? "Qtd" : "Qtd Caixas"}</TableHead>
+                  {!isVendedorLivre && <TableHead className="text-right">Qtd Un.</TableHead>}
                   <TableHead className="text-right">P. Bruto</TableHead>
                   <TableHead className="text-right">Desc. Perfil %</TableHead>
                   <TableHead className="text-right">P. Após Perfil</TableHead>
@@ -319,14 +323,33 @@ export function SecaoProdutos({
                       </TableCell>
                       <TableCell className="text-right text-muted-foreground">{i.cx_embarque}</TableCell>
                       <TableCell className="text-right">
-                        <Input
-                          type="number"
-                          min={1}
-                          value={i.quantidade}
-                          onChange={(e) => atualizarQtd(i.produto_id, Math.max(1, Number(e.target.value) || 1))}
-                          className={cn("w-20 ml-auto")}
-                        />
+                        {isVendedorLivre ? (
+                          <Input
+                            type="number"
+                            min={1}
+                            value={i.quantidade}
+                            onChange={(e) => atualizarQtd(i.produto_id, Math.max(1, Number(e.target.value) || 1))}
+                            className={cn("w-20 ml-auto")}
+                          />
+                        ) : (
+                          <Input
+                            type="number"
+                            min={1}
+                            step={1}
+                            value={Math.round(i.quantidade / i.cx_embarque)}
+                            onChange={(e) => {
+                              const caixas = Math.max(1, Math.floor(Number(e.target.value) || 1));
+                              atualizarQtd(i.produto_id, caixas * i.cx_embarque);
+                            }}
+                            className={cn("w-20 ml-auto")}
+                          />
+                        )}
                       </TableCell>
+                      {!isVendedorLivre && (
+                        <TableCell className="text-right text-muted-foreground text-sm">
+                          {i.quantidade}
+                        </TableCell>
+                      )}
                       <TableCell className="text-right text-sm">{formatBRL(i.preco_bruto)}</TableCell>
                       <TableCell className="text-right text-muted-foreground text-sm">{i.desconto_perfil}%</TableCell>
                       <TableCell className="text-right text-sm">{formatBRL(i.preco_apos_perfil)}</TableCell>

@@ -37,6 +37,8 @@ const initialCliente: DadosCliente = {
   observacoes: "",
   codigo_cliente: "",
   aceita_saldo: false,
+  ordem_compra: "",
+  email_xml: "",
 };
 
 type DraftInfo = {
@@ -52,6 +54,9 @@ export default function NovoPedido() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  const isVendedorLivre = /pedro|julia|tamiris/i.test(user?.email ?? "");
+  const pedidoMinimo = isVendedorLivre ? 3000 : 5000;
+
   const [cliente, setCliente] = useState<DadosCliente>(initialCliente);
   const [itens, setItens] = useState<ItemPedido[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
@@ -62,6 +67,8 @@ export default function NovoPedido() {
   const [salvandoRascunho, setSalvandoRascunho] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pedidoId, setPedidoId] = useState<string | null>(null);
+
+  const [saldoBolsao, setSaldoBolsao] = useState(0);
 
   // Rascunho
   const [draftInfo, setDraftInfo] = useState<DraftInfo | null>(null);
@@ -172,6 +179,30 @@ export default function NovoPedido() {
     }));
   }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Bolsão saldo do cliente ───────────────────────────────────────────────
+  useEffect(() => {
+    const id = cliente.cliente_id;
+    if (!id) { setSaldoBolsao(0); return; }
+    let cancel = false;
+    (async () => {
+      const { data: pedIds } = await supabase
+        .from("pedidos")
+        .select("id")
+        .eq("cliente_id", id)
+        .neq("status", "rascunho");
+      if (cancel || !pedIds?.length) { setSaldoBolsao(0); return; }
+      const ids = pedIds.map((p) => p.id);
+      const { data: items } = await supabase
+        .from("itens_pedido")
+        .select("bolsao")
+        .in("pedido_id", ids);
+      if (!cancel) {
+        setSaldoBolsao((items ?? []).reduce((s, i) => s + (i.bolsao ?? 0), 0));
+      }
+    })();
+    return () => { cancel = true; };
+  }, [cliente.cliente_id]);
+
   // ── podeSalvar / podeEnviar ────────────────────────────────────────────────
   const podeSalvar = useMemo(() => (
     onlyDigits(cliente.cnpj).length === 14 &&
@@ -180,7 +211,13 @@ export default function NovoPedido() {
     !!cliente.tabela_preco
   ), [cliente]);
 
-  const podeEnviar = podeSalvar && itens.length > 0;
+  const totalGeral = itens.reduce((s, i) => s + i.total, 0);
+  const atingiuMinimo = totalGeral >= pedidoMinimo;
+  const progresso = pedidoMinimo > 0 ? Math.min(100, (totalGeral / pedidoMinimo) * 100) : 100;
+  const progressoColor = progresso >= 100 ? "bg-green-500" : progresso >= 70 ? "bg-yellow-400" : "bg-red-500";
+  const progressoTextColor = progresso >= 100 ? "text-green-700" : progresso >= 70 ? "text-yellow-700" : "text-red-600";
+
+  const podeEnviar = podeSalvar && itens.length > 0 && atingiuMinimo;
 
   // ── Garante cliente cadastrado ─────────────────────────────────────────────
   const garantirCliente = async (): Promise<string | null> => {
@@ -216,6 +253,11 @@ export default function NovoPedido() {
     const cliente_id = await garantirCliente();
     if (!cliente_id) return null;
 
+    const obsCompletas = [
+      cliente.ordem_compra ? `OC: ${cliente.ordem_compra}` : "",
+      cliente.observacoes,
+    ].filter(Boolean).join("\n") || null;
+
     let id = pedidoId;
     if (id) {
       const { error } = await supabase
@@ -227,7 +269,7 @@ export default function NovoPedido() {
           tabela_preco: cliente.tabela_preco,
           cond_pagamento: cliente.cond_pagamento || null,
           agendamento: cliente.agendamento,
-          observacoes: cliente.observacoes || null,
+          observacoes: obsCompletas,
           status,
         })
         .eq("id", id);
@@ -246,7 +288,7 @@ export default function NovoPedido() {
           tabela_preco: cliente.tabela_preco,
           cond_pagamento: cliente.cond_pagamento || null,
           agendamento: cliente.agendamento,
-          observacoes: cliente.observacoes || null,
+          observacoes: obsCompletas,
           status,
         })
         .select("id")
@@ -320,7 +362,7 @@ export default function NovoPedido() {
       .from("pedidos")
       .select(`
         id, tipo, cond_pagamento, agendamento, observacoes, perfil_cliente, tabela_preco,
-        clientes(id, cnpj, razao_social, cidade, uf, cep, comprador),
+        clientes(id, cnpj, razao_social, cidade, uf, cep, comprador, email),
         itens_pedido(produto_id, quantidade, preco_unitario_bruto, total_item,
           desconto_perfil, desconto_comercial, desconto_trade,
           produtos(codigo_jiva, nome, marca, cx_embarque, peso_unitario))
@@ -353,6 +395,8 @@ export default function NovoPedido() {
       observacoes: data.observacoes ?? "",
       codigo_cliente: cl.codigo_cliente ?? "",
       aceita_saldo: cl.aceita_saldo ?? false,
+      ordem_compra: "",
+      email_xml: cl.email ?? "",
     });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -549,8 +593,6 @@ export default function NovoPedido() {
     doc.save(nomeArquivo);
   };
 
-  const totalGeral = itens.reduce((s, i) => s + i.total, 0);
-
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -596,28 +638,50 @@ export default function NovoPedido() {
         perfilCliente={cliente.cluster}
         itens={itens}
         onChange={setItens}
+        vendedorEmail={user?.email ?? ""}
       />
 
-      <ResumoFinanceiro itens={itens} />
+      <ResumoFinanceiro itens={itens} uf={cliente.uf} saldoBolsao={saldoBolsao} />
 
-      {/* Ações abaixo do resumo */}
-      <div className="flex flex-wrap gap-2 justify-end">
-        <Button variant="outline" onClick={() => setPreviewOpen(true)} disabled={itens.length === 0}>
-          <Eye className="h-4 w-4" />
-          Visualizar resumo
-        </Button>
-        <Button variant="outline" onClick={baixarPDF} disabled={itens.length === 0}>
-          <FileDown className="h-4 w-4" />
-          Baixar PDF
-        </Button>
-        <Button variant="outline" onClick={salvarRascunhoManual} disabled={!podeSalvar || salvandoRascunho}>
-          {salvandoRascunho ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Salvar Rascunho
-        </Button>
-        <Button onClick={onEnviarFaturamento} disabled={!podeEnviar || enviando}>
-          {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          Enviar para faturamento
-        </Button>
+      {/* Barra de pedido mínimo + ações — sticky no rodapé */}
+      <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t z-10 -mx-4 px-4 py-3 space-y-3">
+        {/* Progresso */}
+        <div className="space-y-1.5">
+          <div className="flex justify-between text-sm">
+            <span className="font-medium">Pedido mínimo: {formatBRL(pedidoMinimo)}</span>
+            <span className={`font-semibold ${progressoTextColor}`}>
+              {formatBRL(totalGeral)}
+              {!atingiuMinimo && ` — faltam ${formatBRL(pedidoMinimo - totalGeral)}`}
+              {atingiuMinimo && " ✓"}
+            </span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className={`h-2 rounded-full transition-all duration-300 ${progressoColor}`}
+              style={{ width: `${progresso}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Botões */}
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button variant="outline" onClick={() => setPreviewOpen(true)} disabled={itens.length === 0}>
+            <Eye className="h-4 w-4" />
+            Visualizar resumo
+          </Button>
+          <Button variant="outline" onClick={baixarPDF} disabled={itens.length === 0}>
+            <FileDown className="h-4 w-4" />
+            Baixar PDF
+          </Button>
+          <Button variant="outline" onClick={salvarRascunhoManual} disabled={!podeSalvar || salvandoRascunho}>
+            {salvandoRascunho ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Salvar Rascunho
+          </Button>
+          <Button onClick={onEnviarFaturamento} disabled={!podeEnviar || enviando}>
+            {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Enviar para faturamento
+          </Button>
+        </div>
       </div>
 
       {/* Modal: rascunho encontrado no banco */}
