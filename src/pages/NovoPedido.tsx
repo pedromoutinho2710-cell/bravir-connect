@@ -133,6 +133,7 @@ export default function NovoPedido() {
         dRes.data.forEach((d) => { (map[d.produto_id] ||= {})[d.perfil_cliente] = Number(d.percentual_desconto); });
         setDescontos(map);
       }
+      console.log("vigencias:", vigRes.data, "error:", vigRes.error);
       if (vigRes.data && vigRes.data.length > 0) {
         setVigencias(vigRes.data as Vigencia[]);
         // Default: first = mais recente (ordered desc)
@@ -648,13 +649,13 @@ export default function NovoPedido() {
 
       <SecaoCliente value={cliente} onChange={setCliente} vendedorId={user?.id ?? ""} />
 
-      {/* Seletor de vigência de preços */}
-      {vigencias.length > 0 && (
-        <Card className="border-violet-200 bg-violet-50/40">
-          <CardContent className="pt-4 pb-4">
-            <div className="flex items-center gap-4">
-              <CalendarRange className="h-4 w-4 text-violet-600 shrink-0" />
-              <Label className="font-semibold text-sm shrink-0">Tabela de preços</Label>
+      {/* Seletor de vigência de preços — sempre visível após carregar */}
+      <Card className="border-violet-200 bg-violet-50/40">
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center gap-4">
+            <CalendarRange className="h-4 w-4 text-violet-600 shrink-0" />
+            <Label className="font-semibold text-sm shrink-0">Tabela de preços</Label>
+            {vigencias.length > 0 ? (
               <Select value={vigenciaId} onValueChange={setVigenciaId}>
                 <SelectTrigger className="max-w-xs">
                   <SelectValue placeholder="Selecione a vigência" />
@@ -665,10 +666,14 @@ export default function NovoPedido() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            ) : (
+              <span className="text-sm text-amber-700 font-medium">
+                Nenhuma tabela de preços ativa. Cadastre uma em Administração → Tabelas de Preço.
+              </span>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <SecaoProdutos
         produtos={produtos}

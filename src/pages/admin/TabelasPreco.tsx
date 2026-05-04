@@ -136,17 +136,23 @@ export default function TabelasPreco() {
         return;
       }
 
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as (string | number)[][];
-      if (rows.length < 2) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null }) as any[][];
+      if (rows.length < 2 || !rows[0]) {
         toast.error("Planilha vazia ou sem dados");
         setImportando(false);
         return;
       }
 
-      const headerRow = rows[0].map((h) => String(h ?? "").trim());
-      const dataRows = rows.slice(1).filter((r) => r.some((c) => c != null && c !== ""));
+      // Densifica o header: garante string para cada posição, sem buracos esparsos
+      const rawHeader = rows[0] as unknown[];
+      const headerRow: string[] = Array.from(
+        { length: rawHeader.length },
+        (_, i) => String(rawHeader[i] ?? "").trim()
+      );
+      const dataRows = rows.slice(1).filter((r) => Array.isArray(r) && r.some((c) => c != null && c !== ""));
 
-      // Identifica colunas por header
+      // Identifica colunas por header (guards desnecessários pois headerRow é string[])
       const codigoIdx = headerRow.findIndex((h) => /código|codigo/i.test(h));
       const t7Idx = headerRow.findIndex((h) => h.includes("7%") || h === "Tabela 7");
       const t12Idx = headerRow.findIndex((h) => h.includes("12%") || h === "Tabela 12");
@@ -198,6 +204,7 @@ export default function TabelasPreco() {
       const produtosImportados = new Set<string>();
 
       for (const row of dataRows) {
+        if (!Array.isArray(row)) continue;
         const codigo = String(row[codigoIdx] ?? "").trim();
         if (!codigo) continue;
         const prodId = prodMap[codigo];
@@ -210,7 +217,7 @@ export default function TabelasPreco() {
           { tabela: "suframa", idx: tSufIdx },
         ];
         for (const { tabela, idx } of tabelaMap) {
-          if (idx >= 0 && row[idx] != null && row[idx] !== "") {
+          if (idx >= 0 && idx < row.length && row[idx] != null && row[idx] !== "") {
             const preco = Number(row[idx]);
             if (!isNaN(preco) && preco > 0) {
               inserts.push({ produto_id: prodId, tabela, preco_bruto: preco, vigencia_id: vigId });
