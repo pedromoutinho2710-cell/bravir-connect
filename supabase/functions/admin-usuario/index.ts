@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
 
     const [rolesResult, profilesResult] = await Promise.all([
       supabaseAdmin.from("user_roles").upsert({ user_id: userId, role }, { onConflict: "user_id" }),
-      supabaseAdmin.from("profiles").upsert({ id: userId, email, name: full_name, role, ativo: true }, { onConflict: "id" }),
+      supabaseAdmin.from("profiles").upsert({ id: userId, email, full_name, role, ativo: true }, { onConflict: "id" }),
     ]);
 
     if (rolesResult.error) return err("Usuário criado mas erro ao definir role: " + rolesResult.error.message);
@@ -145,6 +145,33 @@ Deno.serve(async (req) => {
     if (roleErr) return err("Erro ao excluir role: " + roleErr.message);
 
     return ok({ ok: true });
+  }
+
+  // ── corrigir_nomes ────────────────────────────────────────────────────────
+  if (acao === "corrigir_nomes") {
+    const { data: profs, error: fetchErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id, email")
+      .is("full_name", null);
+
+    if (fetchErr) return err(fetchErr.message);
+
+    let updated = 0;
+    for (const p of (profs ?? [])) {
+      if (!p.email) continue;
+      const local = p.email.split("@")[0];
+      const full_name = local
+        .split(/[._-]/)
+        .map((s: string) => s.charAt(0).toUpperCase() + s.slice(1))
+        .join(" ");
+      const { error: upErr } = await supabaseAdmin
+        .from("profiles")
+        .update({ full_name })
+        .eq("id", p.id);
+      if (!upErr) updated++;
+    }
+
+    return ok({ ok: true, updated });
   }
 
   return err("Ação desconhecida: " + String(acao));

@@ -55,6 +55,9 @@ export default function Equipe() {
   const [excluirTarget, setExcluirTarget] = useState<UsuarioRow | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
+  // Corrigir nomes nulos
+  const [corrigindo, setCorrigindo] = useState(false);
+
   const carregar = async () => {
     setLoading(true);
     const [profRes, rolesRes] = await Promise.all([
@@ -126,6 +129,20 @@ export default function Equipe() {
     carregar();
   };
 
+  const corrigirNomesNulos = async () => {
+    setCorrigindo(true);
+    const { data, error } = await supabase.functions.invoke("admin-usuario", {
+      body: { acao: "corrigir_nomes" },
+    });
+    setCorrigindo(false);
+    if (error || data?.error) {
+      toast.error("Erro ao corrigir nomes: " + (data?.error ?? error?.message));
+      return;
+    }
+    toast.success(`${data.updated} nome(s) corrigido(s)`);
+    carregar();
+  };
+
   const excluirUsuario = async () => {
     if (!excluirTarget) return;
     setExcluindo(true);
@@ -146,10 +163,18 @@ export default function Equipe() {
           <h1 className="text-2xl font-bold">Equipe</h1>
           <p className="text-sm text-muted-foreground">Gerencie os usuários do sistema</p>
         </div>
-        <Button onClick={() => setNovoOpen(true)}>
-          <UserPlus className="h-4 w-4" />
-          Novo usuário
-        </Button>
+        <div className="flex gap-2">
+          {usuarios.some((u) => !u.full_name) && (
+            <Button variant="outline" onClick={corrigirNomesNulos} disabled={corrigindo}>
+              {corrigindo && <Loader2 className="h-4 w-4 animate-spin" />}
+              Corrigir nomes ausentes
+            </Button>
+          )}
+          <Button onClick={() => setNovoOpen(true)}>
+            <UserPlus className="h-4 w-4" />
+            Novo usuário
+          </Button>
+        </div>
       </div>
 
       {loading ? (
