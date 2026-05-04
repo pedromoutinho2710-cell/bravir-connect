@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -50,6 +50,7 @@ type DraftInfo = {
 export default function NovoPedido() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [cliente, setCliente] = useState<DadosCliente>(initialCliente);
   const [itens, setItens] = useState<ItemPedido[]>([]);
@@ -150,6 +151,26 @@ export default function NovoPedido() {
       setLoading(false);
     })();
   }, [user]);
+
+  // ── Pre-fill cliente a partir do detalhe do cliente ───────────────────────
+  useEffect(() => {
+    if (loading) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fc = (location.state as any)?.fromCliente;
+    if (!fc) return;
+    setCliente((c) => ({
+      ...c,
+      cliente_id: fc.cliente_id ?? undefined,
+      cnpj: formatCNPJ(fc.cnpj ?? ""),
+      razao_social: fc.razao_social ?? "",
+      cidade: fc.cidade ?? "",
+      uf: fc.uf ?? "",
+      cep: fc.cep ? formatCEP(fc.cep) : "",
+      comprador: fc.comprador ?? "",
+      cluster: fc.cluster ?? "",
+      tabela_preco: fc.tabela_preco ?? "",
+    }));
+  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── podeSalvar / podeEnviar ────────────────────────────────────────────────
   const podeSalvar = useMemo(() => (
