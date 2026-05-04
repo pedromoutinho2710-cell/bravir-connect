@@ -42,9 +42,12 @@ export default function Equipe() {
   const [novoRole, setNovoRole] = useState<AppRole>("vendedor");
   const [criando, setCriando] = useState(false);
 
-  // Modal editar role
+  // Modal editar usuário completo
   const [editUser, setEditUser] = useState<UsuarioRow | null>(null);
+  const [editNome, setEditNome] = useState("");
+  const [editEmail, setEditEmail] = useState("");
   const [editRole, setEditRole] = useState<AppRole>("vendedor");
+  const [editSenha, setEditSenha] = useState("");
   const [salvandoEdit, setSalvandoEdit] = useState(false);
 
   // Confirmação toggle ativo
@@ -82,6 +85,14 @@ export default function Equipe() {
 
   useEffect(() => { carregar(); }, []);
 
+  const abrirEdicao = (u: UsuarioRow) => {
+    setEditUser(u);
+    setEditNome(u.full_name ?? "");
+    setEditEmail(u.email);
+    setEditRole(u.role ?? "vendedor");
+    setEditSenha("");
+  };
+
   const criarUsuario = async () => {
     if (!novoNome.trim() || !novoEmail.trim() || !novoSenha.trim()) {
       toast.error("Preencha todos os campos");
@@ -102,15 +113,29 @@ export default function Equipe() {
     carregar();
   };
 
-  const salvarRole = async () => {
+  const salvarUsuario = async () => {
     if (!editUser) return;
+    if (!editNome.trim() || !editEmail.trim()) {
+      toast.error("Nome e email são obrigatórios");
+      return;
+    }
     setSalvandoEdit(true);
-    const { data, error } = await supabase.functions.invoke("admin-usuario", {
-      body: { acao: "atualizar_role", user_id: editUser.id, role: editRole },
-    });
+    const body: Record<string, unknown> = {
+      acao: "atualizar_usuario",
+      user_id: editUser.id,
+      full_name: editNome.trim(),
+      email: editEmail.trim(),
+      role: editRole,
+    };
+    if (editSenha.trim()) body.senha = editSenha.trim();
+
+    const { data, error } = await supabase.functions.invoke("admin-usuario", { body });
     setSalvandoEdit(false);
-    if (error || data?.error) { toast.error("Erro ao atualizar perfil"); return; }
-    toast.success("Perfil atualizado");
+    if (error || data?.error) {
+      toast.error("Erro ao salvar: " + (data?.error ?? error?.message));
+      return;
+    }
+    toast.success("Usuário atualizado");
     setEditUser(null);
     carregar();
   };
@@ -222,8 +247,8 @@ export default function Equipe() {
                   <TableCell>
                     <div className="flex gap-1.5">
                       <Button size="icon" variant="outline" className="h-7 w-7"
-                        onClick={() => { setEditUser(u); setEditRole(u.role ?? "vendedor"); }}
-                        title="Editar perfil">
+                        onClick={() => abrirEdicao(u)}
+                        title="Editar usuário">
                         <Pencil className="h-3 w-3" />
                       </Button>
                       <Button size="icon" variant="outline" className="h-7 w-7"
@@ -284,13 +309,31 @@ export default function Equipe() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal: editar role */}
+      {/* Modal: editar usuário completo */}
       <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Editar perfil — {editUser?.full_name ?? editUser?.email}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Editar usuário</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label>Perfil</Label>
+              <Label>Nome completo *</Label>
+              <Input
+                value={editNome}
+                onChange={(e) => setEditNome(e.target.value)}
+                placeholder="Nome completo"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email *</Label>
+              <Input
+                type="email"
+                value={editEmail}
+                onChange={(e) => setEditEmail(e.target.value)}
+                placeholder="email@empresa.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Perfil *</Label>
               <Select value={editRole} onValueChange={(v) => setEditRole(v as AppRole)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -298,10 +341,19 @@ export default function Equipe() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1.5">
+              <Label>Nova senha <span className="text-muted-foreground font-normal">(deixe em branco para manter)</span></Label>
+              <Input
+                type="password"
+                value={editSenha}
+                onChange={(e) => setEditSenha(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditUser(null)}>Cancelar</Button>
-            <Button onClick={salvarRole} disabled={salvandoEdit}>
+            <Button onClick={salvarUsuario} disabled={salvandoEdit}>
               {salvandoEdit && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Salvar
             </Button>

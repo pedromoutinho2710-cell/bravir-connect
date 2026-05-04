@@ -147,6 +147,42 @@ Deno.serve(async (req) => {
     return ok({ ok: true });
   }
 
+  // ── atualizar_usuario ─────────────────────────────────────────────────────
+  if (acao === "atualizar_usuario") {
+    const { user_id, full_name, email, role, senha } = body as {
+      user_id: string;
+      full_name: string;
+      email: string;
+      role: string;
+      senha?: string;
+    };
+
+    if (!user_id || !full_name || !email || !role) {
+      return err("Campos obrigatórios: user_id, full_name, email, role");
+    }
+
+    // Update auth: email + optional password
+    const authUpdate: Record<string, unknown> = { email, user_metadata: { full_name } };
+    if (senha) authUpdate.password = senha;
+    const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(user_id, authUpdate);
+    if (authErr) return err("Erro ao atualizar autenticação: " + authErr.message);
+
+    // Update profile
+    const { error: profErr } = await supabaseAdmin
+      .from("profiles")
+      .update({ full_name, email })
+      .eq("id", user_id);
+    if (profErr) return err("Erro ao atualizar profile: " + profErr.message);
+
+    // Update role
+    const { error: roleErr } = await supabaseAdmin
+      .from("user_roles")
+      .upsert({ user_id, role }, { onConflict: "user_id" });
+    if (roleErr) return err("Erro ao atualizar perfil: " + roleErr.message);
+
+    return ok({ ok: true });
+  }
+
   // ── corrigir_nomes ────────────────────────────────────────────────────────
   if (acao === "corrigir_nomes") {
     const { data: profs, error: fetchErr } = await supabaseAdmin
