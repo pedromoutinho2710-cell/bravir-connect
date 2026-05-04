@@ -16,6 +16,7 @@ import { MARCAS } from "@/lib/constants";
 import { Loader2, Search, CalendarClock, CheckCircle2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
+import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 
 type PedidoHistorico = {
   id: string;
@@ -91,6 +92,8 @@ export default function MeusClientes() {
   const [sheetCliente, setSheetCliente] = useState<ClienteAgregado | null>(null);
   const [historico, setHistorico] = useState<PedidoHistorico[]>([]);
   const [tarefas, setTarefas] = useState<Tarefa[]>([]);
+  const [detalhesId, setDetalhesId] = useState<string | null>(null);
+  const [detalhesOpen, setDetalhesOpen] = useState(false);
   const [loadingSheet, setLoadingSheet] = useState(false);
   const [novaTarefaTitulo, setNovaTarefaTitulo] = useState("");
   const [novaTarefaData, setNovaTarefaData] = useState("");
@@ -490,7 +493,11 @@ export default function MeusClientes() {
                 ) : (
                   <div className="space-y-2">
                     {historico.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between rounded-md border px-3 py-2">
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between rounded-md border px-3 py-2 cursor-pointer hover:bg-muted/50"
+                        onClick={() => { setDetalhesId(p.id); setDetalhesOpen(true); }}
+                      >
                         <div>
                           <span className="font-mono font-semibold text-sm">#{p.numero_pedido}</span>
                           <span className="text-xs text-muted-foreground ml-2">{formatDate(p.data_pedido)}</span>
@@ -567,6 +574,12 @@ export default function MeusClientes() {
           )}
         </SheetContent>
       </Sheet>
+
+      <PedidoDetalhesDialog
+        pedidoId={detalhesId}
+        open={detalhesOpen}
+        onOpenChange={setDetalhesOpen}
+      />
     </div>
   );
 }

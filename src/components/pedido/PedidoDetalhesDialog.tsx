@@ -138,24 +138,37 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
     if (!open || !pedidoId) { setPedido(null); return; }
     setLoading(true);
     (async () => {
-      const [pRes, hRes, fatRes] = await Promise.all([
-        supabase
-          .from("pedidos")
-          .select(`
-            numero_pedido, tipo, data_pedido, status, status_atualizado_em,
-            perfil_cliente, tabela_preco, cond_pagamento, agendamento, observacoes, motivo,
-            nota_fiscal, nf_pdf_url, rastreio, obs_faturamento,
-            responsavel_id,
-            clientes(razao_social, cnpj, cidade, uf, cep, rua, numero, bairro, comprador, telefone, codigo_parceiro, negativado),
-            itens_pedido(
-              quantidade, preco_unitario_bruto, preco_unitario_liquido,
-              desconto_perfil, desconto_comercial, desconto_trade,
-              preco_apos_perfil, preco_apos_comercial, preco_final, total_item,
-              produtos(nome, codigo_jiva, marca)
-            )
-          `)
-          .eq("id", pedidoId)
-          .single(),
+      // Queries independentes — falha em uma não bloqueia as outras
+      const pRes = await supabase
+        .from("pedidos")
+        .select(`
+          numero_pedido, tipo, data_pedido, status, status_atualizado_em,
+          perfil_cliente, tabela_preco, cond_pagamento, agendamento, observacoes, motivo,
+          nota_fiscal, nf_pdf_url, rastreio, obs_faturamento,
+          responsavel_id,
+          clientes(razao_social, cnpj, cidade, uf, cep, comprador, telefone, codigo_parceiro, negativado),
+          itens_pedido(
+            quantidade, preco_unitario_bruto, preco_unitario_liquido,
+            desconto_perfil, desconto_comercial, desconto_trade,
+            preco_apos_perfil, preco_apos_comercial, preco_final, total_item,
+            produtos(nome, codigo_jiva, marca)
+          )
+        `)
+        .eq("id", pedidoId)
+        .single();
+
+      if (pRes.error || !pRes.data) {
+        toast.error("Erro ao carregar pedido: " + (pRes.error?.message ?? "sem dados"));
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = pRes.data as any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cl = d.clientes as any;
+
+      // Busca paralela de histórico + faturamentos (falhas não bloqueiam o modal)
+      const [hRes, fatRes] = await Promise.all([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
           .from("historico_status")
@@ -169,69 +182,62 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
           .order("faturado_em", { ascending: true }),
       ]);
 
-      if (pRes.data) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const d = pRes.data as any;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const cl = d.clientes as any;
-
-        // Fetch responsavel name separately to avoid FK naming issues
-        let responsavelNome: string | null = null;
-        if (d.responsavel_id) {
-          const { data: prof } = await supabase
-            .from("profiles")
-            .select("full_name, email")
-            .eq("id", d.responsavel_id)
-            .maybeSingle();
-          if (prof) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const p = prof as any;
-            responsavelNome = p.full_name ?? p.email ?? null;
-          }
-        }
-
-        setPedido({
-          numero_pedido: d.numero_pedido,
-          tipo: d.tipo,
-          data_pedido: d.data_pedido,
-          status: d.status,
-          status_atualizado_em: d.status_atualizado_em ?? null,
-          perfil_cliente: d.perfil_cliente,
-          tabela_preco: d.tabela_preco,
-          cond_pagamento: d.cond_pagamento,
-          agendamento: d.agendamento,
-          observacoes: d.observacoes,
-          motivo: d.motivo,
-          razao_social: cl?.razao_social ?? "—",
-          cnpj: cl?.cnpj ?? "—",
-          cidade: cl?.cidade ?? null,
-          uf: cl?.uf ?? null,
-          comprador: cl?.comprador ?? null,
-          telefone: cl?.telefone ?? null,
-          codigo_parceiro: cl?.codigo_parceiro ?? null,
-          negativado: cl?.negativado ?? false,
-          responsavel_nome: responsavelNome,
-          nota_fiscal: d.nota_fiscal ?? null,
-          nf_pdf_url: d.nf_pdf_url ?? null,
-          rastreio: d.rastreio ?? null,
-          obs_faturamento: d.obs_faturamento ?? null,
+      // Busca nome do responsável (falha tratada)
+      let responsavelNome: string | null = null;
+      if (d.responsavel_id) {
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("full_name, email")
+          .eq("id", d.responsavel_id)
+          .maybeSingle();
+        if (prof) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          itens: (d.itens_pedido ?? []).map((i: any) => ({
-            nome: i.produtos?.nome ?? "—",
-            codigo: i.produtos?.codigo_jiva ?? "—",
-            marca: i.produtos?.marca ?? "—",
-            quantidade: i.quantidade,
-            preco_bruto: Number(i.preco_unitario_bruto),
-            desconto_perfil: Number(i.desconto_perfil ?? 0),
-            desconto_comercial: Number(i.desconto_comercial ?? 0),
-            desconto_trade: Number(i.desconto_trade ?? 0),
-            preco_final: Number(i.preco_final ?? i.preco_unitario_liquido ?? 0),
-            total: Number(i.total_item),
-          })),
-          historico: (hRes.data ?? []) as HistoricoItem[],
-          faturamentos: (fatRes.data ?? []) as FaturamentoNF[],
-        });
+          const p = prof as any;
+          responsavelNome = p.full_name ?? p.email ?? null;
+        }
       }
+
+      setPedido({
+        numero_pedido: d.numero_pedido,
+        tipo: d.tipo,
+        data_pedido: d.data_pedido,
+        status: d.status,
+        status_atualizado_em: d.status_atualizado_em ?? null,
+        perfil_cliente: d.perfil_cliente,
+        tabela_preco: d.tabela_preco,
+        cond_pagamento: d.cond_pagamento,
+        agendamento: d.agendamento,
+        observacoes: d.observacoes,
+        motivo: d.motivo,
+        razao_social: cl?.razao_social ?? "—",
+        cnpj: cl?.cnpj ?? "—",
+        cidade: cl?.cidade ?? null,
+        uf: cl?.uf ?? null,
+        comprador: cl?.comprador ?? null,
+        telefone: cl?.telefone ?? null,
+        codigo_parceiro: cl?.codigo_parceiro ?? null,
+        negativado: cl?.negativado ?? false,
+        responsavel_nome: responsavelNome,
+        nota_fiscal: d.nota_fiscal ?? null,
+        nf_pdf_url: d.nf_pdf_url ?? null,
+        rastreio: d.rastreio ?? null,
+        obs_faturamento: d.obs_faturamento ?? null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        itens: (d.itens_pedido ?? []).map((i: any) => ({
+          nome: i.produtos?.nome ?? "—",
+          codigo: i.produtos?.codigo_jiva ?? "—",
+          marca: i.produtos?.marca ?? "—",
+          quantidade: i.quantidade,
+          preco_bruto: Number(i.preco_unitario_bruto),
+          desconto_perfil: Number(i.desconto_perfil ?? 0),
+          desconto_comercial: Number(i.desconto_comercial ?? 0),
+          desconto_trade: Number(i.desconto_trade ?? 0),
+          preco_final: Number(i.preco_final ?? i.preco_unitario_liquido ?? 0),
+          total: Number(i.total_item),
+        })),
+        historico: (hRes.data ?? []) as HistoricoItem[],
+        faturamentos: (fatRes.data ?? []) as FaturamentoNF[],
+      });
     })().finally(() => setLoading(false));
   }, [open, pedidoId]);
 
