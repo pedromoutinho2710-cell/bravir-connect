@@ -76,8 +76,12 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipCnpjLookupRef = useRef(false);
 
+  // Always-fresh ref to avoid stale closures in async callbacks
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
   const set = <K extends keyof DadosCliente>(k: K, v: DadosCliente[K]) =>
-    onChange({ ...value, [k]: v });
+    onChange({ ...valueRef.current, [k]: v });
 
   // Click-outside to close dropdown
   useEffect(() => {
@@ -109,7 +113,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
     setEnderecoDisplay(partes.length > 0 ? partes.join(", ") : null);
     setTelefoneDisplay(cl.telefone ?? null);
     onChange({
-      ...value,
+      ...valueRef.current,
       cliente_id: cl.id,
       cnpj: formatCNPJ(cl.cnpj),
       razao_social: cl.razao_social,
@@ -117,10 +121,10 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       uf: cl.uf ?? "",
       cep: cl.cep ? formatCEP(cl.cep) : "",
       comprador: cl.comprador ?? "",
-      cluster: cl.cluster ?? value.cluster,
-      tabela_preco: cl.tabela_preco ?? value.tabela_preco,
+      cluster: cl.cluster ?? valueRef.current.cluster,
+      tabela_preco: cl.tabela_preco ?? valueRef.current.tabela_preco,
       codigo_cliente: cl.codigo_parceiro ?? cl.codigo_cliente ?? "",
-      aceita_saldo: cl.aceita_saldo ?? false,
+      aceita_saldo: cl.aceita_saldo ?? true,
       email_xml: cl.email ?? "",
     });
   };
@@ -258,21 +262,6 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
   const selecionarSugestao = (s: Sugestao) => {
     skipCnpjLookupRef.current = true;
     preencherCliente(s);
-    onChange({
-      ...value,
-      cliente_id: s.id,
-      cnpj: formatCNPJ(s.cnpj),
-      razao_social: s.razao_social,
-      cidade: s.cidade ?? "",
-      uf: s.uf ?? "",
-      cep: s.cep ? formatCEP(s.cep) : "",
-      comprador: s.comprador ?? "",
-      cluster: s.cluster ?? value.cluster,
-      tabela_preco: s.tabela_preco ?? value.tabela_preco,
-      codigo_cliente: s.codigo_parceiro ?? s.codigo_cliente ?? "",
-      aceita_saldo: s.aceita_saldo ?? false,
-      email_xml: s.email ?? "",
-    });
 
     // Load last orders for selected client
     supabase

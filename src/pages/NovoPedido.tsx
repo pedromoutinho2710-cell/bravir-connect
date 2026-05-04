@@ -151,18 +151,20 @@ export default function NovoPedido() {
       }
 
       if (rascunhoRes.data) {
-        // Rascunho no banco tem prioridade — mostra modal
+        // Rascunho no banco tem prioridade — mostra modal apenas se tiver itens
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const r = rascunhoRes.data as any;
-        setDraftInfo({
-          id: r.id,
-          numero_pedido: r.numero_pedido,
-          clienteNome: r.clientes?.razao_social ?? "—",
-          dataAtualizada: r.created_at,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          total: (r.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0),
-        });
-        setShowDraftModal(true);
+        const itensRascunho: { total_item: number }[] = r.itens_pedido ?? [];
+        if (itensRascunho.length > 0) {
+          setDraftInfo({
+            id: r.id,
+            numero_pedido: r.numero_pedido,
+            clienteNome: r.clientes?.razao_social ?? "—",
+            dataAtualizada: r.created_at,
+            total: itensRascunho.reduce((s, i) => s + Number(i.total_item), 0),
+          });
+          setShowDraftModal(true);
+        }
       } else {
         // Sem rascunho no banco — tenta restaurar localStorage
         try {
