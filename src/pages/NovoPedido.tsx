@@ -117,7 +117,7 @@ export default function NovoPedido() {
       }
       if (dRes.data) {
         const map: Record<string, Record<string, number>> = {};
-        dRes.data.forEach((d) => { (map[d.produto_id] ||= {})[d.cluster] = Number(d.percentual_desconto); });
+        dRes.data.forEach((d) => { (map[d.produto_id] ||= {})[d.perfil_cliente] = Number(d.percentual_desconto); });
         setDescontos(map);
       }
 

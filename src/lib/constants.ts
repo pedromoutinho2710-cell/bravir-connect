@@ -1,6 +1,9 @@
 ﻿export const CLUSTERS = [
+  "Atacado Alimentício",
   "Atacado Generalista",
+  "Cash & Carry",
   "CPF",
+  "Distribuidor Alimentício",
   "Distribuidor Básico",
   "Distribuidor Foco",
   "Distribuidor Parceiro",
@@ -9,6 +12,10 @@
   "Médio Varejo",
   "Outros",
   "Pequeno Varejo",
+  "Varejo Abrafarma",
+  "Varejo Alimentício",
+  "Varejo Perfumaria",
+  "Varejo Rede Média e Grande",
 ] as const;
 
 export const TABELAS_PRECO = [
