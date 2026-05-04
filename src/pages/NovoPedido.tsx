@@ -618,11 +618,23 @@ export default function NovoPedido() {
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
-      <div>
-        <h1 className="text-2xl font-bold">Novo Pedido</h1>
-        <p className="text-sm text-muted-foreground">
-          Preencha os dados do cliente, adicione produtos e envie para faturamento
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Novo Pedido</h1>
+          <p className="text-sm text-muted-foreground">
+            Preencha os dados do cliente, adicione produtos e envie para faturamento
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowLimpar(true)}
+          disabled={itens.length === 0 && !cliente.razao_social}
+          className="shrink-0"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Limpar pedido
+        </Button>
       </div>
 
       {/* Banner: rascunho abandonado (> 24 h) */}
@@ -713,10 +725,6 @@ export default function NovoPedido() {
           <Button variant="outline" onClick={baixarPDF} disabled={itens.length === 0}>
             <FileDown className="h-4 w-4" />
             Baixar PDF
-          </Button>
-          <Button variant="outline" onClick={() => setShowLimpar(true)} disabled={itens.length === 0 && !cliente.razao_social}>
-            <RotateCcw className="h-4 w-4" />
-            Limpar pedido
           </Button>
           <Button variant="outline" onClick={salvarRascunhoManual} disabled={!podeSalvar || salvandoRascunho}>
             {salvandoRascunho ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
