@@ -143,15 +143,31 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
       const pRes = await supabase
         .from("pedidos")
         .select(`
-          numero_pedido, tipo, data_pedido, status, status_atualizado_em,
-          perfil_cliente, tabela_preco, cond_pagamento, agendamento, observacoes, motivo,
-          nota_fiscal, nf_pdf_url, rastreio, obs_faturamento,
+          id,
+          numero_pedido,
+          tipo,
+          data_pedido,
+          status,
+          status_atualizado_em,
+          perfil_cliente,
+          tabela_preco,
+          cond_pagamento,
+          agendamento,
+          observacoes,
+          motivo,
+          obs_faturamento,
           responsavel_id,
+          cliente_id,
+          vendedor_id,
           clientes(razao_social, cnpj, cidade, uf, comprador, telefone, codigo_parceiro, negativado),
           itens_pedido(
-            quantidade, preco_unitario_bruto, preco_unitario_liquido,
-            desconto_perfil, desconto_comercial, desconto_trade,
-            preco_apos_perfil, preco_apos_comercial, preco_final, total_item,
+            quantidade,
+            preco_unitario_bruto,
+            preco_final,
+            total_item,
+            desconto_perfil,
+            desconto_comercial,
+            desconto_trade,
             produtos(nome, codigo_jiva, marca)
           )
         `)
@@ -219,9 +235,9 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
         codigo_parceiro: cl?.codigo_parceiro ?? null,
         negativado: cl?.negativado ?? false,
         responsavel_nome: responsavelNome,
-        nota_fiscal: d.nota_fiscal ?? null,
-        nf_pdf_url: d.nf_pdf_url ?? null,
-        rastreio: d.rastreio ?? null,
+        nota_fiscal: null,
+        nf_pdf_url: null,
+        rastreio: null,
         obs_faturamento: d.obs_faturamento ?? null,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         itens: (d.itens_pedido ?? []).map((i: any) => ({
@@ -233,7 +249,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
           desconto_perfil: Number(i.desconto_perfil ?? 0),
           desconto_comercial: Number(i.desconto_comercial ?? 0),
           desconto_trade: Number(i.desconto_trade ?? 0),
-          preco_final: Number(i.preco_final ?? i.preco_unitario_liquido ?? 0),
+          preco_final: Number(i.preco_final ?? 0),
           total: Number(i.total_item),
         })),
         historico: (hRes.data ?? []) as HistoricoItem[],
