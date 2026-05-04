@@ -15,6 +15,7 @@ import {
   Megaphone,
   Store,
   Upload,
+  Tag,
 } from "lucide-react";
 import {
   Sidebar,
@@ -72,6 +73,7 @@ const ADMIN_SECTIONS: Section[] = [
       { title: "Metas", url: "/admin/metas", icon: Target },
       { title: "Formulários", url: "/admin/formularios", icon: FileStack },
       { title: "Importar Clientes", url: "/admin/importar-clientes", icon: Upload },
+      { title: "Tabelas de Preço", url: "/admin/tabelas-preco", icon: Tag },
     ],
   },
 ];

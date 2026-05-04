@@ -11,7 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FileDown, Eye, Send, Loader2, FileText, Save } from "lucide-react";
+import { FileDown, Eye, Send, Loader2, FileText, Save, CalendarRange } from "lucide-react";
 import { toast } from "sonner";
 import { onlyDigits, formatBRL, formatDate, formatCNPJ, formatCEP } from "@/lib/format";
 import { gerarPedidoPDF, type PdfItem } from "@/lib/pdf";
@@ -19,6 +19,9 @@ import { gerarPedidoDocx } from "@/lib/docx";
 import { SecaoCliente, type DadosCliente } from "@/components/pedido/SecaoCliente";
 import { SecaoProdutos, type ItemPedido, type Produto } from "@/components/pedido/SecaoProdutos";
 import { ResumoFinanceiro } from "@/components/pedido/ResumoFinanceiro";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent } from "@/components/ui/card";
 
 const RASCUNHO_KEY = "bravir:rascunho-pedido";
 
@@ -60,8 +63,11 @@ export default function NovoPedido() {
   const [cliente, setCliente] = useState<DadosCliente>(initialCliente);
   const [itens, setItens] = useState<ItemPedido[]>([]);
   const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [precos, setPrecos] = useState<Record<string, Record<string, number>>>({});
   const [descontos, setDescontos] = useState<Record<string, Record<string, number>>>({});
+
+  type Vigencia = { id: string; nome: string; created_at: string };
+  const [vigencias, setVigencias] = useState<Vigencia[]>([]);
+  const [vigenciaId, setVigenciaId] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [salvandoRascunho, setSalvandoRascunho] = useState(false);
@@ -103,9 +109,8 @@ export default function NovoPedido() {
         prodQuery = supabase.from("produtos").select("*").in("id", fpIds).order("marca").order("nome");
       }
 
-      const [pRes, prRes, dRes, rascunhoRes] = await Promise.all([
+      const [pRes, dRes, rascunhoRes, vigRes] = await Promise.all([
         prodQuery,
-        supabase.from("precos").select("*"),
         supabase.from("descontos").select("*"),
         supabase
           .from("pedidos")
@@ -115,18 +120,23 @@ export default function NovoPedido() {
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle(),
+        supabase
+          .from("tabelas_vigencia")
+          .select("id, nome, created_at")
+          .eq("ativa", true)
+          .order("created_at", { ascending: false }),
       ]);
 
       if (pRes.data) setProdutos(pRes.data as Produto[]);
-      if (prRes.data) {
-        const map: Record<string, Record<string, number>> = {};
-        prRes.data.forEach((p) => { (map[p.produto_id] ||= {})[p.tabela] = Number(p.preco_bruto); });
-        setPrecos(map);
-      }
       if (dRes.data) {
         const map: Record<string, Record<string, number>> = {};
         dRes.data.forEach((d) => { (map[d.produto_id] ||= {})[d.perfil_cliente] = Number(d.percentual_desconto); });
         setDescontos(map);
+      }
+      if (vigRes.data && vigRes.data.length > 0) {
+        setVigencias(vigRes.data as Vigencia[]);
+        // Default: first = mais recente (ordered desc)
+        setVigenciaId(vigRes.data[0].id);
       }
 
       if (rascunhoRes.data) {
@@ -151,6 +161,7 @@ export default function NovoPedido() {
             if (saved.cliente) setCliente(saved.cliente);
             if (saved.itens) setItens(saved.itens);
             if (saved.pedidoId) setPedidoId(saved.pedidoId);
+            if (saved.vigenciaId) setVigenciaId(saved.vigenciaId);
           }
         } catch { /* ignore */ }
       }
@@ -270,6 +281,7 @@ export default function NovoPedido() {
           cond_pagamento: cliente.cond_pagamento || null,
           agendamento: cliente.agendamento,
           observacoes: obsCompletas,
+          vigencia_id: vigenciaId || null,
           status,
         })
         .eq("id", id);
@@ -289,6 +301,7 @@ export default function NovoPedido() {
           cond_pagamento: cliente.cond_pagamento || null,
           agendamento: cliente.agendamento,
           observacoes: obsCompletas,
+          vigencia_id: vigenciaId || null,
           status,
         })
         .select("id")
@@ -342,7 +355,7 @@ export default function NovoPedido() {
     if (loading) return;
     if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
     localSaveTimer.current = window.setTimeout(() => {
-      localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ cliente, itens, pedidoId }));
+      localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ cliente, itens, pedidoId, vigenciaId }));
     }, 500);
   }, [cliente, itens, pedidoId, loading]);
 
@@ -361,7 +374,7 @@ export default function NovoPedido() {
     const { data, error } = await supabase
       .from("pedidos")
       .select(`
-        id, tipo, cond_pagamento, agendamento, observacoes, perfil_cliente, tabela_preco,
+        id, tipo, cond_pagamento, agendamento, observacoes, perfil_cliente, tabela_preco, vigencia_id,
         clientes(id, cnpj, razao_social, cidade, uf, cep, comprador, email),
         itens_pedido(produto_id, quantidade, preco_unitario_bruto, total_item,
           desconto_perfil, desconto_comercial, desconto_trade,
@@ -399,17 +412,22 @@ export default function NovoPedido() {
       email_xml: cl.email ?? "",
     });
 
+    // Restaura vigência
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dAny = data as any;
+    if (dAny.vigencia_id) setVigenciaId(dAny.vigencia_id);
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     setItens(((data.itens_pedido as any[]) ?? []).map((item) => {
       const p = item.produtos;
-      const bruto = precos[item.produto_id]?.[data.tabela_preco] ?? Number(item.preco_unitario_bruto);
-      const dPerfil = descontos[item.produto_id]?.[data.perfil_cliente] ?? Number(item.desconto_perfil ?? 0);
+      const bruto = Number(item.preco_unitario_bruto);
+      const dPerfil = Number(item.desconto_perfil ?? 0);
       const dCom = Number(item.desconto_comercial ?? 0);
       const dTrade = Number(item.desconto_trade ?? 0);
       const apos_perfil = bruto * (1 - dPerfil / 100);
       const apos_comercial = apos_perfil * (1 - dCom / 100);
       const preco_final = apos_comercial * (1 - dTrade / 100);
-      
+
       return {
         produto_id: item.produto_id,
         codigo: p.codigo_jiva,
@@ -630,15 +648,37 @@ export default function NovoPedido() {
 
       <SecaoCliente value={cliente} onChange={setCliente} vendedorId={user?.id ?? ""} />
 
+      {/* Seletor de vigência de preços */}
+      {vigencias.length > 0 && (
+        <Card className="border-violet-200 bg-violet-50/40">
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-4">
+              <CalendarRange className="h-4 w-4 text-violet-600 shrink-0" />
+              <Label className="font-semibold text-sm shrink-0">Tabela de preços</Label>
+              <Select value={vigenciaId} onValueChange={setVigenciaId}>
+                <SelectTrigger className="max-w-xs">
+                  <SelectValue placeholder="Selecione a vigência" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vigencias.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <SecaoProdutos
         produtos={produtos}
-        precos={precos}
         descontos={descontos}
         tabelaPreco={cliente.tabela_preco}
         perfilCliente={cliente.cluster}
         itens={itens}
         onChange={setItens}
         vendedorEmail={user?.email ?? ""}
+        vigenciaId={vigenciaId}
       />
 
       <ResumoFinanceiro itens={itens} uf={cliente.uf} saldoBolsao={saldoBolsao} />

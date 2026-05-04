@@ -27,6 +27,7 @@ import PedidosAdmin from "./pages/admin/PedidosAdmin";
 import ClientesAdmin from "./pages/admin/ClientesAdmin";
 import ImportarClientes from "./pages/admin/ImportarClientes";
 import ClienteDetalhe from "./pages/ClienteDetalhe";
+import TabelasPreco from "./pages/admin/TabelasPreco";
 
 const queryClient = new QueryClient();
 
@@ -50,6 +51,7 @@ const App = () => (
               <Route path="/admin/pedidos" element={<PedidosAdmin />} />
               <Route path="/admin/clientes" element={<ClientesAdmin />} />
               <Route path="/admin/importar-clientes" element={<ImportarClientes />} />
+              <Route path="/admin/tabelas-preco" element={<TabelasPreco />} />
             </Route>
 
             {/* Rotas de vendedor — acessíveis por vendedor e admin */}

@@ -8,6 +8,7 @@ import { formatBRL } from "@/lib/format";
 import { MARCAS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export type Produto = {
   id: string;
@@ -62,27 +63,43 @@ export function calcularPrecos(
 
 type Props = {
   produtos: Produto[];
-  precos: Record<string, Record<string, number>>; // produto_id -> tabela -> preco
   descontos: Record<string, Record<string, number>>; // produto_id -> perfil -> pct
   tabelaPreco: string;
   perfilCliente: string;
   itens: ItemPedido[];
   onChange: (itens: ItemPedido[]) => void;
   vendedorEmail: string;
+  vigenciaId: string;
 };
 
 export function SecaoProdutos({
   produtos,
-  precos,
   descontos,
   tabelaPreco,
   perfilCliente,
   itens,
   onChange,
   vendedorEmail,
+  vigenciaId,
 }: Props) {
   const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
+  const [precos, setPrecos] = useState<Record<string, Record<string, number>>>({});
+
+  // Recarrega preços quando vigência muda
+  useEffect(() => {
+    if (!vigenciaId) { setPrecos({}); return; }
+    supabase
+      .from("precos")
+      .select("produto_id, tabela, preco_bruto")
+      .eq("vigencia_id", vigenciaId)
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, Record<string, number>> = {};
+        data.forEach((p) => { (map[p.produto_id] ||= {})[p.tabela] = Number(p.preco_bruto); });
+        setPrecos(map);
+      });
+  }, [vigenciaId]);
   const [filtroMarca, setFiltroMarca] = useState<string>("Todas");
 
   const calcItem = (p: Produto, qtd: number): ItemPedido => {

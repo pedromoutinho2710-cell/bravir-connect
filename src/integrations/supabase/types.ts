@@ -432,6 +432,7 @@ export type Database = {
           tabela_preco: string
           tipo: string
           vendedor_id: string
+          vigencia_id: string | null
         }
         Insert: {
           agendamento?: boolean
@@ -454,6 +455,7 @@ export type Database = {
           tabela_preco: string
           tipo?: string
           vendedor_id: string
+          vigencia_id?: string | null
         }
         Update: {
           agendamento?: boolean
@@ -476,6 +478,7 @@ export type Database = {
           tabela_preco?: string
           tipo?: string
           vendedor_id?: string
+          vigencia_id?: string | null
         }
         Relationships: [
           {
@@ -493,18 +496,21 @@ export type Database = {
           preco_bruto: number
           produto_id: string
           tabela: string
+          vigencia_id: string | null
         }
         Insert: {
           id?: string
           preco_bruto: number
           produto_id: string
           tabela: string
+          vigencia_id?: string | null
         }
         Update: {
           id?: string
           preco_bruto?: number
           produto_id?: string
           tabela?: string
+          vigencia_id?: string | null
         }
         Relationships: [
           {
@@ -610,6 +616,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      tabelas_vigencia: {
+        Row: {
+          ativa: boolean
+          created_at: string
+          descricao: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          ativa?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          ativa?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
