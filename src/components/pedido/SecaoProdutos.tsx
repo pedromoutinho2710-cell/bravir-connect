@@ -49,8 +49,8 @@ export function calcularPrecos(
   dTrade: number = 0,
   qtd: number = 1
 ) {
-  const apos_perfil = bruto * (1 - dPerfil / 100);
-  const apos_comercial = apos_perfil * (1 - dCom / 100);
+  const apos_perfil = bruto * (1 - dPerfil); // dPerfil é decimal (0.20 = 20%)
+  const apos_comercial = apos_perfil * (1 - dCom / 100); // dCom é percentual (2.5 = 2.5%)
   const preco_final = apos_comercial * (1 - dTrade / 100);
 
   return {
@@ -399,13 +399,13 @@ export function SecaoProdutos({
                       {descontoLivre ? (
                         <Input
                           type="number" min={0} max={100} step={0.1}
-                          value={i.desconto_perfil}
-                          onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                          value={parseFloat((i.desconto_perfil * 100).toFixed(1))}
+                          onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(1, Math.max(0, (parseFloat(e.target.value) || 0) / 100)))}
                           className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
                           placeholder="0"
                         />
                       ) : (
-                        <span className="text-[10px] text-muted-foreground">{i.desconto_perfil}%</span>
+                        <span className="text-[10px] text-muted-foreground">{(i.desconto_perfil * 100).toFixed(1)}%</span>
                       )}
                     </TableCell>
 
