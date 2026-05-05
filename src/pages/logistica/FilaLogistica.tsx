@@ -85,12 +85,6 @@ type Pedido = {
   uf: string | null;
   email_xml: string | null;
   negativado: boolean;
-  cep: string | null;
-  endereco: string | null;
-  numero: string | null;
-  complemento: string | null;
-  bairro: string | null;
-  codigo_parceiro: string | null;
   total: number;
   peso_total: number;
   itens: ItemPedido[];
@@ -121,7 +115,7 @@ export default function FilaLogistica() {
       .from("pedidos")
       .select(`
         id, numero_pedido, data_pedido, status, cond_pagamento, observacoes, vendedor_id, cliente_id,
-        clientes(razao_social, cnpj, cidade, uf, email, negativado, cep, endereco, numero, complemento, bairro, codigo_parceiro),
+        clientes(razao_social, cnpj, cidade, uf, email, negativado),
         itens_pedido(
           id, quantidade, qtd_faturada, total_item, preco_final, preco_unitario_bruto,
           produtos(nome, codigo_jiva, cx_embarque, peso_unitario)
@@ -157,12 +151,6 @@ export default function FilaLogistica() {
         uf: cl?.uf ?? null,
         email_xml: cl?.email ?? null,
         negativado: cl?.negativado ?? false,
-        cep: cl?.cep ?? null,
-        endereco: cl?.endereco ?? null,
-        numero: cl?.numero ?? null,
-        complemento: cl?.complemento ?? null,
-        bairro: cl?.bairro ?? null,
-        codigo_parceiro: cl?.codigo_parceiro ?? null,
         total,
         peso_total: pesoTotal,
         itens: itensList.map((i) => ({
@@ -332,18 +320,8 @@ export default function FilaLogistica() {
       </style>
       </head><body>
       <h2>Pedido #${p.numero_pedido} — ${p.razao_social}</h2>
-      ${p.codigo_parceiro ? `<p>Cód. cliente: ${p.codigo_parceiro}</p>` : ""}
       <p>CNPJ: ${p.cnpj ? formatCNPJ(p.cnpj) : "—"} | Data: ${formatDate(p.data_pedido)} | Vendedor: ${vendedor}</p>
       <p>Cond. Pagamento: ${p.cond_pagamento ?? "—"} | Cidade/UF: ${[p.cidade, p.uf].filter(Boolean).join(" / ") || "—"}</p>
-      ${(() => {
-        const endParts = [
-          [p.endereco, p.numero].filter(Boolean).join(", "),
-          p.complemento,
-          p.bairro,
-          p.cep ? `CEP ${p.cep}` : null,
-        ].filter(Boolean).join(" — ");
-        return endParts ? `<p>Endereço: ${endParts}</p>` : "";
-      })()}
       ${p.email_xml ? `<p>Email XML/Boleto: ${p.email_xml}</p>` : ""}
       ${icms != null ? `<p>ICMS interno ${p.uf}: <strong>${icms}%</strong></p>` : ""}
       ${p.negativado ? `<p><span class="badge">⚠ CLIENTE NEGATIVADO</span></p>` : ""}
@@ -492,22 +470,8 @@ export default function FilaLogistica() {
                 <div className="rounded-md border bg-muted/30 p-4 space-y-1.5 text-sm">
                   <div className="font-semibold mb-2">Dados do cliente</div>
                   <div className="grid gap-1.5 sm:grid-cols-2">
-                    {selecionado.codigo_parceiro && (
-                      <div><span className="text-muted-foreground">Cód. cliente: </span>{selecionado.codigo_parceiro}</div>
-                    )}
                     <div><span className="text-muted-foreground">CNPJ: </span>{selecionado.cnpj ? formatCNPJ(selecionado.cnpj) : "—"}</div>
                     <div><span className="text-muted-foreground">Cidade/UF: </span>{[selecionado.cidade, selecionado.uf].filter(Boolean).join(" / ") || "—"}</div>
-                    {(selecionado.endereco || selecionado.bairro || selecionado.cep) && (
-                      <div className="sm:col-span-2">
-                        <span className="text-muted-foreground">Endereço: </span>
-                        {[
-                          [selecionado.endereco, selecionado.numero].filter(Boolean).join(", "),
-                          selecionado.complemento,
-                          selecionado.bairro,
-                          selecionado.cep ? `CEP ${selecionado.cep}` : null,
-                        ].filter(Boolean).join(" — ")}
-                      </div>
-                    )}
                     {selecionado.email_xml && (
                       <div className="sm:col-span-2"><span className="text-muted-foreground">Email XML/Boleto: </span>{selecionado.email_xml}</div>
                     )}
