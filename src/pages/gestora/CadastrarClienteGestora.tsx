@@ -29,6 +29,8 @@ type Form = {
   cluster: string;
   vendedor_id: string;
   negativado: boolean;
+  tabela_preco: string;
+  suframa: boolean;
   observacoes: string;
 };
 
@@ -47,6 +49,8 @@ const EMPTY: Form = {
   cluster: "",
   vendedor_id: "",
   negativado: false,
+  tabela_preco: "",
+  suframa: false,
   observacoes: "",
 };
 
@@ -104,6 +108,8 @@ export default function CadastrarClienteGestora() {
         cluster: form.cluster || null,
         vendedor_id: form.vendedor_id || null,
         negativado: form.negativado,
+        tabela_preco: form.tabela_preco || null,
+        suframa: form.suframa,
         observacoes_trade: form.observacoes || null,
         status: "ativo",
       });
@@ -270,6 +276,21 @@ export default function CadastrarClienteGestora() {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Tabela de preço</Label>
+              <Select value={form.tabela_preco} onValueChange={(v) => set("tabela_preco", v)}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="7">7</SelectItem>
+                  <SelectItem value="12">12</SelectItem>
+                  <SelectItem value="18">18</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch checked={form.suframa} onCheckedChange={(v) => set("suframa", v)} />
+              <Label>Suframa</Label>
             </div>
             <div className="flex items-center gap-3">
               <Switch checked={form.negativado} onCheckedChange={(v) => set("negativado", v)} />
