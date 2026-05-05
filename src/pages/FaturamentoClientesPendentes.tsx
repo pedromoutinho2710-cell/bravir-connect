@@ -1,9 +1,9 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,16 +13,23 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { formatCNPJ, formatDate } from "@/lib/format";
-import { Loader2, UserPlus, Users, Search, Trash2 } from "lucide-react";
+import { Loader2, Users, Search, Trash2 } from "lucide-react";
 
 type ClientePendente = {
   id: string;
-  razao_social: string;
-  cnpj: string;
-  cidade: string | null;
-  uf: string | null;
+  nome_cliente: string | null;
+  razao_social: string | null;
+  cnpj: string | null;
+  contato_principal: string | null;
+  email: string | null;
+  telefone: string | null;
+  classificacao: string | null;
+  cluster_sugerido: string | null;
   vendedor_id: string | null;
-  assumido_por: string | null;
+  vendedor_nome: string | null;
+  origem: string;
+  status: string;
+  negativado: boolean | null;
   created_at: string;
 };
 
@@ -42,14 +49,13 @@ type ClienteTodos = {
 };
 
 export default function FaturamentoClientesPendentes() {
-  const { user } = useAuth();
   const [clientes, setClientes] = useState<ClientePendente[]>([]);
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [profileList, setProfileList] = useState<{ id: string; nome: string }[]>([]);
-  const [assumindo, setAssumindo] = useState<string | null>(null);
 
   const [cadastrarDialog, setCadastrarDialog] = useState<ClientePendente | null>(null);
+  const [codigoParceiro, setCodigoParceiro] = useState("");
   const [negativado, setNegativado] = useState(false);
   const [cadastrando, setCadastrando] = useState(false);
 
@@ -65,14 +71,12 @@ export default function FaturamentoClientesPendentes() {
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("clientes")
-      .select("id, razao_social, cnpj, cidade, uf, vendedor_id, assumido_por, created_at")
-      .eq("status", "pendente_cadastro")
+    const { data, error } = await (supabase.from("cadastros_pendentes") as any)
+      .select("id, nome_cliente, razao_social, cnpj, contato_principal, email, telefone, classificacao, cluster_sugerido, vendedor_id, vendedor_nome, origem, status, negativado, created_at")
+      .eq("status", "aguardando_faturamento")
       .order("created_at", { ascending: true });
-    if (error) toast.error("Erro ao carregar clientes");
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    else setClientes((data ?? []) as any[]);
+    if (error) toast.error("Erro ao carregar cadastros");
+    else setClientes((data ?? []) as ClientePendente[]);
     setLoading(false);
   }, []);
 
@@ -99,37 +103,54 @@ export default function FaturamentoClientesPendentes() {
     });
   }, [carregar]);
 
-  const assumir = async (c: ClientePendente) => {
-    if (!user) return;
-    setAssumindo(c.id);
-    const { error } = await supabase
-      .from("clientes")
-      .update({ assumido_por: user.id })
-      .eq("id", c.id);
-    setAssumindo(null);
-    if (error) { toast.error("Erro: " + error.message); return; }
-    toast.success(`Você assumiu ${c.razao_social}`);
-    carregar();
-  };
-
   const confirmarCadastro = async () => {
     if (!cadastrarDialog) return;
+    if (!codigoParceiro.trim()) {
+      toast.error("Informe o código do cliente no Sankhya.");
+      return;
+    }
     setCadastrando(true);
-    const { error } = await supabase.from("clientes").update({
-      status: "aguardando_trade",
-      negativado,
-    }).eq("id", cadastrarDialog.id);
 
-    if (error) { toast.error("Erro: " + error.message); setCadastrando(false); return; }
+    // Create client in clientes table
+    const { error: insErr } = await supabase.from("clientes").insert({
+      razao_social: cadastrarDialog.razao_social ?? cadastrarDialog.nome_cliente ?? "Sem nome",
+      cnpj: cadastrarDialog.cnpj ?? "00000000000000",
+      email: cadastrarDialog.email ?? null,
+      telefone: cadastrarDialog.telefone ?? null,
+      cluster: cadastrarDialog.cluster_sugerido ?? null,
+      negativado,
+      vendedor_id: cadastrarDialog.vendedor_id ?? null,
+      codigo_parceiro: codigoParceiro.trim(),
+      status: "aguardando_trade",
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any);
+
+    if (insErr) {
+      toast.error("Erro ao criar cliente: " + insErr.message);
+      setCadastrando(false);
+      return;
+    }
+
+    // Update status in cadastros_pendentes
+    const { error: upErr } = await (supabase.from("cadastros_pendentes") as any)
+      .update({ status: "cadastrado" })
+      .eq("id", cadastrarDialog.id);
+
+    if (upErr) {
+      toast.error("Erro ao atualizar status: " + upErr.message);
+      setCadastrando(false);
+      return;
+    }
 
     await supabase.from("notificacoes").insert({
       destinatario_role: "trade",
-      mensagem: `${cadastrarDialog.razao_social} foi cadastrado no Sankhya e aguarda configuração de perfil`,
+      mensagem: `${cadastrarDialog.nome_cliente ?? cadastrarDialog.razao_social} foi cadastrado no Sankhya e aguarda configuração de perfil`,
       tipo: "cliente_aguardando_trade",
     });
 
-    toast.success(`${cadastrarDialog.razao_social} marcado como cadastrado no Sankhya`);
+    toast.success("Cliente cadastrado com sucesso!");
     setCadastrarDialog(null);
+    setCodigoParceiro("");
     setCadastrando(false);
     carregar();
   };
@@ -137,10 +158,12 @@ export default function FaturamentoClientesPendentes() {
   const excluir = async () => {
     if (!excluirCliente) return;
     setExcluindo(true);
-    const { error } = await supabase.from("clientes").delete().eq("id", excluirCliente.id);
+    const { error } = await (supabase.from("cadastros_pendentes") as any)
+      .delete()
+      .eq("id", excluirCliente.id);
     setExcluindo(false);
     if (error) { toast.error("Erro ao excluir: " + error.message); return; }
-    toast.success(`${excluirCliente.razao_social} excluído`);
+    toast.success(`${excluirCliente.nome_cliente ?? excluirCliente.razao_social} excluído`);
     setClientes((prev) => prev.filter((c) => c.id !== excluirCliente.id));
     setExcluirCliente(null);
   };
@@ -179,7 +202,14 @@ export default function FaturamentoClientesPendentes() {
 
       <Tabs defaultValue="pendentes">
         <TabsList>
-          <TabsTrigger value="pendentes">Pendentes</TabsTrigger>
+          <TabsTrigger value="pendentes">
+            Aguardando cadastro
+            {clientes.length > 0 && (
+              <span className="ml-2 inline-flex items-center rounded-full bg-red-100 text-red-800 border border-red-300 px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                {clientes.length}
+              </span>
+            )}
+          </TabsTrigger>
           <TabsTrigger value="todos" onClick={() => { if (todos.length === 0) carregarTodos(); }}>
             Todos os clientes
           </TabsTrigger>
@@ -187,7 +217,9 @@ export default function FaturamentoClientesPendentes() {
 
         {/* ABA PENDENTES */}
         <TabsContent value="pendentes" className="mt-4">
-          <p className="text-sm text-muted-foreground mb-4">Clientes enviados pelos vendedores aguardando cadastro no Sankhya</p>
+          <p className="text-sm text-muted-foreground mb-4">
+            Cadastros enviados por vendedores ou aprovados pela gestora aguardando registro no Sankhya
+          </p>
 
           {loading ? (
             <div className="flex h-48 items-center justify-center">
@@ -207,83 +239,53 @@ export default function FaturamentoClientesPendentes() {
                   <TableRow>
                     <TableHead>Cliente</TableHead>
                     <TableHead>CNPJ</TableHead>
-                    <TableHead>Cidade / UF</TableHead>
+                    <TableHead>Origem</TableHead>
                     <TableHead>Vendedor</TableHead>
                     <TableHead>Data envio</TableHead>
-                    <TableHead>Responsável</TableHead>
-                    <TableHead className="min-w-[220px]">Ações</TableHead>
+                    <TableHead className="min-w-[160px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {clientes.map((c) => {
-                    const euAssumi = c.assumido_por === user?.id;
-                    const outroAssumiu = c.assumido_por && !euAssumi;
-                    return (
-                      <TableRow key={c.id}>
-                        <TableCell className="font-medium">{c.razao_social}</TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground">
-                          {formatCNPJ(c.cnpj)}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {[c.cidade, c.uf].filter(Boolean).join(" / ") || "—"}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {c.vendedor_id ? (profiles[c.vendedor_id] ?? "—") : "—"}
-                        </TableCell>
-                        <TableCell className="text-sm">{formatDate(c.created_at)}</TableCell>
-                        <TableCell>
-                          {c.assumido_por ? (
-                            <Badge
-                              variant="outline"
-                              className={euAssumi
-                                ? "border-green-400 bg-green-50 text-green-700"
-                                : "border-blue-300 bg-blue-50 text-blue-700"
-                              }
-                            >
-                              <UserPlus className="h-3 w-3 mr-1" />
-                              {euAssumi ? "Você" : (profiles[c.assumido_por] ?? "—")}
-                            </Badge>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Livre</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2 flex-wrap items-center">
-                            {!c.assumido_por && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={assumindo === c.id}
-                                onClick={() => assumir(c)}
-                              >
-                                {assumindo === c.id
-                                  ? <Loader2 className="h-3 w-3 animate-spin" />
-                                  : "Assumir"
-                                }
-                              </Button>
-                            )}
-                            {outroAssumiu ? null : (
-                              <Button
-                                size="sm"
-                                onClick={() => { setCadastrarDialog(c); setNegativado(false); }}
-                              >
-                                Marcar como cadastrado
-                              </Button>
-                            )}
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                              title="Excluir cliente"
-                              onClick={() => setExcluirCliente(c)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                  {clientes.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="font-medium">
+                        {c.nome_cliente ?? c.razao_social ?? "—"}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm text-muted-foreground">
+                        {c.cnpj ? formatCNPJ(c.cnpj) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        {c.origem === "vendedor" ? (
+                          <Badge variant="outline" className="border-green-400 bg-green-50 text-green-700">Vendedor</Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-blue-400 bg-blue-50 text-blue-700">Site</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {c.vendedor_nome ?? (c.vendedor_id ? (profiles[c.vendedor_id] ?? "—") : "—")}
+                      </TableCell>
+                      <TableCell className="text-sm">{formatDate(c.created_at)}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2 items-center">
+                          <Button
+                            size="sm"
+                            onClick={() => { setCadastrarDialog(c); setNegativado(false); setCodigoParceiro(""); }}
+                          >
+                            Marcar como cadastrado
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            title="Excluir"
+                            onClick={() => setExcluirCliente(c)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>
@@ -397,13 +399,13 @@ export default function FaturamentoClientesPendentes() {
         </TabsContent>
       </Tabs>
 
-      {/* AlertDialog — Excluir cliente */}
+      {/* AlertDialog — Excluir cadastro */}
       <AlertDialog open={!!excluirCliente} onOpenChange={(o) => !o && setExcluirCliente(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Deseja excluir este cliente?</AlertDialogTitle>
+            <AlertDialogTitle>Deseja excluir este cadastro?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. <strong>{excluirCliente?.razao_social}</strong> será removido permanentemente.
+              Esta ação não pode ser desfeita. <strong>{excluirCliente?.nome_cliente ?? excluirCliente?.razao_social}</strong> será removido permanentemente da fila.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -420,6 +422,7 @@ export default function FaturamentoClientesPendentes() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Dialog — Confirmar cadastro */}
       <Dialog open={!!cadastrarDialog} onOpenChange={(o) => !o && setCadastrarDialog(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -427,9 +430,17 @@ export default function FaturamentoClientesPendentes() {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-sm text-muted-foreground">
-              Confirme que <strong>{cadastrarDialog?.razao_social}</strong> foi cadastrado no Sankhya.
-              O trade será notificado para configurar perfil e tabela de preço.
+              Informe o código do cliente <strong>{cadastrarDialog?.nome_cliente ?? cadastrarDialog?.razao_social}</strong> gerado no Sankhya.
             </p>
+            <div className="space-y-1.5">
+              <Label>Código do cliente *</Label>
+              <Input
+                value={codigoParceiro}
+                onChange={(e) => setCodigoParceiro(e.target.value)}
+                placeholder="Ex: 00123"
+                autoFocus
+              />
+            </div>
             <div className="flex items-center gap-3 rounded-md border px-4 py-3">
               <Switch checked={negativado} onCheckedChange={setNegativado} />
               <div>
@@ -440,7 +451,7 @@ export default function FaturamentoClientesPendentes() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCadastrarDialog(null)}>Cancelar</Button>
-            <Button onClick={confirmarCadastro} disabled={cadastrando}>
+            <Button onClick={confirmarCadastro} disabled={cadastrando || !codigoParceiro.trim()}>
               {cadastrando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Confirmar cadastro
             </Button>

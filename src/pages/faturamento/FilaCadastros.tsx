@@ -53,9 +53,11 @@ type Cadastro = {
   created_at: string;
 };
 
+type Vendedor = { id: string; nome: string };
+
 const STATUS_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pendente: { label: "Pendente", variant: "secondary" },
-  aprovado: { label: "Aprovado", variant: "default" },
+  aguardando_faturamento: { label: "Enviado p/ faturamento", variant: "default" },
   reprovado: { label: "Reprovado", variant: "destructive" },
 };
 
@@ -72,9 +74,11 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 export default function FilaCadastros() {
   const [cadastros, setCadastros] = useState<Cadastro[]>([]);
   const [loading, setLoading] = useState(true);
+  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [selected, setSelected] = useState<Cadastro | null>(null);
   const [clusterEdit, setClusterEdit] = useState("");
   const [negativadoEdit, setNegativadoEdit] = useState(false);
+  const [vendedorSelecionado, setVendedorSelecionado] = useState("");
   const [showReprovar, setShowReprovar] = useState(false);
   const [motivoReprovacao, setMotivoReprovacao] = useState("");
   const [saving, setSaving] = useState(false);
@@ -83,45 +87,63 @@ export default function FilaCadastros() {
     setLoading(true);
     const { data } = await (supabase.from("cadastros_pendentes") as any)
       .select("*")
+      .eq("origem", "site")
+      .eq("status", "pendente")
       .order("created_at", { ascending: false });
     setCadastros((data ?? []) as Cadastro[]);
     setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  const loadVendedores = async () => {
+    const [profRes, rolesRes] = await Promise.all([
+      supabase.from("profiles").select("id, full_name, email"),
+      supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
+    ]);
+    const vendedorIds = new Set((rolesRes.data ?? []).map((r) => r.user_id));
+    setVendedores(
+      (profRes.data ?? [])
+        .filter((p) => vendedorIds.has(p.id))
+        .map((p) => ({ id: p.id, nome: p.full_name || p.email }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+    );
+  };
+
+  useEffect(() => {
+    load();
+    loadVendedores();
+  }, []);
 
   const openDialog = (c: Cadastro) => {
     setSelected(c);
     setClusterEdit(c.cluster_sugerido ?? "");
     setNegativadoEdit(c.negativado ?? false);
+    setVendedorSelecionado(c.vendedor_id ?? "");
     setMotivoReprovacao("");
   };
 
   const handleAprovar = async () => {
     if (!selected) return;
+    if (!vendedorSelecionado) {
+      toast.error("Selecione um vendedor para encarteirar o cliente.");
+      return;
+    }
     setSaving(true);
     try {
-      const { error: upErr } = await (supabase.from("cadastros_pendentes") as any)
-        .update({ status: "aprovado", cluster_sugerido: clusterEdit || null, negativado: negativadoEdit })
+      const { error } = await (supabase.from("cadastros_pendentes") as any)
+        .update({
+          status: "aguardando_faturamento",
+          cluster_sugerido: clusterEdit || null,
+          negativado: negativadoEdit,
+          vendedor_id: vendedorSelecionado,
+          vendedor_nome: vendedores.find((v) => v.id === vendedorSelecionado)?.nome ?? null,
+        })
         .eq("id", selected.id);
-      if (upErr) throw upErr;
-
-      const { error: insErr } = await supabase.from("clientes").insert({
-        razao_social: selected.razao_social ?? selected.nome_cliente ?? "Sem nome",
-        cnpj: selected.cnpj ?? "00000000000000",
-        email: selected.email ?? null,
-        telefone: selected.telefone ?? null,
-        cluster: clusterEdit || null,
-        negativado: negativadoEdit,
-        vendedor_id: selected.vendedor_id ?? null,
-      } as any);
-      if (insErr) throw insErr;
-
-      toast.success("Cadastro aprovado e cliente criado!");
+      if (error) throw error;
+      toast.success("Cadastro encaminhado para o faturamento!");
       setSelected(null);
       load();
     } catch (err: any) {
-      toast.error(err.message ?? "Erro ao aprovar.");
+      toast.error(err.message ?? "Erro ao encaminhar.");
     } finally {
       setSaving(false);
     }
@@ -153,12 +175,15 @@ export default function FilaCadastros() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Fila de Cadastros</h1>
+      <div>
+        <h1 className="text-2xl font-bold">Fila de Cadastros</h1>
+        <p className="text-sm text-muted-foreground">Leads do site aguardando verificação e encarteiramento</p>
+      </div>
 
       {loading ? (
         <p className="text-muted-foreground">Carregando...</p>
       ) : cadastros.length === 0 ? (
-        <p className="text-muted-foreground">Nenhum cadastro encontrado.</p>
+        <p className="text-muted-foreground">Nenhum cadastro pendente do site.</p>
       ) : (
         <div className="rounded-md border">
           <Table>
@@ -167,8 +192,7 @@ export default function FilaCadastros() {
                 <TableHead>Data</TableHead>
                 <TableHead>Nome do cliente</TableHead>
                 <TableHead>CNPJ</TableHead>
-                <TableHead>Origem</TableHead>
-                <TableHead>Vendedor</TableHead>
+                <TableHead>Contato</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
@@ -181,14 +205,7 @@ export default function FilaCadastros() {
                     <TableCell className="text-sm text-muted-foreground">{formatDate(c.created_at.slice(0, 10))}</TableCell>
                     <TableCell className="font-medium">{c.nome_cliente ?? c.razao_social ?? "—"}</TableCell>
                     <TableCell className="text-sm">{c.cnpj ? formatCNPJ(c.cnpj) : "—"}</TableCell>
-                    <TableCell>
-                      {c.origem === "vendedor" ? (
-                        <Badge variant="outline" className="border-green-400 bg-green-50 text-green-700">Vendedor</Badge>
-                      ) : (
-                        <Badge variant="outline" className="border-blue-400 bg-blue-50 text-blue-700">Site</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm">{c.vendedor_nome ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{c.contato_principal ?? "—"}</TableCell>
                     <TableCell>
                       <Badge variant={st.variant}>{st.label}</Badge>
                     </TableCell>
@@ -245,18 +262,6 @@ export default function FilaCadastros() {
                     {selected.marcas_interesse && selected.marcas_interesse.length > 0 && (
                       <InfoRow label="Marcas de interesse" value={selected.marcas_interesse.join(", ")} />
                     )}
-                    {selected.produtos_alivik && selected.produtos_alivik.length > 0 && (
-                      <InfoRow label="Produtos Alivik" value={selected.produtos_alivik.join(", ")} />
-                    )}
-                    {selected.produtos_bravir && selected.produtos_bravir.length > 0 && (
-                      <InfoRow label="Produtos Bravir" value={selected.produtos_bravir.join(", ")} />
-                    )}
-                    {selected.produtos_bendita && selected.produtos_bendita.length > 0 && (
-                      <InfoRow label="Produtos Bendita" value={selected.produtos_bendita.join(", ")} />
-                    )}
-                    {selected.produtos_laby && selected.produtos_laby.length > 0 && (
-                      <InfoRow label="Produtos Laby" value={selected.produtos_laby.join(", ")} />
-                    )}
                   </div>
                 </div>
 
@@ -267,7 +272,6 @@ export default function FilaCadastros() {
                     <InfoRow label="Vende digital" value={selected.vende_digital ? "Sim" : "Não"} />
                     {selected.vende_digital && (
                       <>
-                        <InfoRow label="Tem e-commerce" value={selected.tem_ecommerce ? "Sim" : "Não"} />
                         {selected.canal_ecommerce && (
                           <InfoRow label="Canal e-commerce" value={selected.canal_ecommerce} />
                         )}
@@ -283,59 +287,62 @@ export default function FilaCadastros() {
                 </div>
 
                 {/* Info comercial */}
-                <div>
-                  <h3 className="font-semibold mb-2">Informações comerciais</h3>
-                  <div className="space-y-1">
-                    {selected.observacoes && (
-                      <InfoRow label="Observações" value={selected.observacoes} />
-                    )}
-                    {selected.motivo_reprovacao && (
-                      <InfoRow label="Motivo reprovação" value={selected.motivo_reprovacao} />
-                    )}
-                  </div>
-                </div>
-
-                {/* Ações da gestora */}
-                {selected.status === "pendente" && (
-                  <div className="space-y-4 border-t pt-4">
-                    <h3 className="font-semibold">Análise da gestora</h3>
-
-                    <div className="space-y-1.5">
-                      <Label>Cluster</Label>
-                      <Select value={clusterEdit} onValueChange={setClusterEdit}>
-                        <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                        <SelectContent>
-                          {CLUSTERS.map((c) => (
-                            <SelectItem key={c} value={c}>{c}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                      <Switch checked={negativadoEdit} onCheckedChange={setNegativadoEdit} />
-                      <Label>Marcar como negativado</Label>
-                    </div>
+                {selected.observacoes && (
+                  <div>
+                    <h3 className="font-semibold mb-2">Observações</h3>
+                    <p className="text-sm">{selected.observacoes}</p>
                   </div>
                 )}
+
+                {/* Ações da gestora — análise */}
+                <div className="space-y-4 border-t pt-4">
+                  <h3 className="font-semibold">Análise da gestora</h3>
+
+                  <div className="space-y-1.5">
+                    <Label>Encarteirar vendedor *</Label>
+                    <Select value={vendedorSelecionado} onValueChange={setVendedorSelecionado}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione um vendedor..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vendedores.map((v) => (
+                          <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Cluster</Label>
+                    <Select value={clusterEdit} onValueChange={setClusterEdit}>
+                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectContent>
+                        {CLUSTERS.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <Switch checked={negativadoEdit} onCheckedChange={setNegativadoEdit} />
+                    <Label>Marcar como negativado</Label>
+                  </div>
+                </div>
               </div>
 
               <DialogFooter className="gap-2 flex-wrap">
                 <Button variant="outline" onClick={() => setSelected(null)}>Fechar</Button>
-                {selected.status === "pendente" && (
-                  <>
-                    <Button
-                      variant="destructive"
-                      onClick={() => setShowReprovar(true)}
-                      disabled={saving}
-                    >
-                      Reprovar
-                    </Button>
-                    <Button onClick={handleAprovar} disabled={saving}>
-                      {saving ? "Salvando..." : "Aprovar"}
-                    </Button>
-                  </>
-                )}
+                <Button
+                  variant="destructive"
+                  onClick={() => setShowReprovar(true)}
+                  disabled={saving}
+                >
+                  Reprovar
+                </Button>
+                <Button onClick={handleAprovar} disabled={saving || !vendedorSelecionado}>
+                  {saving ? "Salvando..." : "Enviar para faturamento"}
+                </Button>
               </DialogFooter>
             </>
           )}
@@ -348,7 +355,7 @@ export default function FilaCadastros() {
           <AlertDialogHeader>
             <AlertDialogTitle>Reprovar cadastro</AlertDialogTitle>
             <AlertDialogDescription>
-              Informe o motivo da reprovação (opcional). O vendedor poderá ver esta informação.
+              Informe o motivo da reprovação (opcional).
             </AlertDialogDescription>
           </AlertDialogHeader>
           <Textarea

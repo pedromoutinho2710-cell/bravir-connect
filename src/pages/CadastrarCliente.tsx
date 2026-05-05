@@ -169,13 +169,13 @@ export default function CadastrarCliente() {
         percentual_b2b: form.percentual_b2b ? Number(form.percentual_b2b) : null,
         cluster_sugerido: form.cluster_sugerido || null,
         observacoes: form.observacoes || null,
-        status: "pendente",
+        status: "aguardando_faturamento",
         origem: "vendedor",
         vendedor_id: user?.id ?? null,
         vendedor_nome: fullName ?? null,
       });
       if (error) throw error;
-      toast.success("Cadastro enviado para análise da gestora!");
+      toast.success("Cadastro enviado para o faturamento!");
       navigate("/meus-clientes");
     } catch (err: any) {
       toast.error(err.message ?? "Erro ao enviar cadastro.");
@@ -532,8 +532,8 @@ export default function CadastrarCliente() {
               />
               <span className="text-sm leading-relaxed">
                 Declaro que as informações prestadas são verdadeiras e que este cliente demonstrou interesse
-                real em fechar negócio com a Bravir. Estou ciente de que o cadastro será analisado pela
-                gestora antes de ser aprovado.
+                real em fechar negócio com a Bravir. Estou ciente de que o cadastro será encaminhado
+                diretamente ao faturamento para registro no sistema.
               </span>
             </label>
           </CardContent>
