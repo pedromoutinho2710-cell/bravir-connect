@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CLUSTERS } from "@/lib/constants";
 import {
   Loader2, TrendingUp, ShoppingCart, Users, Clock, AlertTriangle,
-  Target, Settings, Tag, ClipboardCheck, ExternalLink,
+  Target, Settings, Tag, ClipboardCheck, ExternalLink, UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -609,6 +609,9 @@ export default function DashboardGestora() {
       <div>
         <h2 className="text-lg font-semibold mb-3">Configurações rápidas</h2>
         <div className="flex flex-wrap gap-3">
+          <Button onClick={() => navigate("/gestora/cadastrar-cliente")} className="gap-2">
+            <UserPlus className="h-4 w-4" /> Cadastrar Cliente
+          </Button>
           <Button variant="outline" onClick={() => navigate("/admin/metas")} className="gap-2">
             <Target className="h-4 w-4" /> Definir metas
           </Button>

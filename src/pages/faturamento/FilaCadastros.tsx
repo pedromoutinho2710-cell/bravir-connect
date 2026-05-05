@@ -139,11 +139,31 @@ export default function FilaCadastros() {
         })
         .eq("id", selected.id);
       if (error) throw error;
-      toast.success("Cadastro encaminhado para o faturamento!");
+
+      const { error: insErr } = await (supabase.from("clientes") as any).insert({
+        razao_social: selected.razao_social ?? selected.nome_cliente ?? "Sem nome",
+        cnpj: selected.cnpj ?? "00000000000000",
+        email: selected.email ?? null,
+        telefone: selected.telefone ?? null,
+        cidade: null,
+        uf: null,
+        cep: null,
+        rua: null,
+        numero: null,
+        bairro: null,
+        comprador: selected.contato_principal ?? null,
+        cluster: clusterEdit || null,
+        vendedor_id: vendedorSelecionado,
+        status: "ativo",
+        negativado: negativadoEdit,
+      });
+      if (insErr) toast.error("Cadastro aprovado, mas erro ao criar cliente: " + insErr.message);
+      else toast.success("Cadastro aprovado e cliente criado!");
+
       setSelected(null);
       load();
     } catch (err: any) {
-      toast.error(err.message ?? "Erro ao encaminhar.");
+      toast.error(err.message ?? "Erro ao aprovar.");
     } finally {
       setSaving(false);
     }

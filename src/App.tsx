@@ -36,6 +36,7 @@ import SiteLanding from "./pages/site/SiteLanding";
 import SiteCandidatura from "./pages/site/SiteCandidatura";
 import DashboardGestora from "./pages/gestora/DashboardGestora";
 import GestaoTime from "./pages/gestora/GestaoTime";
+import CadastrarClienteGestora from "./pages/gestora/CadastrarClienteGestora";
 
 const queryClient = new QueryClient();
 
@@ -93,6 +94,7 @@ const App = () => (
             <Route element={<ProtectedRoute allow={["gestora", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/gestora" element={<DashboardGestora />} />
               <Route path="/gestora/time" element={<GestaoTime />} />
+              <Route path="/gestora/cadastrar-cliente" element={<CadastrarClienteGestora />} />
             </Route>
 
             {/* Logística */}
