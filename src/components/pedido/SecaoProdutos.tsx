@@ -398,9 +398,10 @@ export function SecaoProdutos({
                     <TableCell className="text-right py-2 align-top">
                       {descontoLivre ? (
                         <Input
-                          type="number" min={0} max={100} step={0.1}
-                          value={parseFloat((i.desconto_perfil * 100).toFixed(1))}
+                          type="number" min={0} max={100} step={0.01}
+                          value={parseFloat((i.desconto_perfil * 100).toFixed(2))}
                           onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(1, Math.max(0, (parseFloat(e.target.value) || 0) / 100)))}
+                          onFocus={(e) => e.target.select()}
                           className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
                           placeholder="0"
                         />
@@ -416,9 +417,10 @@ export function SecaoProdutos({
                     {!descontoLivre && (
                       <TableCell className="text-right py-2 align-top">
                         <Input
-                          type="number" min={0} max={3} step={0.1}
+                          type="number" min={0} max={3} step={0.01}
                           value={i.desconto_comercial}
                           onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.min(3, Math.max(0, parseFloat(e.target.value) || 0)))}
+                          onFocus={(e) => e.target.select()}
                           className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
                           placeholder="0"
                         />
@@ -429,9 +431,10 @@ export function SecaoProdutos({
                     {/* Desc. Trade */}
                     <TableCell className="text-right py-2 align-top">
                       <Input
-                        type="number" min={0} max={100} step={0.1}
+                        type="number" min={0} max={100} step={0.01}
                         value={i.desconto_trade}
                         onChange={(e) => atualizarDesconto(i.produto_id, "trade", Math.max(0, parseFloat(e.target.value) || 0))}
+                        onFocus={(e) => e.target.select()}
                         className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
                         placeholder="0"
                       />
