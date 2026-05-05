@@ -261,26 +261,31 @@ export default function NovoPedido() {
       setPedidoId(id);
     }
 
-    // Substitui itens
-    await supabase.from("itens_pedido").delete().eq("pedido_id", id);
+    // Substitui itens: delete first, then upsert to handle any constraint conflicts
+    const { error: delErr } = await supabase.from("itens_pedido").delete().eq("pedido_id", id);
+    if (delErr) console.error("[salvarPedido] delete itens error:", delErr);
+
     if (itens.length > 0) {
-      const { error } = await supabase.from("itens_pedido").insert(
-        itens.map((i) => ({
-          pedido_id: id,
-          produto_id: i.produto_id,
-          quantidade: i.quantidade,
-          preco_unitario_bruto: i.preco_bruto,
-          preco_unitario_liquido: i.preco_final,
-          desconto_comercial: i.desconto_comercial,
-          desconto_trade: i.desconto_trade,
-          desconto_perfil: i.desconto_perfil,
-          preco_apos_perfil: i.preco_apos_perfil,
-          preco_apos_comercial: i.preco_apos_comercial,
-          preco_final: i.preco_final,
-          total_item: i.total,
-        })),
-      );
+      const itemsPayload = itens.map((i) => ({
+        pedido_id: id,
+        produto_id: i.produto_id,
+        quantidade: i.quantidade,
+        preco_unitario_bruto: i.preco_bruto,
+        preco_unitario_liquido: i.preco_final,
+        desconto_comercial: i.desconto_comercial,
+        desconto_trade: i.desconto_trade,
+        desconto_perfil: i.desconto_perfil,
+        preco_apos_perfil: i.preco_apos_perfil,
+        preco_apos_comercial: i.preco_apos_comercial,
+        preco_final: i.preco_final,
+        total_item: i.total,
+      }));
+      // Upsert on (pedido_id, produto_id) so re-saving never causes a 409 conflict
+      const { error } = await supabase
+        .from("itens_pedido")
+        .upsert(itemsPayload, { onConflict: "pedido_id,produto_id" });
       if (error) {
+        console.error("[salvarPedido] upsert itens error:", error);
         if (status !== "rascunho") toast.error("Erro ao salvar itens: " + error.message);
         return null;
       }
@@ -340,13 +345,22 @@ export default function NovoPedido() {
       return;
     }
     setEnviando(true);
+    console.log("[enviar] pedidoId atual:", pedidoId);
+    console.log("[enviar] itens a enviar:", itens.length, itens.map((i) => i.produto_id));
 
     // Delete existing items first to avoid 409 conflicts from previously auto-saved drafts
     if (pedidoId) {
-      await supabase.from("itens_pedido").delete().eq("pedido_id", pedidoId);
+      const { error: delErr, count } = await supabase
+        .from("itens_pedido")
+        .delete()
+        .eq("pedido_id", pedidoId);
+      console.log("[enviar] delete pré-envio: count=", count, "error=", delErr);
+    } else {
+      console.log("[enviar] pedidoId null — sem delete pré-envio");
     }
 
     const id = await salvarPedido("aguardando_faturamento");
+    console.log("[enviar] salvarPedido retornou id:", id);
     if (id) {
       // Gera docx e envia email (best-effort)
       try {
