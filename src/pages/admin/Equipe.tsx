@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,8 +9,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Loader2, UserPlus, Pencil, PowerOff, Power, Trash2 } from "lucide-react";
+import { Loader2, UserPlus, Pencil, PowerOff, Power, Trash2, Search } from "lucide-react";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
+import { cn } from "@/lib/utils";
 
 type UsuarioRow = {
   id: string;
@@ -20,7 +21,8 @@ type UsuarioRow = {
   role: AppRole | null;
 };
 
-const ROLES: AppRole[] = ["admin", "vendedor", "faturamento", "logistica", "trade"];
+const ROLES: AppRole[] = ["admin", "gestora", "vendedor", "faturamento", "logistica", "trade"];
+const ROLE_ORDER: AppRole[] = ["admin", "gestora", "vendedor", "faturamento", "logistica", "trade"];
 
 const ROLE_COLOR: Record<string, string> = {
   admin: "bg-purple-100 text-purple-800 border-purple-300",
@@ -60,6 +62,36 @@ export default function Equipe() {
 
   // Corrigir nomes nulos
   const [corrigindo, setCorrigindo] = useState(false);
+
+  // Filtros
+  const [busca, setBusca] = useState("");
+  const [filtroRole, setFiltroRole] = useState<"todos" | AppRole>("todos");
+
+  const usuariosFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return usuarios.filter((u) => {
+      if (q && !((u.full_name ?? "").toLowerCase().includes(q) || u.email.toLowerCase().includes(q))) return false;
+      if (filtroRole !== "todos" && u.role !== filtroRole) return false;
+      return true;
+    });
+  }, [usuarios, busca, filtroRole]);
+
+  const grupos = useMemo(() => {
+    const groups = ROLE_ORDER
+      .map((role) => ({
+        role: role as AppRole | null,
+        lista: usuariosFiltrados
+          .filter((u) => u.role === role)
+          .sort((a, b) => (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email, "pt-BR")),
+      }))
+      .filter((g) => g.lista.length > 0);
+
+    const semPerfil = usuariosFiltrados.filter((u) => !u.role)
+      .sort((a, b) => (a.full_name ?? a.email).localeCompare(b.full_name ?? b.email, "pt-BR"));
+    if (semPerfil.length > 0) groups.push({ role: null, lista: semPerfil });
+
+    return groups;
+  }, [usuariosFiltrados]);
 
   const carregar = async () => {
     setLoading(true);
@@ -202,6 +234,46 @@ export default function Equipe() {
         </div>
       </div>
 
+      {/* Filtros */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+          <Input
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome ou email…"
+            className="pl-9"
+          />
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            onClick={() => setFiltroRole("todos")}
+            className={cn(
+              "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+              filtroRole === "todos"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-background hover:bg-muted border-input"
+            )}
+          >
+            Todos
+          </button>
+          {ROLE_ORDER.map((r) => (
+            <button
+              key={r}
+              onClick={() => setFiltroRole(r)}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-medium transition-colors",
+                filtroRole === r
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background hover:bg-muted border-input"
+              )}
+            >
+              {ROLE_LABEL[r]}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {loading ? (
         <div className="flex h-48 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -219,53 +291,69 @@ export default function Equipe() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {usuarios.length === 0 && (
+              {grupos.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
-                    Nenhum usuário cadastrado
+                    Nenhum usuário encontrado
                   </TableCell>
                 </TableRow>
               )}
-              {usuarios.map((u) => (
-                <TableRow key={u.id} className={!(u.ativo ?? true) ? "opacity-50" : ""}>
-                  <TableCell className="font-medium">{u.full_name ?? "—"}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
-                  <TableCell>
-                    {u.role ? (
-                      <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${ROLE_COLOR[u.role] ?? ""}`}>
-                        {ROLE_LABEL[u.role]}
-                      </span>
-                    ) : (
-                      <Badge variant="outline" className="text-xs text-muted-foreground">Sem perfil</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <span className={`text-xs font-medium ${(u.ativo ?? true) ? "text-green-700" : "text-red-600"}`}>
-                      {(u.ativo ?? true) ? "Ativo" : "Inativo"}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1.5">
-                      <Button size="icon" variant="outline" className="h-7 w-7"
-                        onClick={() => abrirEdicao(u)}
-                        title="Editar usuário">
-                        <Pencil className="h-3 w-3" />
-                      </Button>
-                      <Button size="icon" variant="outline" className="h-7 w-7"
-                        onClick={() => setToggleTarget(u)}
-                        title={(u.ativo ?? true) ? "Desativar" : "Reativar"}>
-                        {(u.ativo ?? true)
-                          ? <PowerOff className="h-3 w-3 text-red-500" />
-                          : <Power className="h-3 w-3 text-green-600" />}
-                      </Button>
-                      <Button size="icon" variant="outline" className="h-7 w-7"
-                        onClick={() => setExcluirTarget(u)}
-                        title="Excluir usuário">
-                        <Trash2 className="h-3 w-3 text-red-600" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
+              {grupos.map((grupo) => (
+                <>
+                  {filtroRole === "todos" && (
+                    <TableRow key={`header-${grupo.role ?? "sem-perfil"}`} className="bg-muted/40 hover:bg-muted/40">
+                      <TableCell colSpan={5} className="py-2 px-4">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                          {grupo.role ? ROLE_LABEL[grupo.role] : "Sem perfil"}
+                          <span className="ml-2 font-normal normal-case tracking-normal">
+                            ({grupo.lista.length})
+                          </span>
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  )}
+                  {grupo.lista.map((u) => (
+                    <TableRow key={u.id} className={!(u.ativo ?? true) ? "opacity-50" : ""}>
+                      <TableCell className="font-medium">{u.full_name ?? "—"}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{u.email}</TableCell>
+                      <TableCell>
+                        {u.role ? (
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${ROLE_COLOR[u.role] ?? ""}`}>
+                            {ROLE_LABEL[u.role]}
+                          </span>
+                        ) : (
+                          <Badge variant="outline" className="text-xs text-muted-foreground">Sem perfil</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className={`text-xs font-medium ${(u.ativo ?? true) ? "text-green-700" : "text-red-600"}`}>
+                          {(u.ativo ?? true) ? "Ativo" : "Inativo"}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1.5">
+                          <Button size="icon" variant="outline" className="h-7 w-7"
+                            onClick={() => abrirEdicao(u)}
+                            title="Editar usuário">
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button size="icon" variant="outline" className="h-7 w-7"
+                            onClick={() => setToggleTarget(u)}
+                            title={(u.ativo ?? true) ? "Desativar" : "Reativar"}>
+                            {(u.ativo ?? true)
+                              ? <PowerOff className="h-3 w-3 text-red-500" />
+                              : <Power className="h-3 w-3 text-green-600" />}
+                          </Button>
+                          <Button size="icon" variant="outline" className="h-7 w-7"
+                            onClick={() => setExcluirTarget(u)}
+                            title="Excluir usuário">
+                            <Trash2 className="h-3 w-3 text-red-600" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </>
               ))}
             </TableBody>
           </Table>
