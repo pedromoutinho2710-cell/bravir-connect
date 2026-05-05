@@ -32,6 +32,8 @@ import TabelasPreco from "./pages/admin/TabelasPreco";
 import Configuracoes from "./pages/admin/Configuracoes";
 import DashboardLogistica from "./pages/logistica/DashboardLogistica";
 import FilaLogistica from "./pages/logistica/FilaLogistica";
+import SiteLanding from "./pages/site/SiteLanding";
+import SiteCandidatura from "./pages/site/SiteCandidatura";
 
 const queryClient = new QueryClient();
 
@@ -45,6 +47,10 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
+
+            {/* Rotas públicas — sem autenticação */}
+            <Route path="/site" element={<SiteLanding />} />
+            <Route path="/site/candidatura" element={<SiteCandidatura />} />
 
             {/* Rotas exclusivas do admin */}
             <Route element={<ProtectedRoute allow={["admin"]}><AppLayout /></ProtectedRoute>}>
