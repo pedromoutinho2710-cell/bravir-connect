@@ -6,12 +6,11 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { FileDown, Eye, Send, Loader2, FileText, Save, CalendarRange, RotateCcw } from "lucide-react";
+import { FileDown, Eye, Send, Loader2, Save, CalendarRange, RotateCcw } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -54,13 +53,6 @@ const initialCliente: DadosCliente = {
   email_xml: "",
 };
 
-type DraftInfo = {
-  id: string;
-  numero_pedido: number;
-  clienteNome: string;
-  dataAtualizada: string;
-  total: number;
-};
 
 export default function NovoPedido() {
   const { user } = useAuth();
@@ -86,22 +78,11 @@ export default function NovoPedido() {
 
   const [showLimpar, setShowLimpar] = useState(false);
 
-  // Rascunho
-  const [draftInfo, setDraftInfo] = useState<DraftInfo | null>(null);
-  const [showDraftModal, setShowDraftModal] = useState(false);
-  const [carregandoRascunho, setCarregandoRascunho] = useState(false);
-
   // Refs de timers
   const localSaveTimer = useRef<number | null>(null);
-  const dbSaveTimer = useRef<number | null>(null);
-  const dbSaveInProgress = useRef(false);
   const pedidoEnviadoRef = useRef(false); // bloqueia auto-saves após envio bem-sucedido
 
-  // Ref "latest" para o auto-save de banco em segundo plano
-  // (atualizado a cada render, evita closure stale)
-  const doDbSaveRef = useRef<() => Promise<void>>(async () => {});
-
-  // ── Carrega catálogo + verifica rascunho no banco ──────────────────────────
+  // ── Carrega catálogo ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     (async () => {
@@ -120,17 +101,9 @@ export default function NovoPedido() {
         prodQuery = supabase.from("produtos").select("*").in("id", fpIds).order("marca").order("nome");
       }
 
-      const [pRes, dRes, rascunhoRes, vigRes] = await Promise.all([
+      const [pRes, dRes, vigRes] = await Promise.all([
         prodQuery,
         supabase.from("descontos").select("*"),
-        supabase
-          .from("pedidos")
-          .select("id, numero_pedido, created_at, clientes(razao_social), itens_pedido(total_item)")
-          .eq("vendedor_id", user.id)
-          .eq("status", "rascunho")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
         supabase
           .from("tabelas_vigencia")
           .select("id, nome, created_at, desconto_livre")
@@ -151,34 +124,17 @@ export default function NovoPedido() {
         setVigenciaId(vigRes.data[0].id);
       }
 
-      if (rascunhoRes.data) {
-        // Rascunho no banco tem prioridade — mostra modal apenas se tiver itens
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const r = rascunhoRes.data as any;
-        const itensRascunho: { total_item: number }[] = r.itens_pedido ?? [];
-        if (itensRascunho.length > 0) {
-          setDraftInfo({
-            id: r.id,
-            numero_pedido: r.numero_pedido,
-            clienteNome: r.clientes?.razao_social ?? "—",
-            dataAtualizada: r.created_at,
-            total: itensRascunho.reduce((s, i) => s + Number(i.total_item), 0),
-          });
-          setShowDraftModal(true);
+      // Restaura rascunho do localStorage silenciosamente
+      try {
+        const raw = localStorage.getItem(RASCUNHO_KEY);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          if (saved.cliente) setCliente(saved.cliente);
+          if (saved.itens) setItens(saved.itens);
+          if (saved.pedidoId) setPedidoId(saved.pedidoId);
+          if (saved.vigenciaId) setVigenciaId(saved.vigenciaId);
         }
-      } else {
-        // Sem rascunho no banco — tenta restaurar localStorage
-        try {
-          const raw = localStorage.getItem(RASCUNHO_KEY);
-          if (raw) {
-            const saved = JSON.parse(raw);
-            if (saved.cliente) setCliente(saved.cliente);
-            if (saved.itens) setItens(saved.itens);
-            if (saved.pedidoId) setPedidoId(saved.pedidoId);
-            if (saved.vigenciaId) setVigenciaId(saved.vigenciaId);
-          }
-        } catch { /* ignore */ }
-      }
+      } catch { /* ignore */ }
 
       setLoading(false);
     })();
@@ -331,15 +287,6 @@ export default function NovoPedido() {
     return id;
   };
 
-  // ── Atualiza ref "latest" a cada render ────────────────────────────────────
-  // (padrão latest-ref: evita closure stale no auto-save assíncrono)
-  doDbSaveRef.current = async () => {
-    if (pedidoEnviadoRef.current || !podeSalvar || dbSaveInProgress.current || showDraftModal) return;
-    dbSaveInProgress.current = true;
-    await salvarPedido("rascunho");
-    dbSaveInProgress.current = false;
-  };
-
   // ── Auto-save LOCAL (500ms) ────────────────────────────────────────────────
   useEffect(() => {
     if (loading || pedidoEnviadoRef.current) return;
@@ -349,114 +296,6 @@ export default function NovoPedido() {
       localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ cliente, itens, pedidoId, vigenciaId }));
     }, 500);
   }, [cliente, itens, pedidoId, loading]);
-
-  // ── Auto-save BANCO em segundo plano (5s debounce) ─────────────────────────
-  useEffect(() => {
-    if (loading || showDraftModal || pedidoEnviadoRef.current) return;
-    if (dbSaveTimer.current) window.clearTimeout(dbSaveTimer.current);
-    dbSaveTimer.current = window.setTimeout(() => {
-      doDbSaveRef.current();
-    }, 5000);
-  }, [cliente, itens, loading, showDraftModal]);
-
-  // ── Continuar rascunho existente ───────────────────────────────────────────
-  const continuarRascunho = async (id: string) => {
-    setCarregandoRascunho(true);
-    const { data, error } = await supabase
-      .from("pedidos")
-      .select(`
-        id, tipo, cond_pagamento, agendamento, observacoes, perfil_cliente, tabela_preco, vigencia_id,
-        clientes(id, cnpj, razao_social, cidade, uf, cep, comprador, email),
-        itens_pedido(produto_id, quantidade, preco_unitario_bruto, total_item,
-          desconto_perfil, desconto_comercial, desconto_trade,
-          produtos(codigo_jiva, nome, marca, cx_embarque, peso_unitario))
-      `)
-      .eq("id", id)
-      .single();
-
-    if (error || !data) {
-      toast.error("Não foi possível carregar o rascunho.");
-      setCarregandoRascunho(false);
-      setShowDraftModal(false);
-      return;
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cl = data.clientes as any;
-    setCliente({
-      cliente_id: cl.id,
-      cnpj: formatCNPJ(cl.cnpj),
-      razao_social: cl.razao_social,
-      cidade: cl.cidade ?? "",
-      uf: cl.uf ?? "",
-      cep: cl.cep ? formatCEP(cl.cep) : "",
-      comprador: cl.comprador ?? "",
-      cluster: data.perfil_cliente,
-      tabela_preco: data.tabela_preco,
-      tipo: data.tipo,
-      cond_pagamento: data.cond_pagamento ?? "",
-      agendamento: data.agendamento,
-      observacoes: data.observacoes ?? "",
-      codigo_cliente: cl.codigo_cliente ?? "",
-      aceita_saldo: cl.aceita_saldo ?? false,
-      ordem_compra: "",
-      email_xml: cl.email ?? "",
-    });
-
-    // Restaura vigência
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const dAny = data as any;
-    if (dAny.vigencia_id) setVigenciaId(dAny.vigencia_id);
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    setItens(((data.itens_pedido as any[]) ?? []).map((item) => {
-      const p = item.produtos;
-      const bruto = Number(item.preco_unitario_bruto);
-      const dPerfil = Number(item.desconto_perfil ?? 0);
-      const dCom = Number(item.desconto_comercial ?? 0);
-      const dTrade = Number(item.desconto_trade ?? 0);
-      const apos_perfil = bruto * (1 - dPerfil / 100);
-      const apos_comercial = apos_perfil * (1 - dCom / 100);
-      const preco_final = apos_comercial * (1 - dTrade / 100);
-
-      return {
-        produto_id: item.produto_id,
-        codigo: p.codigo_jiva,
-        nome: p.nome,
-        marca: p.marca,
-        cx_embarque: p.cx_embarque,
-        peso_unitario: Number(p.peso_unitario),
-        quantidade: item.quantidade,
-        preco_bruto: bruto,
-        desconto_perfil: dPerfil,
-        desconto_comercial: dCom,
-        desconto_trade: dTrade,
-        preco_apos_perfil: apos_perfil,
-        preco_apos_comercial: apos_comercial,
-        preco_final: preco_final,
-        total: preco_final * item.quantidade,
-        bolsao: 0,
-      };
-    }));
-
-    setPedidoId(id);
-    setCarregandoRascunho(false);
-    setShowDraftModal(false);
-    setDraftInfo(null);
-  };
-
-  // ── Descartar rascunho e começar do zero ───────────────────────────────────
-  const descartarRascunho = async () => {
-    if (draftInfo) {
-      await supabase.from("pedidos").delete().eq("id", draftInfo.id);
-    }
-    localStorage.removeItem(RASCUNHO_KEY);
-    setCliente(initialCliente);
-    setItens([]);
-    setPedidoId(null);
-    setDraftInfo(null);
-    setShowDraftModal(false);
-  };
 
   // ── Limpar pedido ─────────────────────────────────────────────────────────
   const limparPedido = () => {
@@ -644,23 +483,6 @@ export default function NovoPedido() {
         </Button>
       </div>
 
-      {/* Banner: rascunho abandonado (> 24 h) */}
-      {draftInfo && Date.now() - new Date(draftInfo.dataAtualizada).getTime() > 86_400_000 && (
-        <div className="bg-amber-50 border border-amber-300 rounded-md p-4 flex items-center justify-between gap-4">
-          <span className="text-sm text-amber-900">
-            Você tem um rascunho abandonado de {formatDate(draftInfo.dataAtualizada)}. Deseja continuar ou descartar?
-          </span>
-          <div className="flex gap-2 shrink-0">
-            <Button variant="outline" size="sm" onClick={descartarRascunho}>
-              Descartar
-            </Button>
-            <Button size="sm" onClick={() => continuarRascunho(draftInfo.id)}>
-              Continuar
-            </Button>
-          </div>
-        </div>
-      )}
-
       <SecaoCliente value={cliente} onChange={setCliente} vendedorId={user?.id ?? ""} />
 
       {/* Seletor de vigência de preços — sempre visível após carregar */}
@@ -743,62 +565,6 @@ export default function NovoPedido() {
           </Button>
         </div>
       </div>
-
-      {/* Modal: rascunho encontrado no banco */}
-      <Dialog open={showDraftModal}>
-        <DialogContent
-          className="sm:max-w-md"
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
-        >
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-amber-500" />
-              Pedido não finalizado
-            </DialogTitle>
-            <DialogDescription>
-              Você tem um rascunho salvo. Deseja continuar de onde parou?
-            </DialogDescription>
-          </DialogHeader>
-
-          {draftInfo && (
-            <div className="rounded-md border bg-muted/40 p-3 text-sm space-y-1.5">
-              <div>
-                <span className="text-muted-foreground">Cliente: </span>
-                <span className="font-semibold">{draftInfo.clienteNome}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Salvo em: </span>
-                {formatDate(draftInfo.dataAtualizada)}
-              </div>
-              {draftInfo.total > 0 && (
-                <div>
-                  <span className="text-muted-foreground">Total parcial: </span>
-                  <span className="font-semibold">{formatBRL(draftInfo.total)}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <DialogFooter className="flex-col-reverse sm:flex-row gap-2 sm:gap-2">
-            <Button
-              variant="outline"
-              className="w-full sm:w-auto"
-              onClick={descartarRascunho}
-            >
-              Começar novo
-            </Button>
-            <Button
-              className="w-full sm:w-auto"
-              disabled={carregandoRascunho}
-              onClick={() => draftInfo && continuarRascunho(draftInfo.id)}
-            >
-              {carregandoRascunho && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Continuar de onde parou
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Modal: visualizar resumo */}
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
