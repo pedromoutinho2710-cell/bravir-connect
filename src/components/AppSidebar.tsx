@@ -77,6 +77,14 @@ const ADMIN_SECTIONS: Section[] = [
     ],
   },
   {
+    label: "Gestora",
+    items: [
+      { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
+      { title: "Meu Time", url: "/gestora/time", icon: Users },
+      { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
+    ],
+  },
+  {
     label: "Administração",
     items: [
       { title: "Equipe", url: "/admin/equipe", icon: UserCog },
@@ -107,6 +115,11 @@ const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
   logistica: [
     { title: "Dashboard", url: "/logistica", icon: LayoutDashboard },
     { title: "Fila de Pedidos", url: "/logistica/fila", icon: ListChecks },
+  ],
+  gestora: [
+    { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
+    { title: "Meu Time", url: "/gestora/time", icon: Users },
+    { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
   ],
   trade: [
     { title: "Clientes aguardando", url: "/trade", icon: Store },

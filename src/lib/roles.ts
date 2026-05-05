@@ -1,4 +1,4 @@
-export type AppRole = "admin" | "vendedor" | "faturamento" | "logistica" | "trade";
+export type AppRole = "admin" | "vendedor" | "faturamento" | "logistica" | "trade" | "gestora";
 
 export const ROLE_HOME: Record<AppRole, string> = {
   admin: "/dashboard",
@@ -6,6 +6,7 @@ export const ROLE_HOME: Record<AppRole, string> = {
   faturamento: "/faturamento",
   logistica: "/logistica",
   trade: "/trade",
+  gestora: "/gestora",
 };
 
 export const ROLE_LABEL: Record<AppRole, string> = {
@@ -14,4 +15,5 @@ export const ROLE_LABEL: Record<AppRole, string> = {
   faturamento: "Faturamento",
   logistica: "Logística",
   trade: "Trade",
+  gestora: "Gestora",
 };

@@ -34,6 +34,8 @@ import DashboardLogistica from "./pages/logistica/DashboardLogistica";
 import FilaLogistica from "./pages/logistica/FilaLogistica";
 import SiteLanding from "./pages/site/SiteLanding";
 import SiteCandidatura from "./pages/site/SiteCandidatura";
+import DashboardGestora from "./pages/gestora/DashboardGestora";
+import GestaoTime from "./pages/gestora/GestaoTime";
 
 const queryClient = new QueryClient();
 
@@ -75,16 +77,22 @@ const App = () => (
             </Route>
 
             {/* Rotas de faturamento — acessíveis por faturamento e admin */}
-            <Route element={<ProtectedRoute allow={["faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
+            <Route element={<ProtectedRoute allow={["faturamento", "admin", "gestora"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/faturamento" element={<Faturamento />} />
               <Route path="/faturamento/clientes-pendentes" element={<FaturamentoClientesPendentes />} />
               <Route path="/faturamento/clientes" element={<FaturamentoClientes />} />
               <Route path="/faturamento/cadastros" element={<FilaCadastros />} />
             </Route>
 
-            {/* Detalhe de cliente — acessível por vendedor, admin, faturamento, trade */}
-            <Route element={<ProtectedRoute allow={["vendedor", "admin", "faturamento", "trade"]}><AppLayout /></ProtectedRoute>}>
+            {/* Detalhe de cliente — acessível por vendedor, admin, faturamento, trade, gestora */}
+            <Route element={<ProtectedRoute allow={["vendedor", "admin", "faturamento", "trade", "gestora"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/clientes/:id" element={<ClienteDetalhe />} />
+            </Route>
+
+            {/* Gestora */}
+            <Route element={<ProtectedRoute allow={["gestora", "admin"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/gestora" element={<DashboardGestora />} />
+              <Route path="/gestora/time" element={<GestaoTime />} />
             </Route>
 
             {/* Logística */}
