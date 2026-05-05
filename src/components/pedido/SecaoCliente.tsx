@@ -105,7 +105,8 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
   // Fill all fields from a complete client record
   const preencherCliente = (cl: Sugestao) => {
     setCnpjStatus("encontrado");
-    setNegativado(cl.negativado ?? false);
+    const isNegativado = cl.negativado ?? false;
+    setNegativado(isNegativado);
     setSearchText(cl.razao_social);
     setSugestoes([]);
     setShowSugestoes(false);
@@ -126,6 +127,7 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       codigo_cliente: cl.codigo_parceiro ?? cl.codigo_cliente ?? "",
       aceita_saldo: cl.aceita_saldo ?? true,
       email_xml: cl.email ?? "",
+      ...(isNegativado ? { cond_pagamento: "À vista — pagamento antes do envio" } : {}),
     });
   };
 
@@ -512,7 +514,9 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
             <Label className="text-base font-semibold">Condição de pagamento</Label>
             <Input
               value={value.cond_pagamento}
-              onChange={(e) => set("cond_pagamento", e.target.value)}
+              onChange={(e) => !negativado && set("cond_pagamento", e.target.value)}
+              readOnly={negativado}
+              disabled={negativado}
               placeholder="Ex: 28/35/42 DDL, 30/60 dias..."
               className="h-11 text-base"
             />

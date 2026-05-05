@@ -50,6 +50,105 @@ export type Database = {
         }
         Relationships: []
       }
+      cadastros_pendentes: {
+        Row: {
+          id: string
+          nome_cliente: string | null
+          cnpj: string | null
+          razao_social: string | null
+          contato_principal: string | null
+          email: string | null
+          telefone: string | null
+          classificacao: string | null
+          qtd_vendedores: number | null
+          perfil_atacado_distribuidor: string | null
+          qtd_lojas: string | null
+          marcas_interesse: string[] | null
+          produtos_alivik: string[] | null
+          produtos_bravir: string[] | null
+          produtos_bendita: string[] | null
+          produtos_laby: string[] | null
+          vende_digital: boolean | null
+          tem_ecommerce: boolean | null
+          canal_ecommerce: string | null
+          percentual_b2c: number | null
+          percentual_b2b: number | null
+          status: string
+          origem: string
+          vendedor_id: string | null
+          vendedor_nome: string | null
+          cluster_sugerido: string | null
+          observacoes: string | null
+          negativado: boolean | null
+          motivo_reprovacao: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          nome_cliente?: string | null
+          cnpj?: string | null
+          razao_social?: string | null
+          contato_principal?: string | null
+          email?: string | null
+          telefone?: string | null
+          classificacao?: string | null
+          qtd_vendedores?: number | null
+          perfil_atacado_distribuidor?: string | null
+          qtd_lojas?: string | null
+          marcas_interesse?: string[] | null
+          produtos_alivik?: string[] | null
+          produtos_bravir?: string[] | null
+          produtos_bendita?: string[] | null
+          produtos_laby?: string[] | null
+          vende_digital?: boolean | null
+          tem_ecommerce?: boolean | null
+          canal_ecommerce?: string | null
+          percentual_b2c?: number | null
+          percentual_b2b?: number | null
+          status?: string
+          origem?: string
+          vendedor_id?: string | null
+          vendedor_nome?: string | null
+          cluster_sugerido?: string | null
+          observacoes?: string | null
+          negativado?: boolean | null
+          motivo_reprovacao?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          nome_cliente?: string | null
+          cnpj?: string | null
+          razao_social?: string | null
+          contato_principal?: string | null
+          email?: string | null
+          telefone?: string | null
+          classificacao?: string | null
+          qtd_vendedores?: number | null
+          perfil_atacado_distribuidor?: string | null
+          qtd_lojas?: string | null
+          marcas_interesse?: string[] | null
+          produtos_alivik?: string[] | null
+          produtos_bravir?: string[] | null
+          produtos_bendita?: string[] | null
+          produtos_laby?: string[] | null
+          vende_digital?: boolean | null
+          tem_ecommerce?: boolean | null
+          canal_ecommerce?: string | null
+          percentual_b2c?: number | null
+          percentual_b2b?: number | null
+          status?: string
+          origem?: string
+          vendedor_id?: string | null
+          vendedor_nome?: string | null
+          cluster_sugerido?: string | null
+          observacoes?: string | null
+          negativado?: boolean | null
+          motivo_reprovacao?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       clientes: {
         Row: {
           aceita_saldo: boolean

@@ -1,205 +1,471 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
-import { toast } from "sonner";
-import { formatCNPJ, onlyDigits, formatCEP } from "@/lib/format";
-import { UFS } from "@/lib/constants";
-import { Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
+import { CLUSTERS } from "@/lib/constants";
+import { formatCNPJ, onlyDigits } from "@/lib/format";
+
+const MARCAS_OPCOES = ["Bendita Cânfora", "Bravir", "Laby", "Alivik"] as const;
+
+const PRODUTOS_ALIVIK = ["1062", "1718"];
+const PRODUTOS_BRAVIR = ["22", "23", "27", "1622", "1623", "3704", "4518"];
+const PRODUTOS_BENDITA = ["8", "11", "16", "17", "1733", "3428", "4046", "5936"];
+const PRODUTOS_LABY = [
+  "33", "35", "38", "40", "42", "44", "941", "3207", "3708", "3813",
+  "4059", "4408", "4409", "4410", "4425", "4456", "4562", "4563",
+  "5309", "5310", "6226", "7350", "7410", "7411", "7413", "7414", "7415",
+];
+
+type Form = {
+  nome_cliente: string;
+  cnpj: string;
+  razao_social: string;
+  contato_principal: string;
+  email: string;
+  telefone: string;
+  classificacao: "Atacado" | "Distribuidor" | "Varejo" | "";
+  qtd_vendedores: string;
+  marcas_interesse: string[];
+  produtos_alivik: string[];
+  produtos_bravir: string[];
+  produtos_bendita: string[];
+  produtos_laby: string[];
+  perfil_atacado_distribuidor: string;
+  qtd_lojas: string;
+  vende_digital: boolean;
+  tem_ecommerce: boolean;
+  canal_ecommerce: string;
+  percentual_b2c: string;
+  percentual_b2b: string;
+  cluster_sugerido: string;
+  observacoes: string;
+  declaracao: boolean;
+};
+
+const EMPTY: Form = {
+  nome_cliente: "",
+  cnpj: "",
+  razao_social: "",
+  contato_principal: "",
+  email: "",
+  telefone: "",
+  classificacao: "",
+  qtd_vendedores: "",
+  marcas_interesse: [],
+  produtos_alivik: [],
+  produtos_bravir: [],
+  produtos_bendita: [],
+  produtos_laby: [],
+  perfil_atacado_distribuidor: "",
+  qtd_lojas: "",
+  vende_digital: false,
+  tem_ecommerce: false,
+  canal_ecommerce: "",
+  percentual_b2c: "",
+  percentual_b2b: "",
+  cluster_sugerido: "",
+  observacoes: "",
+  declaracao: false,
+};
+
+function toggleArr(arr: string[], val: string): string[] {
+  return arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val];
+}
+
+function CheckboxGroup({
+  label,
+  items,
+  selected,
+  onChange,
+}: {
+  label: string;
+  items: string[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label className="font-semibold">{label}</Label>
+      <div className="flex flex-wrap gap-3">
+        {items.map((item) => (
+          <label key={item} className="flex items-center gap-2 cursor-pointer text-sm">
+            <Checkbox
+              checked={selected.includes(item)}
+              onCheckedChange={() => onChange(toggleArr(selected, item))}
+            />
+            {item}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function CadastrarCliente() {
-  const { user } = useAuth();
-  const [enviando, setEnviando] = useState(false);
+  const navigate = useNavigate();
+  const { user, fullName } = useAuth();
+  const [form, setForm] = useState<Form>(EMPTY);
+  const [loading, setLoading] = useState(false);
 
-  const [cnpj, setCnpj] = useState("");
-  const [razaoSocial, setRazaoSocial] = useState("");
-  const [email, setEmail] = useState("");
-  const [telefone, setTelefone] = useState("");
-  const [inscricaoEstadual, setInscricaoEstadual] = useState("");
-  const [isento, setIsento] = useState(false);
-  const [rua, setRua] = useState("");
-  const [numero, setNumero] = useState("");
-  const [bairro, setBairro] = useState("");
-  const [cidade, setCidade] = useState("");
-  const [uf, setUf] = useState("");
-  const [cep, setCep] = useState("");
+  const set = <K extends keyof Form>(k: K, v: Form[K]) =>
+    setForm((prev) => ({ ...prev, [k]: v }));
 
-  const formatTelefone = (raw: string) => {
-    const v = onlyDigits(raw).slice(0, 11);
-    if (v.length <= 10) {
-      return v
-        .replace(/^(\d{2})(\d{4})(\d{1,4})$/, "($1) $2-$3")
-        .replace(/^(\d{2})(\d{1,4})$/, "($1) $2")
-        .replace(/^(\d{1,2})$/, "($1");
-    }
-    return v.replace(/^(\d{2})(\d{5})(\d{4})$/, "($1) $2-$3");
-  };
+  const isAtacadoDist = form.classificacao === "Atacado" || form.classificacao === "Distribuidor";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
-
-    const cnpjDigits = onlyDigits(cnpj);
-    if (cnpjDigits.length !== 14) { toast.error("CNPJ inválido"); return; }
-    if (!razaoSocial.trim()) { toast.error("Razão social é obrigatória"); return; }
-    if (!isento && !inscricaoEstadual.trim()) {
-      toast.error("Informe a Inscrição Estadual ou marque como Isento");
+    if (!form.declaracao) {
+      toast.error("Confirme a declaração antes de enviar.");
       return;
     }
-
-    setEnviando(true);
+    if (!form.classificacao) {
+      toast.error("Selecione a classificação do cliente.");
+      return;
+    }
+    setLoading(true);
     try {
-      const { error: clienteError } = await supabase
-        .from("clientes")
-        .insert({
-          cnpj: cnpjDigits,
-          razao_social: razaoSocial.trim(),
-          cidade: cidade.trim() || null,
-          uf: uf || null,
-          cep: onlyDigits(cep) || null,
-          status: "pendente_cadastro",
-          vendedor_id: user.id,
-          inscricao_estadual: isento ? "Isento" : inscricaoEstadual.trim(),
-          email: email.trim() || null,
-          telefone: onlyDigits(telefone) || null,
-          rua: rua.trim() || null,
-          numero: numero.trim() || null,
-          bairro: bairro.trim() || null,
-        });
-
-      if (clienteError) {
-        toast.error("Erro ao cadastrar: " + clienteError.message);
-        return;
-      }
-
-      await supabase.from("notificacoes").insert({
-        destinatario_role: "faturamento",
-        mensagem: `Novo cliente para cadastrar: ${razaoSocial.trim()} (CNPJ: ${formatCNPJ(cnpjDigits)})`,
-        tipo: "cliente_pendente",
+      const { error } = await (supabase.from("cadastros_pendentes") as any).insert({
+        nome_cliente: form.nome_cliente || null,
+        cnpj: onlyDigits(form.cnpj) || null,
+        razao_social: form.razao_social || null,
+        contato_principal: form.contato_principal || null,
+        email: form.email || null,
+        telefone: form.telefone || null,
+        classificacao: form.classificacao || null,
+        qtd_vendedores: form.qtd_vendedores ? Number(form.qtd_vendedores) : null,
+        perfil_atacado_distribuidor: form.perfil_atacado_distribuidor || null,
+        qtd_lojas: form.qtd_lojas || null,
+        marcas_interesse: form.marcas_interesse.length > 0 ? form.marcas_interesse : null,
+        produtos_alivik: form.produtos_alivik.length > 0 ? form.produtos_alivik : null,
+        produtos_bravir: form.produtos_bravir.length > 0 ? form.produtos_bravir : null,
+        produtos_bendita: form.produtos_bendita.length > 0 ? form.produtos_bendita : null,
+        produtos_laby: form.produtos_laby.length > 0 ? form.produtos_laby : null,
+        vende_digital: form.vende_digital,
+        tem_ecommerce: form.vende_digital ? form.tem_ecommerce : null,
+        canal_ecommerce: form.tem_ecommerce ? form.canal_ecommerce || null : null,
+        percentual_b2c: form.percentual_b2c ? Number(form.percentual_b2c) : null,
+        percentual_b2b: form.percentual_b2b ? Number(form.percentual_b2b) : null,
+        cluster_sugerido: form.cluster_sugerido || null,
+        observacoes: form.observacoes || null,
+        status: "pendente",
+        origem: "vendedor",
+        vendedor_id: user?.id ?? null,
+        vendedor_nome: fullName ?? null,
       });
-
-      toast.success("Cliente enviado para cadastro pelo faturamento!");
-      setCnpj(""); setRazaoSocial(""); setEmail(""); setTelefone("");
-      setInscricaoEstadual(""); setIsento(false);
-      setRua(""); setNumero(""); setBairro(""); setCidade(""); setUf(""); setCep("");
+      if (error) throw error;
+      toast.success("Cadastro enviado para análise da gestora!");
+      navigate("/meus-clientes");
+    } catch (err: any) {
+      toast.error(err.message ?? "Erro ao enviar cadastro.");
     } finally {
-      setEnviando(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="space-y-6 max-w-2xl">
-      <div>
-        <h1 className="text-2xl font-bold">Cadastrar Cliente</h1>
-        <p className="text-sm text-muted-foreground">Envie um novo cliente para ser cadastrado pelo faturamento</p>
-      </div>
+    <div className="max-w-3xl mx-auto space-y-6 pb-10">
+      <h1 className="text-2xl font-bold">Cadastrar Novo Cliente</h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">
+
+        {/* Seção 1: Dados básicos */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Dados do cliente</CardTitle></CardHeader>
+          <CardHeader><CardTitle>1. Dados do cliente</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="cnpj">CNPJ *</Label>
-                <Input id="cnpj" value={cnpj} onChange={(e) => setCnpj(formatCNPJ(e.target.value))}
-                  placeholder="00.000.000/0000-00" maxLength={18} />
+                <Label>Nome fantasia *</Label>
+                <Input
+                  required
+                  value={form.nome_cliente}
+                  onChange={(e) => set("nome_cliente", e.target.value)}
+                  placeholder="Como o cliente é conhecido"
+                />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="razao">Razão Social *</Label>
-                <Input id="razao" value={razaoSocial} onChange={(e) => setRazaoSocial(e.target.value)}
-                  placeholder="Nome da empresa" />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="email">E-mail</Label>
-                <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                  placeholder="contato@empresa.com" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="telefone">Telefone</Label>
-                <Input id="telefone" value={telefone}
-                  onChange={(e) => setTelefone(formatTelefone(e.target.value))}
-                  placeholder="(00) 00000-0000" maxLength={15} />
+                <Label>Razão social</Label>
+                <Input
+                  value={form.razao_social}
+                  onChange={(e) => set("razao_social", e.target.value)}
+                  placeholder="Razão social completa"
+                />
               </div>
             </div>
-
-            <div className="space-y-2">
+            <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="ie">Inscrição Estadual *</Label>
-                <Input id="ie" value={inscricaoEstadual}
-                  onChange={(e) => setInscricaoEstadual(e.target.value)}
-                  placeholder="Número da IE" disabled={isento} />
+                <Label>CNPJ</Label>
+                <Input
+                  value={form.cnpj}
+                  onChange={(e) => set("cnpj", formatCNPJ(e.target.value))}
+                  placeholder="00.000.000/0000-00"
+                  maxLength={18}
+                />
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox id="isento" checked={isento}
-                  onCheckedChange={(c) => { setIsento(!!c); if (c) setInscricaoEstadual(""); }} />
-                <Label htmlFor="isento" className="cursor-pointer font-normal">
-                  Isento de Inscrição Estadual
-                </Label>
+              <div className="space-y-1.5">
+                <Label>Contato principal *</Label>
+                <Input
+                  required
+                  value={form.contato_principal}
+                  onChange={(e) => set("contato_principal", e.target.value)}
+                  placeholder="Nome do comprador / responsável"
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>E-mail</Label>
+                <Input
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => set("email", e.target.value)}
+                  placeholder="contato@empresa.com"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Telefone</Label>
+                <Input
+                  value={form.telefone}
+                  onChange={(e) => set("telefone", e.target.value)}
+                  placeholder="(00) 00000-0000"
+                />
               </div>
             </div>
           </CardContent>
         </Card>
 
+        {/* Seção 2: Classificação */}
         <Card>
-          <CardHeader><CardTitle className="text-base">Endereço de entrega</CardTitle></CardHeader>
+          <CardHeader><CardTitle>2. Classificação *</CardTitle></CardHeader>
+          <CardContent className="space-y-5">
+            <RadioGroup
+              value={form.classificacao}
+              onValueChange={(v) => set("classificacao", v as Form["classificacao"])}
+              className="flex gap-6"
+            >
+              {["Atacado", "Distribuidor", "Varejo"].map((c) => (
+                <label key={c} className="flex items-center gap-2 cursor-pointer">
+                  <RadioGroupItem value={c} />
+                  <span className="font-medium">{c}</span>
+                </label>
+              ))}
+            </RadioGroup>
+
+            {isAtacadoDist && (
+              <div className="space-y-5 border-t pt-4">
+                <div className="space-y-1.5">
+                  <Label>Quantidade de vendedores</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form.qtd_vendedores}
+                    onChange={(e) => set("qtd_vendedores", e.target.value)}
+                    placeholder="Ex: 5"
+                    className="w-40"
+                  />
+                </div>
+
+                <CheckboxGroup
+                  label="Marcas de interesse"
+                  items={MARCAS_OPCOES as unknown as string[]}
+                  selected={form.marcas_interesse}
+                  onChange={(v) => set("marcas_interesse", v)}
+                />
+
+                {form.marcas_interesse.includes("Alivik") && (
+                  <CheckboxGroup
+                    label="Produtos Alivik"
+                    items={PRODUTOS_ALIVIK}
+                    selected={form.produtos_alivik}
+                    onChange={(v) => set("produtos_alivik", v)}
+                  />
+                )}
+                {form.marcas_interesse.includes("Bravir") && (
+                  <CheckboxGroup
+                    label="Produtos Bravir"
+                    items={PRODUTOS_BRAVIR}
+                    selected={form.produtos_bravir}
+                    onChange={(v) => set("produtos_bravir", v)}
+                  />
+                )}
+                {form.marcas_interesse.includes("Bendita Cânfora") && (
+                  <CheckboxGroup
+                    label="Produtos Bendita Cânfora"
+                    items={PRODUTOS_BENDITA}
+                    selected={form.produtos_bendita}
+                    onChange={(v) => set("produtos_bendita", v)}
+                  />
+                )}
+                {form.marcas_interesse.includes("Laby") && (
+                  <CheckboxGroup
+                    label="Produtos Laby"
+                    items={PRODUTOS_LABY}
+                    selected={form.produtos_laby}
+                    onChange={(v) => set("produtos_laby", v)}
+                  />
+                )}
+
+                <div className="space-y-2">
+                  <Label className="font-semibold">Perfil</Label>
+                  <RadioGroup
+                    value={form.perfil_atacado_distribuidor}
+                    onValueChange={(v) => set("perfil_atacado_distribuidor", v)}
+                    className="flex flex-col gap-2"
+                  >
+                    {["Foco", "Parceiro", "Básico"].map((p) => (
+                      <label key={p} className="flex items-center gap-2 cursor-pointer">
+                        <RadioGroupItem value={p} />
+                        <span>{p}</span>
+                      </label>
+                    ))}
+                  </RadioGroup>
+                </div>
+              </div>
+            )}
+
+            {form.classificacao === "Varejo" && (
+              <div className="space-y-2 border-t pt-4">
+                <Label className="font-semibold">Quantidade de lojas</Label>
+                <RadioGroup
+                  value={form.qtd_lojas}
+                  onValueChange={(v) => set("qtd_lojas", v)}
+                  className="flex flex-col gap-2"
+                >
+                  {["1 loja", "2–5 lojas", "6–20 lojas", "21+ lojas"].map((q) => (
+                    <label key={q} className="flex items-center gap-2 cursor-pointer">
+                      <RadioGroupItem value={q} />
+                      <span>{q}</span>
+                    </label>
+                  ))}
+                </RadioGroup>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Seção 3: Canais digitais */}
+        <Card>
+          <CardHeader><CardTitle>3. Canais digitais</CardTitle></CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-              <div className="sm:col-span-2 space-y-1.5">
-                <Label htmlFor="rua">Rua / Av.</Label>
-                <Input id="rua" value={rua} onChange={(e) => setRua(e.target.value)}
-                  placeholder="Nome da rua" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="numero">Número</Label>
-                <Input id="numero" value={numero} onChange={(e) => setNumero(e.target.value)}
-                  placeholder="123" />
-              </div>
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={form.vende_digital}
+                onCheckedChange={(c) => set("vende_digital", c)}
+              />
+              <Label>Vende pelo digital (redes sociais, WhatsApp, etc.)</Label>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="bairro">Bairro</Label>
-                <Input id="bairro" value={bairro} onChange={(e) => setBairro(e.target.value)}
-                  placeholder="Bairro" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cidade">Cidade</Label>
-                <Input id="cidade" value={cidade} onChange={(e) => setCidade(e.target.value)}
-                  placeholder="Cidade" />
-              </div>
-            </div>
+            {form.vende_digital && (
+              <>
+                <div className="flex items-center gap-3">
+                  <Switch
+                    checked={form.tem_ecommerce}
+                    onCheckedChange={(c) => set("tem_ecommerce", c)}
+                  />
+                  <Label>Tem e-commerce próprio</Label>
+                </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="uf">UF</Label>
-                <Select value={uf} onValueChange={setUf}>
-                  <SelectTrigger id="uf"><SelectValue placeholder="Selecione" /></SelectTrigger>
-                  <SelectContent>
-                    {UFS.map((u) => <SelectItem key={u} value={u}>{u}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="cep">CEP</Label>
-                <Input id="cep" value={cep} onChange={(e) => setCep(formatCEP(e.target.value))}
-                  placeholder="00000-000" maxLength={9} />
-              </div>
+                {form.tem_ecommerce && (
+                  <div className="space-y-1.5">
+                    <Label>Canal de e-commerce</Label>
+                    <Input
+                      value={form.canal_ecommerce}
+                      onChange={(e) => set("canal_ecommerce", e.target.value)}
+                      placeholder="Ex: VTEX, Shopify, WooCommerce, próprio..."
+                    />
+                  </div>
+                )}
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>% vendas B2C (consumidor final)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={form.percentual_b2c}
+                      onChange={(e) => set("percentual_b2c", e.target.value)}
+                      placeholder="0–100"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>% vendas B2B (revendedor)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={form.percentual_b2b}
+                      onChange={(e) => set("percentual_b2b", e.target.value)}
+                      placeholder="0–100"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Seção 4: Info comercial */}
+        <Card>
+          <CardHeader><CardTitle>4. Informações comerciais</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Cluster sugerido</Label>
+              <Select value={form.cluster_sugerido} onValueChange={(v) => set("cluster_sugerido", v)}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {CLUSTERS.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Observações</Label>
+              <Textarea
+                rows={4}
+                value={form.observacoes}
+                onChange={(e) => set("observacoes", e.target.value)}
+                placeholder="Informações relevantes sobre o cliente, potencial de compra, contexto da prospecção..."
+              />
             </div>
           </CardContent>
         </Card>
 
-        <div className="flex justify-end">
-          <Button type="submit" disabled={enviando}>
-            {enviando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-            Enviar para cadastro
+        {/* Seção 5: Declaração */}
+        <Card>
+          <CardHeader><CardTitle>5. Declaração</CardTitle></CardHeader>
+          <CardContent>
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Checkbox
+                checked={form.declaracao}
+                onCheckedChange={(c) => set("declaracao", c === true)}
+                className="mt-0.5"
+              />
+              <span className="text-sm leading-relaxed">
+                Declaro que as informações prestadas são verdadeiras e que este cliente demonstrou interesse
+                real em fechar negócio com a Bravir. Estou ciente de que o cadastro será analisado pela
+                gestora antes de ser aprovado.
+              </span>
+            </label>
+          </CardContent>
+        </Card>
+
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="outline" onClick={() => navigate("/meus-clientes")}>
+            Cancelar
+          </Button>
+          <Button type="submit" disabled={loading}>
+            {loading ? "Enviando..." : "Enviar cadastro"}
           </Button>
         </div>
       </form>

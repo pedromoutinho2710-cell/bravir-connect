@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 import { CLUSTERS, TABELAS_PRECO } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
+import { BadgeNegativado } from "@/components/BadgeNegativado";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
@@ -374,11 +375,7 @@ export default function ClienteDetalhe() {
               <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${atividadeConf.cls}`}>
                 {atividadeConf.label}
               </span>
-              {cliente.negativado && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
-                  <AlertCircle className="h-3 w-3" /> Negativado
-                </span>
-              )}
+              {cliente.negativado && <BadgeNegativado />}
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span className="font-mono">{formatCNPJ(cliente.cnpj)}</span>
@@ -468,11 +465,7 @@ export default function ClienteDetalhe() {
               )}
 
               <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-3 pt-1">
-                {cliente.negativado && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-red-300 bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-700">
-                    <AlertCircle className="h-3 w-3" /> Negativado
-                  </span>
-                )}
+                {cliente.negativado && <BadgeNegativado />}
                 {cliente.aceita_saldo && (
                   <span className="inline-flex items-center rounded-full border border-green-300 bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
                     Aceita saldo de bolsão
