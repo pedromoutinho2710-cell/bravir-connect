@@ -339,8 +339,9 @@ export function SecaoProdutos({
                 <TableRow style={{ backgroundColor: '#1a5c38' }} className="hover:bg-[#1a5c38]">
                   <TableHead className="text-white text-[11px] font-semibold py-2">Produto</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-28">Qtd</TableHead>
-                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">Bruto & Desc.</TableHead>
-                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. c/ Perfil</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Bruto</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-20">Desc. %</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Líquido</TableHead>
                   {!descontoLivre && <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Com. %</TableHead>}
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Trade %</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Final</TableHead>
@@ -389,25 +390,27 @@ export function SecaoProdutos({
                       )}
                     </TableCell>
 
-                    {/* Bruto & Desc. Perfil (merged) */}
+                    {/* P. Bruto */}
                     <TableCell className="text-right py-2 align-top">
                       <div className="text-xs font-medium">{formatBRL(i.preco_bruto)}</div>
-                      <div className="mt-0.5">
-                        {descontoLivre ? (
-                          <Input
-                            type="number" min={0} max={100} step={1}
-                            value={i.desconto_perfil}
-                            onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(100, Math.max(0, Math.round(Number(e.target.value) || 0))))}
-                            className={cn("w-14 ml-auto h-6 text-[10px]")}
-                            placeholder="0%"
-                          />
-                        ) : (
-                          <span className="text-[10px] text-muted-foreground">↓ {i.desconto_perfil}%</span>
-                        )}
-                      </div>
                     </TableCell>
 
-                    {/* P. Após Perfil */}
+                    {/* Desc. % */}
+                    <TableCell className="text-right py-2 align-top">
+                      {descontoLivre ? (
+                        <Input
+                          type="number" min={0} max={100} step={0.1}
+                          value={i.desconto_perfil}
+                          onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
+                          className={cn("w-14 ml-auto h-6 text-[10px]")}
+                          placeholder="0"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">{i.desconto_perfil}%</span>
+                      )}
+                    </TableCell>
+
+                    {/* P. Líquido */}
                     <TableCell className="text-right text-xs py-2 align-top">{formatBRL(i.preco_apos_perfil)}</TableCell>
 
                     {/* Desc. Comercial */}
@@ -416,7 +419,7 @@ export function SecaoProdutos({
                         <Input
                           type="number" min={0} max={3} step={0.1}
                           value={i.desconto_comercial}
-                          onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.min(3, Math.max(0, Number(e.target.value) || 0)))}
+                          onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.min(3, Math.max(0, parseFloat(e.target.value) || 0)))}
                           className={cn("w-14 ml-auto h-7 text-xs")}
                           placeholder="0"
                         />
@@ -429,7 +432,7 @@ export function SecaoProdutos({
                       <Input
                         type="number" min={0} max={100} step={0.1}
                         value={i.desconto_trade}
-                        onChange={(e) => atualizarDesconto(i.produto_id, "trade", Math.max(0, Number(e.target.value) || 0))}
+                        onChange={(e) => atualizarDesconto(i.produto_id, "trade", Math.max(0, parseFloat(e.target.value) || 0))}
                         className={cn("w-14 ml-auto h-7 text-xs")}
                         placeholder="0"
                       />
