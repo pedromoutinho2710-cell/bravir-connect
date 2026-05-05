@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { Loader2, FileSpreadsheet, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database } from "lucide-react";
+import { Loader2, FileSpreadsheet, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink } from "lucide-react";
 import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { exportarPedidoExcel } from "@/lib/excel";
@@ -48,7 +48,10 @@ type PedidoFat = {
   tabela_preco: string;
   agendamento: boolean;
   aceita_saldo_cliente: boolean;
+  negativado_cliente: boolean;
+  email_xml: string | null;
   total: number;
+  peso_total: number;
   marcas: string[];
   aberto_por: string | null;
   ultima_acao: { nome: string; data: string } | null;
@@ -61,6 +64,7 @@ type ExcelItemRaw = {
   codigo: string;
   marca: string;
   quantidade: number;
+  qtd_faturada: number;
   cx_embarque: number;
   peso_unitario: number;
   preco_bruto: number;
@@ -78,8 +82,8 @@ export const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
   aguardando_faturamento: "Aguardando faturamento",
   no_sankhya: "No Sankhya",
-  faturado: "Faturado",
-  parcialmente_faturado: "Parc. faturado",
+  faturado: "Pré-faturado",
+  parcialmente_faturado: "Parc. pré-faturado",
   com_problema: "Com problema",
   devolvido: "Devolvido",
   cancelado: "Cancelado",
@@ -195,6 +199,15 @@ export default function Faturamento() {
   const [excluirTarget, setExcluirTarget] = useState<PedidoFat | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
+  // Filtros extras
+  const [filtroNumero, setFiltroNumero] = useState("");
+  const [filtroSaldoPendente, setFiltroSaldoPendente] = useState(false);
+
+  // Dialog faturamento por produto
+  const [prodFatDialog, setProdFatDialog] = useState<PedidoFat | null>(null);
+  const [prodFatQtds, setProdFatQtds] = useState<Record<string, number>>({});
+  const [salvandoProdFat, setSalvandoProdFat] = useState(false);
+
   const carregar = useCallback(() => setRefreshKey((k) => k + 1), []);
   usePullToRefresh(carregar);
 
@@ -243,9 +256,9 @@ export default function Faturamento() {
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, observacoes, responsavel_id, motivo, vendedor_id,
           cliente_id, perfil_cliente, tabela_preco, agendamento,
-          clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, aceita_saldo),
+          clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, aceita_saldo, negativado, email),
           itens_pedido(
-            id, total_item, quantidade, preco_unitario_bruto, preco_unitario_liquido,
+            id, total_item, quantidade, qtd_faturada, preco_unitario_bruto, preco_unitario_liquido,
             desconto_perfil, desconto_comercial, desconto_trade,
             preco_apos_perfil, preco_apos_comercial, preco_final,
             produtos(nome, codigo_jiva, marca, cx_embarque, peso_unitario)
@@ -268,6 +281,7 @@ export default function Faturamento() {
         const itensList = (p.itens_pedido ?? []) as any[];
         const marcas = [...new Set(itensList.map((i) => i.produtos?.marca).filter(Boolean))] as string[];
         const total = itensList.reduce((s: number, i) => s + Number(i.total_item), 0);
+        const pesoTotal = itensList.reduce((s: number, i) => s + Number(i.produtos?.peso_unitario ?? 0) * Number(i.quantidade), 0);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const cl = p.clientes as any;
         return {
@@ -294,7 +308,10 @@ export default function Faturamento() {
           cep: cl?.cep ?? null,
           codigo_parceiro: cl?.codigo_parceiro ?? null,
           aceita_saldo_cliente: cl?.aceita_saldo ?? false,
+          negativado_cliente: cl?.negativado ?? false,
+          email_xml: cl?.email ?? null,
           total,
+          peso_total: pesoTotal,
           marcas,
           aberto_por: null,
           ultima_acao: null,
@@ -304,6 +321,7 @@ export default function Faturamento() {
             codigo: i.produtos?.codigo_jiva ?? "—",
             marca: i.produtos?.marca ?? "—",
             quantidade: i.quantidade,
+            qtd_faturada: Number(i.qtd_faturada ?? 0),
             cx_embarque: Number(i.produtos?.cx_embarque ?? 1),
             peso_unitario: Number(i.produtos?.peso_unitario ?? 0),
             preco_bruto: Number(i.preco_unitario_bruto ?? 0),
@@ -318,10 +336,17 @@ export default function Faturamento() {
         };
       });
 
-      // Filtro marca + valor mínimo (client-side)
+      // Filtro marca + valor mínimo + número + saldo pendente (client-side)
       if (filtroMarca !== "todas") mapped = mapped.filter((p) => p.marcas.includes(filtroMarca));
       const valorMin = parseFloat(filtroValorMin);
       if (!isNaN(valorMin) && valorMin > 0) mapped = mapped.filter((p) => p.total >= valorMin);
+      if (filtroNumero.trim()) {
+        const num = parseInt(filtroNumero.trim(), 10);
+        if (!isNaN(num)) mapped = mapped.filter((p) => p.numero_pedido === num);
+      }
+      if (filtroSaldoPendente) {
+        mapped = mapped.filter((p) => p.itens.some((i) => i.qtd_faturada < i.quantidade));
+      }
 
       // Ordenar por score de prioridade decrescente
       mapped.sort((a, b) => calcScore(b) - calcScore(a));
@@ -583,6 +608,73 @@ export default function Faturamento() {
     setRefreshKey((k) => k + 1);
   };
 
+  const abrirProdFat = (p: PedidoFat, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setProdFatDialog(p);
+    const qtds: Record<string, number> = {};
+    p.itens.forEach((i) => { qtds[i.id] = i.qtd_faturada; });
+    setProdFatQtds(qtds);
+  };
+
+  const salvarProdFat = async () => {
+    if (!prodFatDialog) return;
+    setSalvandoProdFat(true);
+    const updates = prodFatDialog.itens.map((item) =>
+      supabase.from("itens_pedido").update({ qtd_faturada: prodFatQtds[item.id] ?? 0 } as any).eq("id", item.id)
+    );
+    await Promise.all(updates);
+    const todosCompletos = prodFatDialog.itens.every((i) => (prodFatQtds[i.id] ?? 0) >= i.quantidade);
+    const algumParcial = prodFatDialog.itens.some((i) => (prodFatQtds[i.id] ?? 0) > 0);
+    let novoStatus = prodFatDialog.status;
+    if (todosCompletos) novoStatus = "faturado";
+    else if (algumParcial) novoStatus = "parcialmente_faturado";
+    if (novoStatus !== prodFatDialog.status) {
+      await supabase.from("pedidos").update({
+        status: novoStatus,
+        status_atualizado_em: new Date().toISOString(),
+        ...(novoStatus === "faturado" ? { faturado_em: new Date().toISOString() } : {}),
+      }).eq("id", prodFatDialog.id);
+    }
+    toast.success("Faturamento salvo!");
+    setSalvandoProdFat(false);
+    setProdFatDialog(null);
+    setRefreshKey((k) => k + 1);
+  };
+
+  const gerarPdf = (p: PedidoFat, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const vendedor = profiles[p.vendedor_id] ?? "—";
+    const linhas = p.itens.map((i) => `
+      <tr>
+        <td>${i.codigo}</td>
+        <td>${i.nome}</td>
+        <td style="text-align:center">${i.cx_embarque}</td>
+        <td style="text-align:center">${i.quantidade}</td>
+        <td style="text-align:center">${i.qtd_faturada}</td>
+        <td style="text-align:center">${(i.peso_unitario * i.quantidade).toFixed(2)} kg</td>
+        <td style="text-align:right">R$ ${i.total.toFixed(2)}</td>
+      </tr>`).join("");
+    const pesoTotal = p.itens.reduce((s, i) => s + i.peso_unitario * i.quantidade, 0);
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Pedido #${p.numero_pedido}</title>
+      <style>body{font-family:sans-serif;font-size:12px;padding:20px}
+      table{width:100%;border-collapse:collapse;margin-top:10px}
+      th,td{border:1px solid #ccc;padding:4px 8px}th{background:#f0f0f0}
+      h2{margin:0 0 4px}p{margin:2px 0}.total{text-align:right;font-weight:bold;margin-top:8px}</style>
+      </head><body>
+      <h2>Pedido #${p.numero_pedido} — ${p.razao_social}</h2>
+      <p>CNPJ: ${formatCNPJ(p.cnpj)} | Data: ${formatDate(p.data_pedido)} | Vendedor: ${vendedor}</p>
+      <p>Cond. Pagamento: ${p.cond_pagamento ?? "—"} | Cluster: ${p.cluster ?? "—"} | Agendamento: ${p.agendamento ? "Sim" : "Não"}</p>
+      ${p.comprador ? `<p>Comprador: ${p.comprador}</p>` : ""}
+      ${p.email_xml ? `<p>Email XML/Boleto: ${p.email_xml}</p>` : ""}
+      <table><thead><tr>
+        <th>Código</th><th>Produto</th><th>Cx</th><th>Qtd Pedida</th><th>Qtd Faturada</th><th>Peso Total</th><th>Total</th>
+      </tr></thead><tbody>${linhas}</tbody></table>
+      <p class="total">Peso total: ${pesoTotal.toFixed(2)} kg | Total: R$ ${p.total.toFixed(2)}</p>
+      </body></html>`;
+    const win = window.open("", "_blank");
+    if (win) { win.document.write(html); win.document.close(); win.print(); }
+  };
+
   const handleExcel = async (p: PedidoFat, e: React.MouseEvent) => {
     e.stopPropagation();
     setExportando(p.id);
@@ -637,21 +729,21 @@ export default function Faturamento() {
           </Button>
         )}
 
-        {/* Cadastrar no Sankhya */}
-        {(p.status === "aguardando_faturamento" || p.status === "em_faturamento") && (
-          <Button size="sm" disabled={atualizando === p.id}
-            onClick={wrap(() => cadastrarNoSankhya(p))}>
-            <Database className="h-3 w-3 mr-1" />
-            {atualizando === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "No Sankhya"}
-          </Button>
-        )}
-
-        {/* Registrar faturamento */}
+        {/* Registrar faturamento com NF */}
         {(p.status === "no_sankhya" || p.status === "parcialmente_faturado") && (
           <Button size="sm" disabled={atualizando === p.id}
             onClick={wrap(() => abrirFaturarDialog(p))}>
             <FileCheck className="h-3 w-3 mr-1" />
-            Faturar
+            Faturar NF
+          </Button>
+        )}
+
+        {/* Faturamento por produto */}
+        {!isTerminal && (
+          <Button size="sm" variant="outline" disabled={atualizando === p.id}
+            onClick={(e) => abrirProdFat(p, e)} title="Faturamento por produto">
+            <FileText className="h-3 w-3 mr-1" />
+            Produtos
           </Button>
         )}
 
@@ -694,11 +786,26 @@ export default function Faturamento() {
           </Button>
         )}
 
+        {/* Ver cliente */}
+        {p.cliente_id && (
+          <Button size="sm" variant="outline"
+            onClick={wrap(() => navigate(`/clientes/${p.cliente_id}`))}
+            title="Ver cliente">
+            <ExternalLink className="h-3 w-3" />
+          </Button>
+        )}
+
         {/* Ver detalhes */}
         <Button size="sm" variant="outline"
           onClick={wrap(() => { setDetalhesId(p.id); setDetalhesOpen(true); })}
           title="Ver detalhes">
           <Eye className="h-3 w-3" />
+        </Button>
+
+        {/* PDF */}
+        <Button size="sm" variant="outline"
+          onClick={(e) => gerarPdf(p, e)} title="Baixar PDF">
+          <FileText className="h-3 w-3" />
         </Button>
 
         {/* Excel */}
@@ -714,7 +821,7 @@ export default function Faturamento() {
   return (
     <div className="space-y-6 pb-6">
       <div>
-        <h1 className="text-2xl font-bold">Faturamento</h1>
+        <h1 className="text-2xl font-bold">Pré-faturamento</h1>
         <p className="text-sm text-muted-foreground">Gerencie e processe pedidos enviados pelos vendedores</p>
       </div>
 
@@ -736,7 +843,7 @@ export default function Faturamento() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Faturados hoje</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pré-faturados hoje</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent><div className="text-2xl font-bold text-green-700">{kpis.faturadosHoje}</div></CardContent>
@@ -755,7 +862,7 @@ export default function Faturamento() {
       </div>
 
       {/* Filtros */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Select value={filtroVendedor} onValueChange={setFiltroVendedor}>
           <SelectTrigger><SelectValue placeholder="Vendedor" /></SelectTrigger>
           <SelectContent>
@@ -790,6 +897,22 @@ export default function Faturamento() {
           placeholder="Valor mínimo (R$)"
           title="Filtrar por valor mínimo"
         />
+        <Input
+          type="number"
+          min={1}
+          value={filtroNumero}
+          onChange={(e) => setFiltroNumero(e.target.value)}
+          placeholder="Nº do pedido"
+          title="Filtrar por número de pedido"
+        />
+        <div className="flex items-center gap-2 self-center">
+          <Checkbox
+            id="saldo-pendente"
+            checked={filtroSaldoPendente}
+            onCheckedChange={(c) => setFiltroSaldoPendente(!!c)}
+          />
+          <Label htmlFor="saldo-pendente" className="text-sm cursor-pointer">Apenas com saldo pendente</Label>
+        </div>
       </div>
 
       {/* Legenda urgência */}
@@ -847,40 +970,50 @@ export default function Faturamento() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-20">#</TableHead>
-                  <TableHead>Data</TableHead>
+                  <TableHead className="w-28"># / Data</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Vendedor</TableHead>
                   <TableHead>Marcas</TableHead>
                   <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Peso</TableHead>
                   <TableHead>Aguardando</TableHead>
                   <TableHead>Prioridade</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="min-w-[260px]">Ações</TableHead>
+                  <TableHead className="min-w-[320px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pedidos.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center text-muted-foreground py-12">Nenhum pedido encontrado</TableCell>
+                    <TableCell colSpan={11} className="text-center text-muted-foreground py-12">Nenhum pedido encontrado</TableCell>
                   </TableRow>
                 )}
                 {pedidos.map((p) => (
                   <TableRow key={p.id}
                     className={`cursor-pointer hover:bg-muted/50 ${urgencyClass(p)}`}
                     onClick={() => { setDetalhesId(p.id); setDetalhesOpen(true); }}>
-                    <TableCell className="font-mono font-semibold text-sm">#{p.numero_pedido}</TableCell>
-                    <TableCell className="text-sm">{formatDate(p.data_pedido)}</TableCell>
+                    <TableCell className="font-mono font-semibold text-sm">
+                      <div>#{p.numero_pedido}</div>
+                      <div className="text-xs font-normal text-muted-foreground">{formatDate(p.data_pedido)}</div>
+                    </TableCell>
                     <TableCell>
-                      <button
-                        type="button"
-                        className="font-medium text-sm hover:underline text-left"
-                        onClick={(e) => { e.stopPropagation(); if (p.cliente_id) navigate(`/clientes/${p.cliente_id}`); }}
-                      >
-                        {p.razao_social}
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          type="button"
+                          className="font-medium text-sm hover:underline text-left"
+                          onClick={(e) => { e.stopPropagation(); if (p.cliente_id) navigate(`/clientes/${p.cliente_id}`); }}
+                        >
+                          {p.razao_social}
+                        </button>
+                        {p.negativado_cliente && (
+                          <span className="inline-flex items-center rounded-full border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700">⚠ Neg.</span>
+                        )}
+                      </div>
                       {p.codigo_parceiro && (
                         <div className="text-xs font-mono text-muted-foreground">Cód: {p.codigo_parceiro}</div>
+                      )}
+                      {p.email_xml && (
+                        <div className="text-xs text-muted-foreground truncate max-w-[160px]" title={p.email_xml}>{p.email_xml}</div>
                       )}
                     </TableCell>
                     <TableCell className="text-sm">{profiles[p.vendedor_id] ?? "—"}</TableCell>
@@ -890,6 +1023,7 @@ export default function Faturamento() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-bold text-sm text-green-700">{formatBRL(p.total)}</TableCell>
+                    <TableCell className="text-right text-xs text-muted-foreground">{p.peso_total > 0 ? `${p.peso_total.toFixed(1)} kg` : "—"}</TableCell>
                     <TableCell className="text-xs text-muted-foreground">
                       {STATUS_ACTIVE.has(p.status) ? (tempoAguardando(p.status_atualizado_em) ?? "—") : "—"}
                     </TableCell>
@@ -1129,6 +1263,82 @@ export default function Faturamento() {
       </Dialog>
 
       <PedidoDetalhesDialog pedidoId={detalhesId} open={detalhesOpen} onOpenChange={setDetalhesOpen} />
+
+      {/* Dialog: faturamento por produto */}
+      <Dialog open={!!prodFatDialog} onOpenChange={(o) => !o && setProdFatDialog(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Faturamento por produto — Pedido #{prodFatDialog?.numero_pedido}</DialogTitle>
+          </DialogHeader>
+          {prodFatDialog && (
+            <div className="space-y-4 py-2">
+              <p className="text-sm text-muted-foreground">
+                {prodFatDialog.razao_social} — {prodFatDialog.cond_pagamento ?? ""}
+                {prodFatDialog.email_xml && <span className="ml-2">• Email XML: {prodFatDialog.email_xml}</span>}
+              </p>
+              <div className="rounded-md border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left px-3 py-2">Produto</th>
+                      <th className="text-center px-2 py-2 w-10">Cx</th>
+                      <th className="text-center px-2 py-2 w-20">Qtd Pedida</th>
+                      <th className="text-center px-2 py-2 w-24">Qtd Faturada</th>
+                      <th className="text-center px-2 py-2 w-24">Saldo</th>
+                      <th className="text-center px-2 py-2 w-20">Peso Un.</th>
+                      <th className="text-center px-2 py-2 w-24">Peso Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {prodFatDialog.itens.map((item) => {
+                      const qtdFat = prodFatQtds[item.id] ?? 0;
+                      const saldo = item.quantidade - qtdFat;
+                      return (
+                        <tr key={item.id} className="border-b last:border-0">
+                          <td className="px-3 py-2">
+                            <div className="font-medium">{item.nome}</div>
+                            <div className="text-xs text-muted-foreground">{item.codigo}</div>
+                          </td>
+                          <td className="text-center px-2 py-2 text-muted-foreground">{item.cx_embarque}</td>
+                          <td className="text-center px-2 py-2">{item.quantidade}</td>
+                          <td className="px-2 py-2">
+                            <Input
+                              type="number"
+                              min={0}
+                              max={item.quantidade}
+                              value={qtdFat}
+                              onChange={(e) => {
+                                const v = Math.max(0, Math.min(item.quantidade, Number(e.target.value) || 0));
+                                setProdFatQtds((prev) => ({ ...prev, [item.id]: v }));
+                              }}
+                              className="h-7 w-20 text-sm text-center mx-auto block"
+                            />
+                          </td>
+                          <td className={`text-center px-2 py-2 font-medium ${saldo > 0 ? "text-red-600" : "text-green-600"}`}>
+                            {saldo}
+                          </td>
+                          <td className="text-center px-2 py-2 text-muted-foreground">{item.peso_unitario.toFixed(3)}</td>
+                          <td className="text-center px-2 py-2 text-muted-foreground">{(item.peso_unitario * qtdFat).toFixed(2)} kg</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="text-right text-sm text-muted-foreground">
+                Peso total faturado: <strong>{prodFatDialog.itens.reduce((s, i) => s + i.peso_unitario * (prodFatQtds[i.id] ?? 0), 0).toFixed(2)} kg</strong>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProdFatDialog(null)}>Fechar</Button>
+            <Button onClick={salvarProdFat} disabled={salvandoProdFat}>
+              {salvandoProdFat && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Salvar faturamento parcial
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

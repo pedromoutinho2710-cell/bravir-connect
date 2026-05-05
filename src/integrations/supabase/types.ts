@@ -392,6 +392,7 @@ export type Database = {
           preco_unitario_liquido: number | null
           produto_id: string
           quantidade: number
+          qtd_faturada: number
           total_item: number
         }
         Insert: {
@@ -407,6 +408,7 @@ export type Database = {
           preco_unitario_liquido?: number | null
           produto_id: string
           quantidade: number
+          qtd_faturada?: number
           total_item: number
         }
         Update: {
@@ -422,6 +424,7 @@ export type Database = {
           preco_unitario_liquido?: number | null
           produto_id?: string
           quantidade?: number
+          qtd_faturada?: number
           total_item?: number
         }
         Relationships: [
@@ -740,6 +743,30 @@ export type Database = {
           descricao?: string | null
           id?: string
           nome?: string
+        }
+        Relationships: []
+      }
+      solicitacoes_analise: {
+        Row: {
+          id: string
+          cliente_id: string | null
+          observacoes: string | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          cliente_id?: string | null
+          observacoes?: string | null
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          cliente_id?: string | null
+          observacoes?: string | null
+          status?: string
+          created_at?: string
         }
         Relationships: []
       }

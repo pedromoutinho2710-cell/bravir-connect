@@ -21,8 +21,11 @@ type Cliente = {
   id: string;
   razao_social: string;
   cnpj: string | null;
+  email: string | null;
+  telefone: string | null;
   cidade: string | null;
   uf: string | null;
+  codigo_parceiro: string | null;
   cluster: string | null;
   tabela_preco: string | null;
   vendedor_id: string | null;
@@ -80,6 +83,9 @@ export default function FaturamentoClientes() {
 
   // Modal edição
   const [modalCliente, setModalCliente] = useState<Cliente | null>(null);
+  const [editRazaoSocial, setEditRazaoSocial] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editTelefone, setEditTelefone] = useState("");
   const [editPerfil, setEditPerfil] = useState("");
   const [editTabela, setEditTabela] = useState("");
   const [editVendedorId, setEditVendedorId] = useState("");
@@ -87,6 +93,11 @@ export default function FaturamentoClientes() {
   const [editAceitaSaldo, setEditAceitaSaldo] = useState(false);
   const [editObs, setEditObs] = useState("");
   const [salvando, setSalvando] = useState(false);
+
+  // Analise de crédito
+  const [analiseCliente, setAnaliseCliente] = useState<Cliente | null>(null);
+  const [analiseObs, setAnaliseObs] = useState("");
+  const [salvandoAnalise, setSalvandoAnalise] = useState(false);
 
   // Excluir
   const [excluirCliente, setExcluirCliente] = useState<Cliente | null>(null);
@@ -97,7 +108,7 @@ export default function FaturamentoClientes() {
     const [clientesRes, roleRes, loRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, cnpj, cidade, uf, cluster, tabela_preco, vendedor_id, negativado, aceita_saldo, observacoes_trade")
+        .select("id, razao_social, cnpj, email, telefone, cidade, uf, codigo_parceiro, cluster, tabela_preco, vendedor_id, negativado, aceita_saldo, observacoes_trade")
         .order("razao_social"),
       supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
       supabase
@@ -176,7 +187,9 @@ export default function FaturamentoClientes() {
       const cnpjDigits = (c.cnpj ?? "").replace(/\D/g, "");
       const matchBusca = !busca
         || c.razao_social.toLowerCase().includes(buscaLow)
-        || (buscaDigits.length > 0 && cnpjDigits.includes(buscaDigits));
+        || (buscaDigits.length > 0 && cnpjDigits.includes(buscaDigits))
+        || (c.codigo_parceiro?.toLowerCase().includes(buscaLow) ?? false)
+        || (c.cidade?.toLowerCase().includes(buscaLow) ?? false);
       const matchPerfil = filtroPerfil === "todos"
         || (filtroPerfil === "sem" && !c.cluster)
         || (filtroPerfil === "com" && !!c.cluster);
@@ -202,6 +215,9 @@ export default function FaturamentoClientes() {
 
   const abrirModal = (c: Cliente) => {
     setModalCliente(c);
+    setEditRazaoSocial(c.razao_social);
+    setEditEmail(c.email ?? "");
+    setEditTelefone(c.telefone ?? "");
     setEditPerfil(c.cluster ?? "");
     setEditTabela(c.tabela_preco ?? "");
     setEditVendedorId(c.vendedor_id ?? "");
@@ -219,6 +235,9 @@ export default function FaturamentoClientes() {
     const { error } = await supabase
       .from("clientes")
       .update({
+        razao_social: editRazaoSocial.trim() || modalCliente.razao_social,
+        email: editEmail.trim() || null,
+        telefone: editTelefone.trim() || null,
         cluster: editPerfil || null,
         tabela_preco: editTabela || null,
         vendedor_id: editVendedorId || null,
@@ -259,6 +278,21 @@ export default function FaturamentoClientes() {
     toast.success(`${excluirCliente.razao_social} excluído`);
     setExcluirCliente(null);
     setClientes((prev) => prev.filter((c) => c.id !== excluirCliente.id));
+  };
+
+  const enviarAnalise = async () => {
+    if (!analiseCliente) return;
+    setSalvandoAnalise(true);
+    const { error } = await (supabase.from("solicitacoes_analise") as any).insert({
+      cliente_id: analiseCliente.id,
+      observacoes: analiseObs.trim() || null,
+      status: "pendente",
+    });
+    setSalvandoAnalise(false);
+    if (error) { toast.error("Erro ao enviar: " + error.message); return; }
+    toast.success("Solicitação enviada!");
+    setAnaliseCliente(null);
+    setAnaliseObs("");
   };
 
   const semPerfilCount = clientes.filter((c) => !c.cluster).length;
@@ -401,14 +435,14 @@ export default function FaturamentoClientes() {
             <TableHeader>
               <TableRow>
                 <TableHead>Cliente</TableHead>
-                <TableHead>CNPJ</TableHead>
+                <TableHead>CNPJ / Cód.</TableHead>
                 <TableHead>Cidade / UF</TableHead>
                 <TableHead>Cluster</TableHead>
                 <TableHead>Tabela</TableHead>
                 <TableHead>Vendedor</TableHead>
                 <TableHead>Último Pedido</TableHead>
                 <TableHead>Negativado</TableHead>
-                <TableHead className="w-20">Ações</TableHead>
+                <TableHead className="w-28">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -422,8 +456,9 @@ export default function FaturamentoClientes() {
                     onClick={() => navigate(`/clientes/${c.id}`)}
                   >
                     <TableCell className="font-medium">{c.razao_social}</TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      {c.cnpj ? formatCNPJ(c.cnpj) : "—"}
+                    <TableCell className="text-sm text-muted-foreground">
+                      <div className="font-mono">{c.cnpj ? formatCNPJ(c.cnpj) : "—"}</div>
+                      {c.codigo_parceiro && <div className="text-xs">Cód: {c.codigo_parceiro}</div>}
                     </TableCell>
                     <TableCell className="text-sm">
                       {[c.cidade, c.uf].filter(Boolean).join(" / ") || "—"}
@@ -462,19 +497,24 @@ export default function FaturamentoClientes() {
                     </TableCell>
                     <TableCell>
                       {c.negativado && (
-                        <Badge variant="outline" className="text-xs bg-red-100 text-red-800 border-red-300">
-                          Sim
-                        </Badge>
+                        <Badge variant="outline" className="text-xs bg-red-100 text-red-800 border-red-300">⚠ Negativado</Badge>
                       )}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <div className="flex gap-1">
                         <Button
                           size="icon" variant="ghost" className="h-7 w-7"
-                          title="Editar cliente"
+                          title="Editar cadastro"
                           onClick={() => abrirModal(c)}
                         >
                           <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm" variant="ghost" className="h-7 px-2 text-xs"
+                          title="Solicitar análise de crédito"
+                          onClick={() => { setAnaliseCliente(c); setAnaliseObs(""); }}
+                        >
+                          Crédito
                         </Button>
                         <Button
                           size="icon" variant="ghost" className="h-7 w-7"
@@ -501,6 +541,20 @@ export default function FaturamentoClientes() {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Razão social</Label>
+              <Input value={editRazaoSocial} onChange={(e) => setEditRazaoSocial(e.target.value)} placeholder="Razão social" />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>E-mail</Label>
+                <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} placeholder="email@empresa.com" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Telefone</Label>
+                <Input value={editTelefone} onChange={(e) => setEditTelefone(e.target.value)} placeholder="(00) 00000-0000" />
+              </div>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Cluster</Label>
@@ -588,6 +642,31 @@ export default function FaturamentoClientes() {
             <Button onClick={salvar} disabled={salvando}>
               {salvando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog — Análise de crédito */}
+      <Dialog open={!!analiseCliente} onOpenChange={(o) => !o && setAnaliseCliente(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Solicitar análise de crédito — {analiseCliente?.razao_social}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label>Observações</Label>
+            <Textarea
+              rows={4}
+              value={analiseObs}
+              onChange={(e) => setAnaliseObs(e.target.value)}
+              placeholder="Informe o motivo da solicitação, histórico relevante..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAnaliseCliente(null)}>Cancelar</Button>
+            <Button onClick={enviarAnalise} disabled={salvandoAnalise}>
+              {salvandoAnalise && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Enviar solicitação
             </Button>
           </DialogFooter>
         </DialogContent>

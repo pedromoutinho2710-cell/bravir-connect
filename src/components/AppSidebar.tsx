@@ -54,7 +54,7 @@ const ADMIN_SECTIONS: Section[] = [
     ],
   },
   {
-    label: "Faturamento",
+    label: "Pré-faturamento",
     items: [
       { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
       { title: "Clientes", url: "/faturamento/clientes", icon: Users },

@@ -30,8 +30,8 @@ const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
   aguardando_faturamento: "Aguardando faturamento",
   no_sankhya: "No Sankhya",
-  faturado: "Faturado",
-  parcialmente_faturado: "Parc. faturado",
+  faturado: "Pré-faturado",
+  parcialmente_faturado: "Parc. pré-faturado",
   com_problema: "Com problema",
   devolvido: "Devolvido",
   cancelado: "Cancelado",
@@ -159,8 +159,28 @@ export default function ClienteDetalhe() {
   const [detalhesId, setDetalhesId] = useState<string | null>(null);
   const [detalhesOpen, setDetalhesOpen] = useState(false);
 
+  // Análise de crédito
+  const [analiseOpen, setAnaliseOpen] = useState(false);
+  const [analiseObs, setAnaliseObs] = useState("");
+  const [salvandoAnalise, setSalvandoAnalise] = useState(false);
+
   const canEdit = role === "admin" || role === "faturamento";
   const canObs = canEdit || (role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id);
+
+  const enviarAnalise = async () => {
+    if (!cliente) return;
+    setSalvandoAnalise(true);
+    const { error } = await (supabase.from("solicitacoes_analise") as any).insert({
+      cliente_id: cliente.id,
+      observacoes: analiseObs.trim() || null,
+      status: "pendente",
+    });
+    setSalvandoAnalise(false);
+    if (error) { toast.error("Erro: " + error.message); return; }
+    toast.success("Solicitação enviada!");
+    setAnaliseOpen(false);
+    setAnaliseObs("");
+  };
 
   const carregar = async () => {
     if (!id) return;
@@ -400,9 +420,9 @@ export default function ClienteDetalhe() {
               <Plus className="h-4 w-4" />
               Novo Pedido
             </Button>
-            <Button size="sm" variant="outline" onClick={solicitarCredito}>
+            <Button size="sm" variant="outline" onClick={() => { setAnaliseObs(""); setAnaliseOpen(true); }}>
               <CreditCard className="h-4 w-4" />
-              Solicitar crédito
+              Solicitar análise de crédito
             </Button>
             {canEdit && (
               <Button size="sm" variant="outline" onClick={abrirEdicao}>
@@ -648,6 +668,31 @@ export default function ClienteDetalhe() {
       </AlertDialog>
 
       <PedidoDetalhesDialog pedidoId={detalhesId} open={detalhesOpen} onOpenChange={setDetalhesOpen} />
+
+      {/* Dialog: análise de crédito */}
+      <Dialog open={analiseOpen} onOpenChange={setAnaliseOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Solicitar análise de crédito — {cliente.razao_social}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label>Observações</Label>
+            <Textarea
+              rows={4}
+              value={analiseObs}
+              onChange={(e) => setAnaliseObs(e.target.value)}
+              placeholder="Informe o motivo, histórico relevante, urgência..."
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAnaliseOpen(false)}>Cancelar</Button>
+            <Button onClick={enviarAnalise} disabled={salvandoAnalise}>
+              {salvandoAnalise && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Enviar solicitação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
