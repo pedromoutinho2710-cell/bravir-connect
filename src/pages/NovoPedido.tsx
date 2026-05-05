@@ -340,6 +340,12 @@ export default function NovoPedido() {
       return;
     }
     setEnviando(true);
+
+    // Delete existing items first to avoid 409 conflicts from previously auto-saved drafts
+    if (pedidoId) {
+      await supabase.from("itens_pedido").delete().eq("pedido_id", pedidoId);
+    }
+
     const id = await salvarPedido("aguardando_faturamento");
     if (id) {
       // Gera docx e envia email (best-effort)
@@ -423,7 +429,6 @@ export default function NovoPedido() {
 
       pedidoEnviadoRef.current = true;
       if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
-      if (dbSaveTimer.current) window.clearTimeout(dbSaveTimer.current);
       localStorage.removeItem(RASCUNHO_KEY);
       toast.success("Pedido enviado para faturamento!");
       navigate("/meus-pedidos");
