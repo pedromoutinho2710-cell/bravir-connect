@@ -12,6 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
+import { Plus, X } from "lucide-react";
 import { CLUSTERS } from "@/lib/constants";
 import { formatCNPJ, onlyDigits } from "@/lib/format";
 
@@ -43,8 +44,9 @@ type Form = {
   perfil_atacado_distribuidor: string;
   qtd_lojas: string;
   vende_digital: boolean;
-  tem_ecommerce: boolean;
-  canal_ecommerce: string;
+  canais_digitais: string[];
+  link_ecommerce: string;
+  links_marketplace: { plataforma: string; link: string }[];
   percentual_b2c: string;
   percentual_b2b: string;
   cluster_sugerido: string;
@@ -69,8 +71,9 @@ const EMPTY: Form = {
   perfil_atacado_distribuidor: "",
   qtd_lojas: "",
   vende_digital: false,
-  tem_ecommerce: false,
-  canal_ecommerce: "",
+  canais_digitais: [],
+  link_ecommerce: "",
+  links_marketplace: [],
   percentual_b2c: "",
   percentual_b2b: "",
   cluster_sugerido: "",
@@ -151,8 +154,17 @@ export default function CadastrarCliente() {
         produtos_bendita: form.produtos_bendita.length > 0 ? form.produtos_bendita : null,
         produtos_laby: form.produtos_laby.length > 0 ? form.produtos_laby : null,
         vende_digital: form.vende_digital,
-        tem_ecommerce: form.vende_digital ? form.tem_ecommerce : null,
-        canal_ecommerce: form.tem_ecommerce ? form.canal_ecommerce || null : null,
+        canal_ecommerce: form.vende_digital && form.canais_digitais.length > 0
+          ? (form.canais_digitais.includes("proprio") && form.canais_digitais.includes("marketplace")
+              ? "proprio_e_marketplace"
+              : form.canais_digitais[0])
+          : null,
+        link_ecommerce: form.vende_digital && form.canais_digitais.includes("proprio")
+          ? form.link_ecommerce || null
+          : null,
+        links_marketplace: form.vende_digital && form.canais_digitais.includes("marketplace") && form.links_marketplace.length > 0
+          ? JSON.stringify(form.links_marketplace)
+          : null,
         percentual_b2c: form.percentual_b2c ? Number(form.percentual_b2c) : null,
         percentual_b2b: form.percentual_b2b ? Number(form.percentual_b2b) : null,
         cluster_sugerido: form.cluster_sugerido || null,
@@ -365,33 +377,102 @@ export default function CadastrarCliente() {
             </div>
 
             {form.vende_digital && (
-              <>
-                <div className="flex items-center gap-3">
-                  <Switch
-                    checked={form.tem_ecommerce}
-                    onCheckedChange={(c) => set("tem_ecommerce", c)}
-                  />
-                  <Label>Tem e-commerce próprio</Label>
+              <div className="space-y-4 border-t pt-4">
+                {/* Quais canais? */}
+                <div className="space-y-2">
+                  <Label className="font-semibold">Quais canais utiliza?</Label>
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
+                      <Checkbox
+                        checked={form.canais_digitais.includes("proprio")}
+                        onCheckedChange={() => set("canais_digitais", toggleArr(form.canais_digitais, "proprio"))}
+                      />
+                      E-commerce próprio
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
+                      <Checkbox
+                        checked={form.canais_digitais.includes("marketplace")}
+                        onCheckedChange={() => set("canais_digitais", toggleArr(form.canais_digitais, "marketplace"))}
+                      />
+                      Marketplace (ex: Amazon, Mercado Livre, Shopee)
+                    </label>
+                  </div>
                 </div>
 
-                {form.tem_ecommerce && (
+                {/* E-commerce próprio: link */}
+                {form.canais_digitais.includes("proprio") && (
                   <div className="space-y-1.5">
-                    <Label>Canal de e-commerce</Label>
+                    <Label>Link do e-commerce</Label>
                     <Input
-                      value={form.canal_ecommerce}
-                      onChange={(e) => set("canal_ecommerce", e.target.value)}
-                      placeholder="Ex: VTEX, Shopify, WooCommerce, próprio..."
+                      value={form.link_ecommerce}
+                      onChange={(e) => set("link_ecommerce", e.target.value)}
+                      placeholder="https://sualoja.com.br"
                     />
                   </div>
                 )}
 
+                {/* Marketplace: lista de lojas */}
+                {form.canais_digitais.includes("marketplace") && (
+                  <div className="space-y-3">
+                    <Label className="font-semibold">Adicione os links das suas lojas nos marketplaces:</Label>
+                    {form.links_marketplace.map((loja, idx) => (
+                      <div key={idx} className="flex gap-2 items-center">
+                        <Select
+                          value={loja.plataforma}
+                          onValueChange={(v) => {
+                            const updated = [...form.links_marketplace];
+                            updated[idx] = { ...updated[idx], plataforma: v };
+                            set("links_marketplace", updated);
+                          }}
+                        >
+                          <SelectTrigger className="w-44 shrink-0">
+                            <SelectValue placeholder="Plataforma" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {["Shopee", "Mercado Livre", "Amazon", "Magalu", "Outros"].map((p) => (
+                              <SelectItem key={p} value={p}>{p}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          className="flex-1"
+                          value={loja.link}
+                          onChange={(e) => {
+                            const updated = [...form.links_marketplace];
+                            updated[idx] = { ...updated[idx], link: e.target.value };
+                            set("links_marketplace", updated);
+                          }}
+                          placeholder="https://shopee.com.br/sualoja"
+                        />
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => set("links_marketplace", form.links_marketplace.filter((_, i) => i !== idx))}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => set("links_marketplace", [...form.links_marketplace, { plataforma: "", link: "" }])}
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Adicionar loja
+                    </Button>
+                  </div>
+                )}
+
+                {/* B2C / B2B */}
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label>% vendas B2C (consumidor final)</Label>
                     <Input
-                      type="number"
-                      min={0}
-                      max={100}
+                      type="number" min={0} max={100}
                       value={form.percentual_b2c}
                       onChange={(e) => set("percentual_b2c", e.target.value)}
                       placeholder="0–100"
@@ -400,16 +481,14 @@ export default function CadastrarCliente() {
                   <div className="space-y-1.5">
                     <Label>% vendas B2B (revendedor)</Label>
                     <Input
-                      type="number"
-                      min={0}
-                      max={100}
+                      type="number" min={0} max={100}
                       value={form.percentual_b2b}
                       onChange={(e) => set("percentual_b2b", e.target.value)}
                       placeholder="0–100"
                     />
                   </div>
                 </div>
-              </>
+              </div>
             )}
           </CardContent>
         </Card>
