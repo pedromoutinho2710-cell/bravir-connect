@@ -345,7 +345,6 @@ export function SecaoProdutos({
                   {!descontoLivre && <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Com. %</TableHead>}
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Trade %</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Final</TableHead>
-                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Bolsão</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right">Total</TableHead>
                   <TableHead className="text-white w-8 py-2"></TableHead>
                 </TableRow>
@@ -443,17 +442,6 @@ export function SecaoProdutos({
                       <span className="text-sm font-bold" style={{ color: '#1a5c38' }}>
                         {formatBRL(i.preco_final)}
                       </span>
-                    </TableCell>
-
-                    {/* Bolsão */}
-                    <TableCell className="text-right py-2 align-top">
-                      <Input
-                        type="number" min={0}
-                        value={i.bolsao}
-                        onChange={(e) => atualizarBolsao(i.produto_id, Math.max(0, Number(e.target.value) || 0))}
-                        className={cn("w-16 ml-auto h-7 text-xs")}
-                        placeholder="0"
-                      />
                     </TableCell>
 
                     {/* Total */}
