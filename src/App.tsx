@@ -30,6 +30,8 @@ import ImportarClientes from "./pages/admin/ImportarClientes";
 import ClienteDetalhe from "./pages/ClienteDetalhe";
 import TabelasPreco from "./pages/admin/TabelasPreco";
 import Configuracoes from "./pages/admin/Configuracoes";
+import DashboardLogistica from "./pages/logistica/DashboardLogistica";
+import FilaLogistica from "./pages/logistica/FilaLogistica";
 
 const queryClient = new QueryClient();
 
@@ -80,8 +82,9 @@ const App = () => (
             </Route>
 
             {/* Logística */}
-            <Route element={<ProtectedRoute allow={["logistica"]}><AppLayout /></ProtectedRoute>}>
-              <Route path="/logistica" element={<PlaceholderPage title="Painel de Entregas" />} />
+            <Route element={<ProtectedRoute allow={["logistica", "admin"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/logistica" element={<DashboardLogistica />} />
+              <Route path="/logistica/fila" element={<FilaLogistica />} />
             </Route>
 
             {/* Trade — acessível por trade e admin */}

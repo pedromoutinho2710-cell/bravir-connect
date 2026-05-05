@@ -63,6 +63,13 @@ const ADMIN_SECTIONS: Section[] = [
     ],
   },
   {
+    label: "Logística",
+    items: [
+      { title: "Dashboard", url: "/logistica", icon: LayoutDashboard },
+      { title: "Fila de Pedidos", url: "/logistica/fila", icon: Truck },
+    ],
+  },
+  {
     label: "Trade",
     items: [
       { title: "Clientes aguardando", url: "/trade", icon: Store },
@@ -98,7 +105,8 @@ const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
   ],
   logistica: [
-    { title: "Painel de Entregas", url: "/logistica", icon: Truck },
+    { title: "Dashboard", url: "/logistica", icon: LayoutDashboard },
+    { title: "Fila de Pedidos", url: "/logistica/fila", icon: ListChecks },
   ],
   trade: [
     { title: "Clientes aguardando", url: "/trade", icon: Store },
@@ -155,7 +163,7 @@ export function AppSidebar() {
   };
 
   const adminSections: Section[] = ADMIN_SECTIONS.map((section) =>
-    section.label === "Faturamento"
+    section.label === "Pré-faturamento"
       ? {
           ...section,
           items: section.items.map((item) =>
