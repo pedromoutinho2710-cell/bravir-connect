@@ -340,7 +340,7 @@ export function SecaoProdutos({
                   <TableHead className="text-white text-[11px] font-semibold py-2">Produto</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-28">Qtd</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Bruto</TableHead>
-                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-20">Desc. %</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right" style={{ minWidth: 110 }}>Desc. %</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Líquido</TableHead>
                   {!descontoLivre && <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Com. %</TableHead>}
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Trade %</TableHead>
@@ -401,7 +401,7 @@ export function SecaoProdutos({
                           type="number" min={0} max={100} step={0.1}
                           value={i.desconto_perfil}
                           onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(100, Math.max(0, parseFloat(e.target.value) || 0)))}
-                          className={cn("w-14 ml-auto h-6 text-[10px]")}
+                          className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
                           placeholder="0"
                         />
                       ) : (
@@ -419,7 +419,7 @@ export function SecaoProdutos({
                           type="number" min={0} max={3} step={0.1}
                           value={i.desconto_comercial}
                           onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.min(3, Math.max(0, parseFloat(e.target.value) || 0)))}
-                          className={cn("w-14 ml-auto h-7 text-xs")}
+                          className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
                           placeholder="0"
                         />
                         <div className="text-[9px] text-muted-foreground mt-0.5 text-right">máx 3%</div>
@@ -432,7 +432,7 @@ export function SecaoProdutos({
                         type="number" min={0} max={100} step={0.1}
                         value={i.desconto_trade}
                         onChange={(e) => atualizarDesconto(i.produto_id, "trade", Math.max(0, parseFloat(e.target.value) || 0))}
-                        className={cn("w-14 ml-auto h-7 text-xs")}
+                        className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
                         placeholder="0"
                       />
                     </TableCell>
