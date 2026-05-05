@@ -8,11 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { formatCNPJ, formatDate } from "@/lib/format";
-import { Loader2, UserPlus, Users, Search } from "lucide-react";
+import { Loader2, UserPlus, Users, Search, Trash2 } from "lucide-react";
 
 type ClientePendente = {
   id: string;
@@ -51,6 +52,9 @@ export default function FaturamentoClientesPendentes() {
   const [cadastrarDialog, setCadastrarDialog] = useState<ClientePendente | null>(null);
   const [negativado, setNegativado] = useState(false);
   const [cadastrando, setCadastrando] = useState(false);
+
+  const [excluirCliente, setExcluirCliente] = useState<ClientePendente | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   // Todos os clientes
   const [todos, setTodos] = useState<ClienteTodos[]>([]);
@@ -128,6 +132,17 @@ export default function FaturamentoClientesPendentes() {
     setCadastrarDialog(null);
     setCadastrando(false);
     carregar();
+  };
+
+  const excluir = async () => {
+    if (!excluirCliente) return;
+    setExcluindo(true);
+    const { error } = await supabase.from("clientes").delete().eq("id", excluirCliente.id);
+    setExcluindo(false);
+    if (error) { toast.error("Erro ao excluir: " + error.message); return; }
+    toast.success(`${excluirCliente.razao_social} excluído`);
+    setClientes((prev) => prev.filter((c) => c.id !== excluirCliente.id));
+    setExcluirCliente(null);
   };
 
   const toggleNegativado = async (c: ClienteTodos) => {
@@ -233,7 +248,7 @@ export default function FaturamentoClientesPendentes() {
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-2 flex-wrap">
+                          <div className="flex gap-2 flex-wrap items-center">
                             {!c.assumido_por && (
                               <Button
                                 size="sm"
@@ -255,6 +270,15 @@ export default function FaturamentoClientesPendentes() {
                                 Marcar como cadastrado
                               </Button>
                             )}
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              title="Excluir cliente"
+                              onClick={() => setExcluirCliente(c)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -372,6 +396,29 @@ export default function FaturamentoClientesPendentes() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* AlertDialog — Excluir cliente */}
+      <AlertDialog open={!!excluirCliente} onOpenChange={(o) => !o && setExcluirCliente(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deseja excluir este cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. <strong>{excluirCliente?.razao_social}</strong> será removido permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={excluir}
+              disabled={excluindo}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {excluindo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={!!cadastrarDialog} onOpenChange={(o) => !o && setCadastrarDialog(null)}>
         <DialogContent className="max-w-sm">
