@@ -81,6 +81,7 @@ export default function NovoPedido() {
   // Refs de timers
   const localSaveTimer = useRef<number | null>(null);
   const pedidoEnviadoRef = useRef(false); // bloqueia auto-saves após envio bem-sucedido
+  const prevVigenciaRef = useRef<string | null>(null); // detecta troca manual de vigência
 
   // ── Carrega catálogo ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -286,6 +287,20 @@ export default function NovoPedido() {
     }
     return id;
   };
+
+  // ── Reset itens ao trocar vigência ────────────────────────────────────────
+  // prevVigenciaRef=null → primeiro disparo (carga inicial) → só grava, não limpa
+  useEffect(() => {
+    if (prevVigenciaRef.current === null) {
+      prevVigenciaRef.current = vigenciaId;
+      return;
+    }
+    if (prevVigenciaRef.current === vigenciaId) return;
+    prevVigenciaRef.current = vigenciaId;
+    if (!vigenciaId) return;
+    setItens([]);
+    toast.info("Tabela de preços alterada. Os produtos foram removidos.");
+  }, [vigenciaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Auto-save LOCAL (500ms) ────────────────────────────────────────────────
   useEffect(() => {
