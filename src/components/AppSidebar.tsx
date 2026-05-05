@@ -100,7 +100,6 @@ const ADMIN_SECTIONS: Section[] = [
 const BASE_FATURAMENTO_ITEMS: Item[] = [
   { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
   { title: "Clientes", url: "/faturamento/clientes", icon: Users },
-  { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
   { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
 ];
 
