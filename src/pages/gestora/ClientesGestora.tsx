@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatCNPJ } from "@/lib/format";
 import { CLUSTERS, TABELAS_PRECO, UFS } from "@/lib/constants";
-import { Loader2, Search, Users, UserX, AlertTriangle, ShieldAlert, Pencil, UserPlus } from "lucide-react";
+import { Loader2, Search, Users, UserX, AlertTriangle, ShieldAlert, Pencil, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
+
+const PAGE_SIZE = 200;
 
 type Cliente = {
   id: string;
@@ -36,6 +38,8 @@ type Cliente = {
 };
 
 type Vendedor = { id: string; nome: string };
+
+type Resumo = { ativos: number; semVendedor: number; aguardandoTrade: number; negativados: number };
 
 const STATUS_OPTIONS = [
   { value: "ativo", label: "Ativo" },
@@ -64,11 +68,15 @@ export default function ClientesGestora() {
   const navigate = useNavigate();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
+  const [pagina, setPagina] = useState(0);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [vendedoresMap, setVendedoresMap] = useState<Record<string, string>>({});
+  const [resumo, setResumo] = useState<Resumo>({ ativos: 0, semVendedor: 0, aguardandoTrade: 0, negativados: 0 });
 
   // Filtros
   const [busca, setBusca] = useState("");
+  const [buscaDebounced, setBuscaDebounced] = useState("");
   const [filtroVendedor, setFiltroVendedor] = useState("todos");
   const [filtroCluster, setFiltroCluster] = useState("todos");
   const [filtroTabela, setFiltroTabela] = useState("todos");
@@ -93,41 +101,96 @@ export default function ClientesGestora() {
   const [editObs, setEditObs] = useState("");
   const [salvando, setSalvando] = useState(false);
 
+  // Debounce da busca — 400 ms
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaDebounced(busca), 400);
+    return () => clearTimeout(t);
+  }, [busca]);
+
+  // Reset para página 0 quando qualquer filtro muda
+  useEffect(() => {
+    setPagina(0);
+  }, [buscaDebounced, filtroVendedor, filtroCluster, filtroTabela, filtroUF, filtroStatus, apenasSemVendedor]);
+
+  // Carrega resumo global (sem filtros) uma vez
+  useEffect(() => {
+    (async () => {
+      const [ativos, semVendedor, aguardandoTrade, negativados] = await Promise.all([
+        supabase.from("clientes").select("id", { count: "exact", head: true }).eq("status", "ativo"),
+        supabase.from("clientes").select("id", { count: "exact", head: true }).is("vendedor_id", null),
+        supabase.from("clientes").select("id", { count: "exact", head: true }).eq("status", "aguardando_trade"),
+        supabase.from("clientes").select("id", { count: "exact", head: true }).eq("negativado", true),
+      ]);
+      setResumo({
+        ativos: ativos.count ?? 0,
+        semVendedor: semVendedor.count ?? 0,
+        aguardandoTrade: aguardandoTrade.count ?? 0,
+        negativados: negativados.count ?? 0,
+      });
+    })();
+  }, []);
+
+  // Carrega vendedores uma vez
+  useEffect(() => {
+    (async () => {
+      const rolesRes = await supabase.from("user_roles").select("user_id").eq("role", "vendedor");
+      if (rolesRes.data && rolesRes.data.length > 0) {
+        const ids = rolesRes.data.map((r) => r.user_id);
+        const profRes = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
+        if (profRes.data) {
+          const map: Record<string, string> = {};
+          const lista: Vendedor[] = [];
+          profRes.data.forEach((p) => {
+            const nome = p.full_name || p.email || "—";
+            map[p.id] = nome;
+            lista.push({ id: p.id, nome });
+          });
+          lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
+          setVendedoresMap(map);
+          setVendedores(lista);
+        }
+      }
+    })();
+  }, []);
+
+  // Query principal — server-side com paginação e filtros
   const carregar = useCallback(async () => {
     setLoading(true);
-    const [clientesRes, rolesRes] = await Promise.all([
-      supabase
-        .from("clientes")
-        .select("id, razao_social, cnpj, email, telefone, comprador, cidade, uf, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade")
-        .order("razao_social"),
-      supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
-    ]);
 
-    if (clientesRes.error) {
-      toast.error("Erro ao carregar clientes: " + clientesRes.error.message);
-    } else {
-      setClientes((clientesRes.data ?? []) as Cliente[]);
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query: any = supabase
+      .from("clientes")
+      .select(
+        "id, razao_social, cnpj, email, telefone, comprador, cidade, uf, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade",
+        { count: "exact" }
+      )
+      .order("razao_social")
+      .range(pagina * PAGE_SIZE, (pagina + 1) * PAGE_SIZE - 1);
 
-    if (rolesRes.data && rolesRes.data.length > 0) {
-      const ids = rolesRes.data.map((r) => r.user_id);
-      const profRes = await supabase.from("profiles").select("id, full_name, email").in("id", ids);
-      if (profRes.data) {
-        const map: Record<string, string> = {};
-        const lista: Vendedor[] = [];
-        profRes.data.forEach((p) => {
-          const nome = p.full_name || p.email || "—";
-          map[p.id] = nome;
-          lista.push({ id: p.id, nome });
-        });
-        lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-        setVendedoresMap(map);
-        setVendedores(lista);
+    // Busca server-side
+    if (buscaDebounced.trim()) {
+      const buscaDigits = buscaDebounced.replace(/\D/g, "");
+      if (buscaDigits.length >= 4) {
+        query = query.or(`razao_social.ilike.%${buscaDebounced}%,cnpj.ilike.%${buscaDigits}%`);
+      } else {
+        query = query.ilike("razao_social", `%${buscaDebounced}%`);
       }
     }
 
+    if (filtroVendedor !== "todos") query = query.eq("vendedor_id", filtroVendedor);
+    if (filtroCluster !== "todos") query = query.eq("cluster", filtroCluster);
+    if (filtroTabela !== "todos") query = query.eq("tabela_preco", filtroTabela);
+    if (filtroUF !== "todas") query = query.eq("uf", filtroUF);
+    if (filtroStatus !== "todos") query = query.eq("status", filtroStatus);
+    if (apenasSemVendedor) query = query.is("vendedor_id", null);
+
+    const { data, count, error } = await query;
     setLoading(false);
-  }, []);
+
+    if (error) { toast.error("Erro ao carregar clientes: " + error.message); return; }
+    setClientes((data ?? []) as Cliente[]);
+    setTotalCount(count ?? 0);
+  }, [pagina, buscaDebounced, filtroVendedor, filtroCluster, filtroTabela, filtroUF, filtroStatus, apenasSemVendedor]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -177,29 +240,7 @@ export default function ClientesGestora() {
     await carregar();
   };
 
-  // Resumo
-  const totalAtivos = useMemo(() => clientes.filter((c) => c.status === "ativo").length, [clientes]);
-  const totalSemVendedor = useMemo(() => clientes.filter((c) => !c.vendedor_id).length, [clientes]);
-  const totalAguardandoTrade = useMemo(() => clientes.filter((c) => c.status === "aguardando_trade").length, [clientes]);
-  const totalNegativados = useMemo(() => clientes.filter((c) => c.negativado).length, [clientes]);
-
-  const clientesFiltrados = useMemo(() => {
-    return clientes.filter((c) => {
-      const buscaLow = busca.toLowerCase();
-      const buscaDigits = busca.replace(/\D/g, "");
-      const cnpjDigits = (c.cnpj ?? "").replace(/\D/g, "");
-      const matchBusca = !busca
-        || c.razao_social.toLowerCase().includes(buscaLow)
-        || (buscaDigits.length > 0 && cnpjDigits.includes(buscaDigits));
-      const matchVendedor = filtroVendedor === "todos" || c.vendedor_id === filtroVendedor;
-      const matchCluster = filtroCluster === "todos" || c.cluster === filtroCluster;
-      const matchTabela = filtroTabela === "todos" || c.tabela_preco === filtroTabela;
-      const matchUF = filtroUF === "todas" || c.uf === filtroUF;
-      const matchStatus = filtroStatus === "todos" || c.status === filtroStatus;
-      const matchSemVendedor = !apenasSemVendedor || !c.vendedor_id;
-      return matchBusca && matchVendedor && matchCluster && matchTabela && matchUF && matchStatus && matchSemVendedor;
-    });
-  }, [clientes, busca, filtroVendedor, filtroCluster, filtroTabela, filtroUF, filtroStatus, apenasSemVendedor]);
+  const temProxima = (pagina + 1) * PAGE_SIZE < totalCount;
 
   return (
     <div className="space-y-6">
@@ -214,7 +255,7 @@ export default function ClientesGestora() {
         </Button>
       </div>
 
-      {/* Cards de resumo */}
+      {/* Cards de resumo — totais globais */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -222,7 +263,7 @@ export default function ClientesGestora() {
             <Users className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalAtivos}</div>
+            <div className="text-2xl font-bold">{resumo.ativos}</div>
           </CardContent>
         </Card>
         <Card>
@@ -231,7 +272,7 @@ export default function ClientesGestora() {
             <UserX className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-orange-600">{totalSemVendedor}</div>
+            <div className="text-2xl font-bold text-orange-600">{resumo.semVendedor}</div>
           </CardContent>
         </Card>
         <Card>
@@ -240,7 +281,7 @@ export default function ClientesGestora() {
             <AlertTriangle className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">{totalAguardandoTrade}</div>
+            <div className="text-2xl font-bold text-yellow-600">{resumo.aguardandoTrade}</div>
           </CardContent>
         </Card>
         <Card>
@@ -249,7 +290,7 @@ export default function ClientesGestora() {
             <ShieldAlert className="h-4 w-4 text-red-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-red-600">{totalNegativados}</div>
+            <div className="text-2xl font-bold text-red-600">{resumo.negativados}</div>
           </CardContent>
         </Card>
       </div>
@@ -332,7 +373,7 @@ export default function ClientesGestora() {
             </label>
           </div>
           <span className="text-sm text-muted-foreground">
-            {clientesFiltrados.length} cliente{clientesFiltrados.length !== 1 ? "s" : ""}
+            {totalCount} cliente{totalCount !== 1 ? "s" : ""}
           </span>
         </div>
       </div>
@@ -342,7 +383,7 @@ export default function ClientesGestora() {
         <div className="flex h-48 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
-      ) : clientesFiltrados.length === 0 ? (
+      ) : clientes.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
             <Users className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
@@ -350,73 +391,103 @@ export default function ClientesGestora() {
           </CardContent>
         </Card>
       ) : (
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente / CNPJ</TableHead>
-                <TableHead>Cidade / UF</TableHead>
-                <TableHead>Cluster</TableHead>
-                <TableHead>Tabela</TableHead>
-                <TableHead>Vendedor</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-20">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {clientesFiltrados.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>
-                    <div className="font-medium">{c.razao_social}</div>
-                    {c.cnpj && (
-                      <div className="text-xs text-muted-foreground font-mono">{formatCNPJ(c.cnpj)}</div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {[c.cidade, c.uf].filter(Boolean).join(" / ") || "—"}
-                  </TableCell>
-                  <TableCell>
-                    {c.cluster ? (
-                      <Badge variant="outline" className="text-xs">{c.cluster}</Badge>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">{tabelaLabel(c.tabela_preco)}</TableCell>
-                  <TableCell className="text-sm">
-                    {c.vendedor_id ? (
-                      vendedoresMap[c.vendedor_id] ?? "—"
-                    ) : (
-                      <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700 border-orange-300">
-                        Sem vendedor
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {c.status ? (
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[c.status] ?? "bg-gray-100 text-gray-600 border-gray-300"}`}>
-                        {statusLabel(c.status)}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      title="Editar cliente"
-                      onClick={() => abrirModal(c)}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                  </TableCell>
+        <>
+          <div className="rounded-md border overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cliente / CNPJ</TableHead>
+                  <TableHead>Cidade / UF</TableHead>
+                  <TableHead>Cluster</TableHead>
+                  <TableHead>Tabela</TableHead>
+                  <TableHead>Vendedor</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-20">Ações</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {clientes.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell>
+                      <div className="font-medium">{c.razao_social}</div>
+                      {c.cnpj && (
+                        <div className="text-xs text-muted-foreground font-mono">{formatCNPJ(c.cnpj)}</div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {[c.cidade, c.uf].filter(Boolean).join(" / ") || "—"}
+                    </TableCell>
+                    <TableCell>
+                      {c.cluster ? (
+                        <Badge variant="outline" className="text-xs">{c.cluster}</Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">{tabelaLabel(c.tabela_preco)}</TableCell>
+                    <TableCell className="text-sm">
+                      {c.vendedor_id ? (
+                        vendedoresMap[c.vendedor_id] ?? "—"
+                      ) : (
+                        <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700 border-orange-300">
+                          Sem vendedor
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {c.status ? (
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[c.status] ?? "bg-gray-100 text-gray-600 border-gray-300"}`}>
+                          {statusLabel(c.status)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        title="Editar cliente"
+                        onClick={() => abrirModal(c)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Paginação */}
+          <div className="flex items-center justify-between pt-1">
+            <span className="text-sm text-muted-foreground">
+              Mostrando {pagina * PAGE_SIZE + 1}–{Math.min((pagina + 1) * PAGE_SIZE, totalCount)} de {totalCount}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPagina((p) => p - 1)}
+                disabled={pagina === 0}
+              >
+                <ChevronLeft className="h-4 w-4 mr-1" />
+                Anterior
+              </Button>
+              <span className="text-sm px-1">Página {pagina + 1}</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPagina((p) => p + 1)}
+                disabled={!temProxima}
+              >
+                Próxima
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Modal de edição */}
