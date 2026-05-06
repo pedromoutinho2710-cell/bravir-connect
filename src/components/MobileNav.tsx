@@ -79,6 +79,12 @@ const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
   logistica: [
     { title: "Painel de Entregas", url: "/logistica", icon: Truck },
   ],
+  gestora: [
+    { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
+    { title: "Meu Time", url: "/gestora/time", icon: Users },
+    { title: "Clientes", url: "/gestora/clientes", icon: Users },
+    { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ListChecks },
+  ],
   trade: [
     { title: "Clientes aguardando", url: "/trade", icon: Store },
     { title: "Campanhas", url: "/trade/campanhas", icon: Megaphone },

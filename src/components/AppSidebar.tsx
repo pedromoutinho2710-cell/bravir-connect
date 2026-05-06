@@ -118,6 +118,7 @@ const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
   gestora: [
     { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
     { title: "Meu Time", url: "/gestora/time", icon: Users },
+    { title: "Clientes", url: "/gestora/clientes", icon: Users },
     { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
   ],
   trade: [
