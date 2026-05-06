@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatCNPJ } from "@/lib/format";
 import { CLUSTERS, TABELAS_PRECO, UFS } from "@/lib/constants";
-import { Loader2, Search, Users, UserX, AlertTriangle, ShieldAlert, Pencil } from "lucide-react";
+import { Loader2, Search, Users, UserX, AlertTriangle, ShieldAlert, Pencil, UserPlus } from "lucide-react";
 
 type Cliente = {
   id: string;
@@ -60,6 +61,7 @@ function statusLabel(v: string | null): string {
 }
 
 export default function ClientesGestora() {
+  const navigate = useNavigate();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
@@ -201,9 +203,15 @@ export default function ClientesGestora() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Clientes</h1>
-        <p className="text-sm text-muted-foreground">Visão completa da carteira — edite perfil, vendedor e status</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Clientes</h1>
+          <p className="text-sm text-muted-foreground">Visão completa da carteira — edite perfil, vendedor e status</p>
+        </div>
+        <Button onClick={() => navigate("/gestora/cadastrar-cliente")}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Cadastrar Cliente
+        </Button>
       </div>
 
       {/* Cards de resumo */}
