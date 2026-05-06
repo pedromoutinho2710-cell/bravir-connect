@@ -32,6 +32,7 @@ type Form = {
   tabela_preco: string;
   suframa: boolean;
   observacoes: string;
+  codigo_cliente: string;
 };
 
 const EMPTY: Form = {
@@ -52,6 +53,7 @@ const EMPTY: Form = {
   tabela_preco: "",
   suframa: false,
   observacoes: "",
+  codigo_cliente: "",
 };
 
 const UFS = [
@@ -111,6 +113,7 @@ export default function CadastrarClienteGestora() {
         tabela_preco: form.tabela_preco || null,
         suframa: form.suframa,
         observacoes_trade: form.observacoes || null,
+        codigo_cliente: form.codigo_cliente || null,
         status: "ativo",
       });
       if (error) throw error;
@@ -255,6 +258,14 @@ export default function CadastrarClienteGestora() {
         <Card>
           <CardHeader><CardTitle>3. Configurações comerciais</CardTitle></CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Código do cliente</Label>
+              <Input
+                value={form.codigo_cliente}
+                onChange={(e) => set("codigo_cliente", e.target.value)}
+                placeholder="Código interno do cliente"
+              />
+            </div>
             <div className="space-y-1.5">
               <Label>Encarteirar vendedor</Label>
               <Select value={form.vendedor_id} onValueChange={(v) => set("vendedor_id", v)}>

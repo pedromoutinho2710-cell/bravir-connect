@@ -82,6 +82,8 @@ const ADMIN_SECTIONS: Section[] = [
       { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
       { title: "Meu Time", url: "/gestora/time", icon: Users },
       { title: "Clientes", url: "/gestora/clientes", icon: Users },
+      { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
+      { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
       { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
     ],
   },
@@ -120,6 +122,8 @@ const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
     { title: "Meu Time", url: "/gestora/time", icon: Users },
     { title: "Clientes", url: "/gestora/clientes", icon: Users },
+    { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
+    { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
     { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
   ],
   trade: [

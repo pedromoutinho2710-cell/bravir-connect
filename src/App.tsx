@@ -38,6 +38,8 @@ import DashboardGestora from "./pages/gestora/DashboardGestora";
 import GestaoTime from "./pages/gestora/GestaoTime";
 import CadastrarClienteGestora from "./pages/gestora/CadastrarClienteGestora";
 import ClientesGestora from "./pages/gestora/ClientesGestora";
+import NovoPedidoGestora from "./pages/gestora/NovoPedidoGestora";
+import PedidosGestora from "./pages/gestora/PedidosGestora";
 
 const queryClient = new QueryClient();
 
@@ -97,6 +99,8 @@ const App = () => (
               <Route path="/gestora/time" element={<GestaoTime />} />
               <Route path="/gestora/clientes" element={<ClientesGestora />} />
               <Route path="/gestora/cadastrar-cliente" element={<CadastrarClienteGestora />} />
+              <Route path="/gestora/novo-pedido" element={<NovoPedidoGestora />} />
+              <Route path="/gestora/pedidos" element={<PedidosGestora />} />
             </Route>
 
             {/* Logística */}
