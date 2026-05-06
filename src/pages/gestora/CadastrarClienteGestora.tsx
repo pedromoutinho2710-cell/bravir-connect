@@ -93,37 +93,60 @@ export default function CadastrarClienteGestora() {
       toast.error("Razão social é obrigatória.");
       return;
     }
+
+    const cnpjDigits = onlyDigits(form.cnpj) || null;
+
     setLoading(true);
-    try {
-      const { error } = await (supabase.from("clientes") as any).insert({
-        razao_social: form.razao_social.trim(),
-        cnpj: onlyDigits(form.cnpj) || null,
-        email: form.email || null,
-        telefone: form.telefone || null,
-        comprador: form.comprador || null,
-        cidade: form.cidade || null,
-        uf: form.uf || null,
-        cep: form.cep || null,
-        rua: form.rua || null,
-        numero: form.numero || null,
-        bairro: form.bairro || null,
-        cluster: form.cluster || null,
-        vendedor_id: form.vendedor_id || null,
-        negativado: form.negativado,
-        tabela_preco: form.tabela_preco || null,
-        suframa: form.suframa,
-        observacoes_trade: form.observacoes || null,
-        codigo_cliente: form.codigo_cliente || null,
-        status: "ativo",
-      });
-      if (error) throw error;
-      toast.success("Cliente cadastrado com sucesso!");
-      navigate("/gestora");
-    } catch (err: any) {
-      toast.error(err.message ?? "Erro ao cadastrar cliente.");
-    } finally {
-      setLoading(false);
+
+    // Verifica duplicidade de CNPJ antes de inserir
+    if (cnpjDigits) {
+      const { data: existing } = await supabase
+        .from("clientes")
+        .select("id")
+        .eq("cnpj", cnpjDigits)
+        .maybeSingle();
+      if (existing) {
+        toast.error("CNPJ já cadastrado na base de clientes.");
+        setLoading(false);
+        return;
+      }
     }
+
+    const { error } = await (supabase.from("clientes") as any).insert({
+      razao_social: form.razao_social.trim(),
+      cnpj: cnpjDigits,
+      email: form.email || null,
+      telefone: form.telefone || null,
+      comprador: form.comprador || null,
+      cidade: form.cidade || null,
+      uf: form.uf || null,
+      cep: form.cep || null,
+      rua: form.rua || null,
+      numero: form.numero || null,
+      bairro: form.bairro || null,
+      cluster: form.cluster || null,
+      vendedor_id: form.vendedor_id || null,
+      negativado: form.negativado,
+      tabela_preco: form.tabela_preco || null,
+      suframa: form.suframa,
+      observacoes_trade: form.observacoes || null,
+      codigo_cliente: form.codigo_cliente || null,
+      status: "ativo",
+    });
+
+    setLoading(false);
+
+    if (error) {
+      if (error.code === "23505") {
+        toast.error("CNPJ já cadastrado.");
+      } else {
+        toast.error(error.message ?? "Erro ao cadastrar cliente.");
+      }
+      return;
+    }
+
+    toast.success("Cliente cadastrado com sucesso!");
+    navigate("/gestora");
   };
 
   return (
