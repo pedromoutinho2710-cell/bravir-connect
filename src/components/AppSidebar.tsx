@@ -81,6 +81,7 @@ const ADMIN_SECTIONS: Section[] = [
     items: [
       { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
       { title: "Meu Time", url: "/gestora/time", icon: Users },
+      { title: "Clientes", url: "/gestora/clientes", icon: Users },
       { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
     ],
   },
