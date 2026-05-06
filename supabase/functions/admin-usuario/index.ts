@@ -86,17 +86,48 @@ Deno.serve(async (req) => {
       user_metadata: { full_name },
     });
 
-    if (error) return err(error.message);
+    let userId: string;
 
-    const userId = data.user.id;
+    if (error) {
+      const isAlreadyExists =
+        error.message.toLowerCase().includes("already") ||
+        error.message.toLowerCase().includes("registered");
 
-    const [rolesResult, profilesResult] = await Promise.all([
-      supabaseAdmin.from("user_roles").upsert({ user_id: userId, role }, { onConflict: "user_id" }),
-      supabaseAdmin.from("profiles").upsert({ id: userId, email, full_name, role, ativo: true }, { onConflict: "id" }),
-    ]);
+      if (!isAlreadyExists) return err(error.message);
 
-    if (rolesResult.error) return err("Usuário criado mas erro ao definir role: " + rolesResult.error.message);
-    if (profilesResult.error) return err("Usuário criado mas erro ao criar profile: " + profilesResult.error.message);
+      // Usuário já existe no Auth — busca o ID pelo email via GoTrue admin API
+      const listRes = await fetch(
+        `${SUPABASE_URL}/auth/v1/admin/users?per_page=1000&filter=${encodeURIComponent(email)}`,
+        {
+          headers: {
+            apikey: SERVICE_ROLE_KEY,
+            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
+          },
+        }
+      );
+      const listData: { users?: { id: string; email: string }[] } = await listRes.json();
+      const existingUser = (listData.users ?? []).find(
+        (u) => u.email?.toLowerCase() === email.toLowerCase()
+      );
+
+      if (!existingUser) {
+        return err("Usuário já registrado mas não foi possível localizá-lo pelo email.");
+      }
+
+      userId = existingUser.id;
+    } else {
+      userId = data.user.id;
+    }
+
+    await supabaseAdmin.from("user_roles").delete().eq("user_id", userId);
+    const rolesResult = await supabaseAdmin.from("user_roles").insert({ user_id: userId, role });
+    if (rolesResult.error) return err("Erro ao definir role: " + rolesResult.error.message);
+
+    const profilesResult = await supabaseAdmin.from("profiles").upsert(
+      { id: userId, name: full_name, full_name, email, role, ativo: true },
+      { onConflict: "id" }
+    );
+    if (profilesResult.error) return err("Erro ao criar profile: " + profilesResult.error.message);
 
     return ok({ ok: true, user_id: userId });
   }
@@ -104,9 +135,8 @@ Deno.serve(async (req) => {
   // ── atualizar_role ────────────────────────────────────────────────
   if (acao === "atualizar_role") {
     const { user_id, role } = body as { user_id: string; role: string };
-    const { error } = await supabaseAdmin
-      .from("user_roles")
-      .upsert({ user_id, role }, { onConflict: "user_id" });
+    await supabaseAdmin.from("user_roles").delete().eq("user_id", user_id);
+    const { error } = await supabaseAdmin.from("user_roles").insert({ user_id, role });
     if (error) return err(error.message);
     return ok({ ok: true });
   }
@@ -175,9 +205,8 @@ Deno.serve(async (req) => {
     if (profErr) return err("Erro ao atualizar profile: " + profErr.message);
 
     // Update role
-    const { error: roleErr } = await supabaseAdmin
-      .from("user_roles")
-      .upsert({ user_id, role }, { onConflict: "user_id" });
+    await supabaseAdmin.from("user_roles").delete().eq("user_id", user_id);
+    const { error: roleErr } = await supabaseAdmin.from("user_roles").insert({ user_id, role });
     if (roleErr) return err("Erro ao atualizar perfil: " + roleErr.message);
 
     return ok({ ok: true });
