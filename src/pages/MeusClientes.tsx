@@ -11,9 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
 import { MARCAS } from "@/lib/constants";
-import { Loader2, Search, CalendarClock, CheckCircle2, Plus } from "lucide-react";
+import { Loader2, Search, CalendarClock, CheckCircle2, Plus, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
@@ -98,6 +99,8 @@ export default function MeusClientes() {
   const [novaTarefaTitulo, setNovaTarefaTitulo] = useState("");
   const [novaTarefaData, setNovaTarefaData] = useState("");
   const [salvandoTarefa, setSalvandoTarefa] = useState(false);
+  const [removerCliente, setRemoverCliente] = useState<ClienteAgregado | null>(null);
+  const [removendo, setRemovendo] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -294,6 +297,21 @@ export default function MeusClientes() {
     setTarefas((prev) => prev.map((x) => x.id === t.id ? { ...x, concluida: !x.concluida } : x));
   };
 
+  const confirmarRemover = async () => {
+    if (!removerCliente) return;
+    setRemovendo(true);
+    const { error } = await supabase
+      .from("clientes")
+      .update({ vendedor_id: null })
+      .eq("id", removerCliente.cliente_id);
+    setRemovendo(false);
+    if (error) { toast.error("Erro ao remover da carteira"); return; }
+    toast.success(`${removerCliente.razao_social} removido da carteira`);
+    setRemoverCliente(null);
+    setSheetCliente(null);
+    setClientes((prev) => prev.filter((c) => c.cliente_id !== removerCliente.cliente_id));
+  };
+
   const clientesFiltrados = useMemo(() => {
     const filtrados = busca.trim()
       ? clientes.filter((c) => {
@@ -452,14 +470,24 @@ export default function MeusClientes() {
           <SheetHeader>
             <SheetTitle className="flex items-center justify-between gap-2">
               <span className="truncate">{sheetCliente?.razao_social}</span>
-              <Button
-                size="sm"
-                variant="outline"
-                className="shrink-0"
-                onClick={() => sheetCliente && navigate(`/clientes/${sheetCliente.cliente_id}`)}
-              >
-                Ficha completa
-              </Button>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => sheetCliente && navigate(`/clientes/${sheetCliente.cliente_id}`)}
+                >
+                  Ficha completa
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-red-600 border-red-300 hover:bg-red-50"
+                  onClick={() => sheetCliente && setRemoverCliente(sheetCliente)}
+                >
+                  <UserMinus className="h-3.5 w-3.5 mr-1" />
+                  Remover da carteira
+                </Button>
+              </div>
             </SheetTitle>
           </SheetHeader>
 
@@ -574,6 +602,28 @@ export default function MeusClientes() {
           )}
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={!!removerCliente} onOpenChange={(o) => !o && setRemoverCliente(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover da carteira?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{removerCliente?.razao_social}</strong> será desvinculado da sua carteira, mas não será excluído do sistema. O cliente ficará sem vendedor até ser reatribuído.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmarRemover}
+              disabled={removendo}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              {removendo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Remover da carteira
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <PedidoDetalhesDialog
         pedidoId={detalhesId}
