@@ -101,8 +101,8 @@ export function gerarPedidoPDF(d: PdfData): jsPDF {
         `${i.codigo} — ${i.nome}`,
         String(i.quantidade),
         `${(i.desconto_perfil * 100).toFixed(1)}%`,
-        `${(i.desconto_comercial * 100).toFixed(1)}%`,
-        `${(i.desconto_trade * 100).toFixed(1)}%`,
+        `${Number(i.desconto_comercial).toFixed(1)}%`,
+        `${Number(i.desconto_trade).toFixed(1)}%`,
         formatBRL(i.preco_final),
         formatBRL(i.total),
       ]),
@@ -199,7 +199,8 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
 
   const n = (v?: string | null) => v || "—";
   const fR = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
-  const fP = (v: number) => `${(Number(v) * 100).toFixed(1)}%`;
+  const fPDecimal = (v: number) => `${(v * 100).toFixed(1)}%`;
+  const fPInt = (v: number) => `${Number(v).toFixed(1)}%`;
   const rowH = 7;
   const c3 = W / 3;
   const c2 = W / 2;
@@ -319,10 +320,10 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
       String(i.quantidade),
       i.nome,
       fR(i.preco_bruto),
-      fP(i.desconto_perfil),
-      fP(i.desconto_comercial),
+      fPDecimal(i.desconto_perfil),
+      fPInt(i.desconto_comercial),
       fR(i.preco_apos_perfil),
-      fP(i.desconto_trade),
+      fPInt(i.desconto_trade),
       fR(i.preco_final),
       fR(descontoReal),
       fR(i.total_item),

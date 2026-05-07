@@ -653,14 +653,14 @@ export default function Faturamento() {
     const pesoTotal = p.itens.reduce((s, i) => s + i.peso_unitario * i.quantidade, 0);
     const totalDesconto = totalBruto - p.total;
 
-    const uniqPct = (fn: (i: ExcelItemRaw) => number) => {
+    const uniqPct = (fn: (i: ExcelItemRaw) => number, mult = 1) => {
       const vals = [...new Set(p.itens.map(fn))];
-      const toP = (v: number) => `${(v * 100).toFixed(1)}%`;
+      const toP = (v: number) => `${(v * mult).toFixed(1)}%`;
       return vals.length === 1
         ? toP(vals[0])
         : `${toP(Math.min(...vals))}~${toP(Math.max(...vals))}`;
     };
-    const descCluster = uniqPct((i) => i.desconto_perfil);
+    const descCluster = uniqPct((i) => i.desconto_perfil, 100);
     const descVendedor = uniqPct((i) => i.desconto_comercial);
     const descTrade = uniqPct((i) => i.desconto_trade);
 
