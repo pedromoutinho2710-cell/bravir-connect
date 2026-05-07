@@ -1,12 +1,12 @@
-﻿import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useNovoPedido } from "@/hooks/useNovoPedido";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -21,128 +21,55 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
-import { onlyDigits, formatBRL, formatDate, formatCNPJ, formatCEP } from "@/lib/format";
-import { gerarPedidoPDF, type PdfItem } from "@/lib/pdf";
-import { gerarPedidoDocx } from "@/lib/docx";
-import { SecaoCliente, type DadosCliente } from "@/components/pedido/SecaoCliente";
-import { SecaoProdutos, type ItemPedido, type Produto } from "@/components/pedido/SecaoProdutos";
+import { formatBRL, formatCNPJ, formatCEP } from "@/lib/format";
+import { SecaoCliente } from "@/components/pedido/SecaoCliente";
+import { SecaoProdutos, type ItemPedido } from "@/components/pedido/SecaoProdutos";
 import { ResumoFinanceiro } from "@/components/pedido/ResumoFinanceiro";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 
-const initialCliente: DadosCliente = {
-  cnpj: "",
-  razao_social: "",
-  cidade: "",
-  uf: "",
-  cep: "",
-  comprador: "",
-  cluster: "",
-  tabela_preco: "",
-  tipo: "Pedido",
-  cond_pagamento: "",
-  agendamento: false,
-  observacoes: "",
-  codigo_cliente: "",
-  aceita_saldo: true,
-  ordem_compra: "",
-  email_xml: "",
-};
-
-
 export default function NovoPedido() {
   const { user } = useAuth();
-  const rascunhoKey = `bravir:rascunho-pedido:${user?.id ?? "anonimo"}`;
-  const navigate = useNavigate();
   const location = useLocation();
 
   const [pedidoMinimo, setPedidoMinimo] = useState(5000);
+  const [pedidoMinimoLoading, setPedidoMinimoLoading] = useState(true);
 
-  const [cliente, setCliente] = useState<DadosCliente>(initialCliente);
-  const [itens, setItens] = useState<ItemPedido[]>([]);
-  const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [descontos, setDescontos] = useState<Record<string, Record<string, number>>>({});
+  const {
+    cliente, setCliente,
+    itens, setItens,
+    vigenciaId, setVigenciaId,
+    previewOpen, setPreviewOpen,
+    showLimpar, setShowLimpar,
+    produtos,
+    descontos,
+    vigencias,
+    loading: hookLoading,
+    enviando,
+    salvandoRascunho,
+    camposObrigatoriosOk,
+    podeSalvar,
+    podeEnviar,
+    totalGeral,
+    descontoLivre,
+    onEnviarFaturamento,
+    salvarRascunhoManual,
+    limparPedido,
+    baixarPDF,
+  } = useNovoPedido({ variant: "vendedor", navigateAfterEnviar: "/meus-pedidos" });
 
-  type Vigencia = { id: string; nome: string; created_at: string; desconto_livre: boolean };
-  const [vigencias, setVigencias] = useState<Vigencia[]>([]);
-  const [vigenciaId, setVigenciaId] = useState<string>("");
-  const [loading, setLoading] = useState(true);
-  const [enviando, setEnviando] = useState(false);
-  const [salvandoRascunho, setSalvandoRascunho] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [pedidoId, setPedidoId] = useState<string | null>(null);
-
-  const [showLimpar, setShowLimpar] = useState(false);
-
-  // Refs de timers
-  const localSaveTimer = useRef<number | null>(null);
-  const pedidoEnviadoRef = useRef(false); // bloqueia auto-saves após envio bem-sucedido
-  const prevVigenciaRef = useRef<string | null>(null); // detecta troca manual de vigência
-
-  // ── Carrega catálogo ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     (async () => {
-      // Tenta carregar produtos via formulário padrão; fallback para todos ativos
-      const formRes = await supabase
-        .from("formularios")
-        .select("id, formulario_produtos(produto_id)")
-        .eq("padrao", true)
-        .eq("ativo", true)
-        .maybeSingle();
-
-      let prodQuery = supabase.from("produtos").select("*").eq("ativo", true).order("marca").order("nome");
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fpIds: string[] = (formRes.data as any)?.formulario_produtos?.map((fp: { produto_id: string }) => fp.produto_id) ?? [];
-      if (fpIds.length > 0) {
-        prodQuery = supabase.from("produtos").select("*").in("id", fpIds).order("marca").order("nome");
-      }
-
-      const [pRes, dRes, vigRes, profRes] = await Promise.all([
-        prodQuery,
-        supabase.from("descontos").select("*"),
-        supabase
-          .from("tabelas_vigencia")
-          .select("id, nome, created_at, desconto_livre")
-          .eq("ativa", true)
-          .order("created_at", { ascending: false }),
-        supabase.from("profiles").select("pedido_minimo").eq("id", user.id).single(),
-      ]);
-
-      if (pRes.data) setProdutos(pRes.data as Produto[]);
-      if (dRes.data) {
-        const map: Record<string, Record<string, number>> = {};
-        dRes.data.forEach((d) => { (map[d.produto_id] ||= {})[d.perfil_cliente] = Number(d.percentual_desconto); });
-        setDescontos(map);
-      }
-      if (profRes.data?.pedido_minimo) setPedidoMinimo(profRes.data.pedido_minimo);
-      if (vigRes.data && vigRes.data.length > 0) {
-        setVigencias(vigRes.data as Vigencia[]);
-        // Default: first = mais recente (ordered desc)
-        setVigenciaId(vigRes.data[0].id);
-      }
-
-      // Restaura rascunho do localStorage silenciosamente
-      try {
-        const raw = localStorage.getItem(rascunhoKey);
-        if (raw) {
-          const saved = JSON.parse(raw);
-          if (saved.cliente) setCliente(saved.cliente);
-          if (saved.itens) setItens(saved.itens);
-          if (saved.pedidoId) setPedidoId(saved.pedidoId);
-          if (saved.vigenciaId) setVigenciaId(saved.vigenciaId);
-        }
-      } catch { /* ignore */ }
-
-      setLoading(false);
+      const { data } = await supabase.from("profiles").select("pedido_minimo").eq("id", user.id).single();
+      if (data?.pedido_minimo) setPedidoMinimo(data.pedido_minimo);
+      setPedidoMinimoLoading(false);
     })();
-  }, [user]);
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Pre-fill cliente a partir do detalhe do cliente ───────────────────────
   useEffect(() => {
-    if (loading) return;
+    if (hookLoading) return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const fc = (location.state as any)?.fromCliente;
     if (!fc) return;
@@ -158,344 +85,14 @@ export default function NovoPedido() {
       cluster: fc.cluster ?? "",
       tabela_preco: fc.tabela_preco ?? "",
     }));
-  }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [hookLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── podeSalvar / podeEnviar ────────────────────────────────────────────────
-  const camposObrigatoriosOk = !!(
-    cliente.cond_pagamento.trim() &&
-    cliente.email_xml.trim() &&
-    cliente.codigo_cliente.trim() &&
-    cliente.comprador.trim()
-  );
-
-  const podeSalvar = useMemo(() => (
-    onlyDigits(cliente.cnpj).length === 14 &&
-    cliente.razao_social.trim().length > 0 &&
-    !!cliente.cluster &&
-    !!cliente.tabela_preco &&
-    camposObrigatoriosOk
-  ), [cliente, camposObrigatoriosOk]);
-
-  const totalGeral = itens.reduce((s, i) => s + i.total, 0);
   const atingiuMinimo = totalGeral >= pedidoMinimo;
   const progresso = pedidoMinimo > 0 ? Math.min(100, (totalGeral / pedidoMinimo) * 100) : 100;
   const progressoColor = progresso >= 100 ? "bg-green-500" : progresso >= 70 ? "bg-yellow-400" : "bg-red-500";
   const progressoTextColor = progresso >= 100 ? "text-green-700" : progresso >= 70 ? "text-yellow-700" : "text-red-600";
 
-  const podeEnviar = podeSalvar && itens.length > 0 && atingiuMinimo;
-
-  // ── Garante cliente cadastrado ─────────────────────────────────────────────
-  const garantirCliente = async (): Promise<string | null> => {
-    if (cliente.cliente_id) return cliente.cliente_id;
-    const { data, error } = await supabase
-      .from("clientes")
-      .upsert(
-        {
-          cnpj: onlyDigits(cliente.cnpj),
-          razao_social: cliente.razao_social,
-          cidade: cliente.cidade || null,
-          uf: cliente.uf || null,
-          cep: onlyDigits(cliente.cep) || null,
-          comprador: cliente.comprador || null,
-          codigo_cliente: cliente.codigo_cliente || null,
-          aceita_saldo: cliente.aceita_saldo,
-        },
-        { onConflict: "cnpj" },
-      )
-      .select("id")
-      .single();
-    if (error) {
-      toast.error("Erro ao salvar cliente: " + error.message);
-      return null;
-    }
-    setCliente((c) => ({ ...c, cliente_id: data.id }));
-    return data.id;
-  };
-
-  // ── Salva pedido no banco ──────────────────────────────────────────────────
-  const salvarPedido = async (status: "rascunho" | "aguardando_faturamento"): Promise<string | null> => {
-    if (!user || !podeSalvar) return null;
-    const cliente_id = await garantirCliente();
-    if (!cliente_id) return null;
-
-    const obsCompletas = [
-      cliente.ordem_compra ? `OC: ${cliente.ordem_compra}` : "",
-      cliente.observacoes,
-    ].filter(Boolean).join("\n") || null;
-
-    let id = pedidoId;
-    if (id) {
-      const { error } = await supabase
-        .from("pedidos")
-        .update({
-          tipo: cliente.tipo,
-          cliente_id,
-          perfil_cliente: cliente.cluster,
-          tabela_preco: cliente.tabela_preco,
-          cond_pagamento: cliente.cond_pagamento || null,
-          agendamento: cliente.agendamento,
-          observacoes: obsCompletas,
-          vigencia_id: vigenciaId || null,
-          status,
-        })
-        .eq("id", id);
-      if (error) {
-        if (status !== "rascunho") toast.error("Erro ao atualizar: " + error.message);
-        return null;
-      }
-    } else {
-      const { data, error } = await supabase
-        .from("pedidos")
-        .insert({
-          tipo: cliente.tipo,
-          vendedor_id: user.id,
-          cliente_id,
-          perfil_cliente: cliente.cluster,
-          tabela_preco: cliente.tabela_preco,
-          cond_pagamento: cliente.cond_pagamento || null,
-          agendamento: cliente.agendamento,
-          observacoes: obsCompletas,
-          vigencia_id: vigenciaId || null,
-          status,
-        })
-        .select("id")
-        .single();
-      if (error) {
-        if (status !== "rascunho") toast.error("Erro ao criar pedido: " + error.message);
-        return null;
-      }
-      id = data.id;
-      setPedidoId(id);
-    }
-
-    // Substitui itens: delete first, then upsert to handle any constraint conflicts
-    await supabase.from("itens_pedido").delete().eq("pedido_id", id);
-
-    if (itens.length > 0) {
-      const itemsPayload = itens.map((i) => ({
-        pedido_id: id,
-        produto_id: i.produto_id,
-        quantidade: i.quantidade,
-        preco_unitario_bruto: i.preco_bruto,
-        preco_unitario_liquido: i.preco_final,
-        desconto_comercial: i.desconto_comercial,
-        desconto_trade: i.desconto_trade,
-        desconto_perfil: i.desconto_perfil,
-        preco_apos_perfil: i.preco_apos_perfil,
-        preco_apos_comercial: i.preco_apos_comercial,
-        preco_final: i.preco_final,
-        total_item: i.total,
-      }));
-      // Upsert on (pedido_id, produto_id) so re-saving never causes a 409 conflict
-      const { error } = await supabase
-        .from("itens_pedido")
-        .upsert(itemsPayload, { onConflict: "pedido_id,produto_id" });
-      if (error) {
-        if (status !== "rascunho") toast.error("Erro ao salvar itens: " + error.message);
-        return null;
-      }
-    }
-    return id;
-  };
-
-  // ── Reset itens ao trocar vigência ────────────────────────────────────────
-  // prevVigenciaRef=null → primeiro disparo (carga inicial) → só grava, não limpa
-  useEffect(() => {
-    if (prevVigenciaRef.current === null) {
-      prevVigenciaRef.current = vigenciaId;
-      return;
-    }
-    if (prevVigenciaRef.current === vigenciaId) return;
-    prevVigenciaRef.current = vigenciaId;
-    if (!vigenciaId) return;
-    setItens([]);
-    toast.info("Tabela de preços alterada. Os produtos foram removidos.");
-  }, [vigenciaId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Auto-save LOCAL (500ms) ────────────────────────────────────────────────
-  useEffect(() => {
-    if (loading || pedidoEnviadoRef.current) return;
-    if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
-    localSaveTimer.current = window.setTimeout(() => {
-      if (pedidoEnviadoRef.current) return;
-      localStorage.setItem(rascunhoKey, JSON.stringify({ cliente, itens, pedidoId, vigenciaId }));
-    }, 500);
-  }, [cliente, itens, pedidoId, loading]);
-
-  // ── Limpar pedido ─────────────────────────────────────────────────────────
-  const limparPedido = () => {
-    setItens([]);
-    setCliente(initialCliente);
-    setPedidoId(null);
-    localStorage.removeItem(rascunhoKey);
-    setShowLimpar(false);
-  };
-
-  // ── Salvar rascunho manualmente ────────────────────────────────────────────
-  const salvarRascunhoManual = async () => {
-    if (!podeSalvar) {
-      toast.error("Preencha CNPJ, razão social, perfil e tabela de preço.");
-      return;
-    }
-    setSalvandoRascunho(true);
-    const id = await salvarPedido("rascunho");
-    setSalvandoRascunho(false);
-    if (id) toast.success("Rascunho salvo!");
-  };
-
-  // ── Enviar para faturamento ────────────────────────────────────────────────
-  const onEnviarFaturamento = async () => {
-    if (!podeEnviar) {
-      toast.error("Adicione ao menos um produto antes de enviar.");
-      return;
-    }
-    setEnviando(true);
-
-    // Delete existing items first to avoid 409 conflicts from previously auto-saved drafts
-    if (pedidoId) {
-      await supabase
-        .from("itens_pedido")
-        .delete()
-        .eq("pedido_id", pedidoId);
-    }
-
-    const id = await salvarPedido("aguardando_faturamento");
-    if (id) {
-      // Gera docx e envia email (best-effort)
-      try {
-        const { data: pedData } = await supabase
-          .from("pedidos")
-          .select("numero_pedido")
-          .eq("id", id)
-          .single();
-
-        if (pedData) {
-          const docxBlob = await gerarPedidoDocx({
-            numero_pedido: pedData.numero_pedido,
-            data_pedido: formatDate(new Date()),
-            cliente: {
-              razao_social: cliente.razao_social,
-              cnpj: cliente.cnpj,
-              comprador: cliente.comprador,
-              cidade: cliente.cidade,
-              uf: cliente.uf,
-            },
-            vendedor: user?.email ?? "",
-            cond_pagamento: cliente.cond_pagamento,
-            observacoes: cliente.observacoes,
-            itens: itens.map((i, idx) => ({
-              numero: idx + 1,
-              codigo_jiva: i.codigo,
-              cx_embarque: i.cx_embarque,
-              quantidade: i.quantidade,
-              nome: i.nome,
-              preco_bruto: i.preco_bruto,
-              desconto_pct: i.desconto_perfil + i.desconto_comercial + i.desconto_trade,
-              preco_liquido: i.preco_final,
-              bolsao: i.bolsao,
-              total: i.total,
-              peso: i.peso_unitario,
-              total_peso: i.peso_unitario * i.quantidade,
-            })),
-          });
-          const docxBuffer = await docxBlob.arrayBuffer();
-          const uint8 = new Uint8Array(docxBuffer);
-          let binary = "";
-          for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
-          const docx_base64 = btoa(binary);
-          const filename = `Pedido_${pedData.numero_pedido}.docx`;
-
-          await supabase.functions.invoke("enviar-pedido-email", {
-            body: { pedido_id: id, docx_base64, filename },
-          });
-        }
-      } catch (err) {
-        console.warn("Falha ao enviar email:", err);
-        toast.warning("Pedido salvo, mas houve falha ao enviar o email de notificação.");
-      }
-
-      // Salvar email_xml no cadastro do cliente (best-effort)
-      if (cliente.email_xml.trim()) {
-        supabase
-          .from("clientes")
-          .update({ email: cliente.email_xml.trim() })
-          .eq("cnpj", onlyDigits(cliente.cnpj))
-          .then(() => {});
-      }
-
-      // Notificar todos os usuários de faturamento
-      try {
-        const { data: fatRoles } = await supabase
-          .from("user_roles")
-          .select("user_id")
-          .eq("role", "faturamento");
-        const fatIds = (fatRoles ?? []).map((r) => r.user_id);
-        if (fatIds.length > 0) {
-          const { data: pedData2 } = await supabase
-            .from("pedidos")
-            .select("numero_pedido")
-            .eq("id", id)
-            .single();
-          const numPed = pedData2?.numero_pedido ?? "";
-          const nomeVendedor = user?.email ?? "Vendedor";
-          await supabase.from("notificacoes").insert(
-            fatIds.map((uid: string) => ({
-              destinatario_id: uid,
-              destinatario_role: "faturamento",
-              tipo: "novo_pedido",
-              mensagem: `Novo pedido #${numPed} de ${nomeVendedor}`,
-            }))
-          );
-        }
-      } catch { /* best-effort */ }
-
-      pedidoEnviadoRef.current = true;
-      if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
-      localStorage.removeItem(rascunhoKey);
-      toast.success("Pedido enviado para faturamento!");
-      navigate("/meus-pedidos");
-    }
-    setEnviando(false);
-  };
-
-  // ── PDF ────────────────────────────────────────────────────────────────────
-  const itensPdf: PdfItem[] = itens.map((i) => ({
-    marca: i.marca,
-    codigo: i.codigo,
-    nome: i.nome,
-    quantidade: i.quantidade,
-    preco_bruto: i.preco_bruto,
-    desconto_perfil: i.desconto_perfil,
-    desconto_comercial: i.desconto_comercial,
-    desconto_trade: i.desconto_trade,
-    preco_final: i.preco_final,
-    total: i.total,
-  }));
-
-  const baixarPDF = () => {
-    const doc = gerarPedidoPDF({
-      data: new Date(),
-      tipo: cliente.tipo,
-      cliente: {
-        cnpj: cliente.cnpj,
-        razao_social: cliente.razao_social,
-        cidade: cliente.cidade,
-        uf: cliente.uf,
-        comprador: cliente.comprador,
-      },
-      cluster: cliente.cluster,
-      tabela_preco: cliente.tabela_preco,
-      cond_pagamento: cliente.cond_pagamento,
-      agendamento: cliente.agendamento,
-      observacoes: cliente.observacoes,
-      itens: itensPdf,
-      vendedor_email: user?.email,
-    });
-    const nomeArquivo = `pedido-${(cliente.razao_social || "rascunho").slice(0, 20)}-${formatDate(new Date()).replace(/\//g, "-")}.pdf`;
-    doc.save(nomeArquivo);
-  };
-
-  if (loading) {
+  if (hookLoading || pedidoMinimoLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -562,7 +159,7 @@ export default function NovoPedido() {
         onChange={setItens}
         vendedorEmail={user?.email ?? ""}
         vigenciaId={vigenciaId}
-        descontoLivre={vigencias.find((v) => v.id === vigenciaId)?.desconto_livre ?? false}
+        descontoLivre={descontoLivre}
         bloqueado={!camposObrigatoriosOk}
       />
 
@@ -602,7 +199,7 @@ export default function NovoPedido() {
             {salvandoRascunho ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             Salvar Rascunho
           </Button>
-          <Button onClick={onEnviarFaturamento} disabled={!podeEnviar || enviando}>
+          <Button onClick={onEnviarFaturamento} disabled={!(podeEnviar && atingiuMinimo) || enviando}>
             {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             Enviar para faturamento
           </Button>
