@@ -140,9 +140,22 @@ export default function FilaCadastros() {
         .eq("id", selected.id);
       if (error) throw error;
 
+      if (selected.cnpj) {
+        const { data: existing } = await (supabase.from("clientes") as any)
+          .select("id")
+          .eq("cnpj", selected.cnpj)
+          .maybeSingle();
+        if (existing) {
+          toast.error("CNPJ já cadastrado na base de clientes.");
+          setSelected(null);
+          load();
+          return;
+        }
+      }
+
       const { error: insErr } = await (supabase.from("clientes") as any).insert({
         razao_social: selected.razao_social ?? selected.nome_cliente ?? "Sem nome",
-        cnpj: selected.cnpj ?? "00000000000000",
+        cnpj: selected.cnpj ?? null,
         email: selected.email ?? null,
         telefone: selected.telefone ?? null,
         cidade: null,
