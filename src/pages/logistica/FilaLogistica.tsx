@@ -49,11 +49,11 @@ const ICMS_UF: Record<string, number> = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  aguardando_faturamento: "Aguardando",
+  no_sankhya: "No Sankhya",
   parcialmente_faturado: "Parc. pré-faturado",
 };
 const STATUS_COLOR: Record<string, string> = {
-  aguardando_faturamento: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
   parcialmente_faturado: "bg-teal-100 text-teal-800 border-teal-300",
 };
 
@@ -128,7 +128,7 @@ export default function FilaLogistica() {
           produtos(nome, codigo_jiva, cx_embarque, peso_unitario)
         )
       `)
-      .in("status", ["aguardando_faturamento", "parcialmente_faturado"])
+      .in("status", ["no_sankhya", "parcialmente_faturado"])
       .order("data_pedido", { ascending: true });
 
     if (error) { toast.error("Erro ao carregar pedidos"); setLoading(false); return; }
