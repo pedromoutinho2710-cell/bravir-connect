@@ -100,9 +100,9 @@ export function gerarPedidoPDF(d: PdfData): jsPDF {
       body: itens.map((i) => [
         `${i.codigo} — ${i.nome}`,
         String(i.quantidade),
-        `${i.desconto_perfil}%`,
-        `${i.desconto_comercial}%`,
-        `${i.desconto_trade}%`,
+        `${(i.desconto_perfil * 100).toFixed(1)}%`,
+        `${(i.desconto_comercial * 100).toFixed(1)}%`,
+        `${(i.desconto_trade * 100).toFixed(1)}%`,
         formatBRL(i.preco_final),
         formatBRL(i.total),
       ]),
@@ -184,6 +184,7 @@ export type FormularioPdfData = {
   agendamento: boolean;
   tabela_preco: string;
   observacoes?: string | null;
+  email_xml?: string | null;
   vendedor: string;
   itens: FormularioItem[];
   total: number;
@@ -198,7 +199,7 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
 
   const n = (v?: string | null) => v || "—";
   const fR = (v: number) => `R$ ${v.toFixed(2).replace(".", ",")}`;
-  const fP = (v: number) => `${Number(v).toFixed(1)}%`;
+  const fP = (v: number) => `${(Number(v) * 100).toFixed(1)}%`;
   const rowH = 7;
   const c3 = W / 3;
   const c2 = W / 2;
@@ -272,7 +273,11 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
   hcell(ml, y, W, "OBSERVAÇÕES", n(d.observacoes));
   y += rowH;
 
-  // Row 8 — título tabela
+  // Row 8 — email xml (largura total)
+  hcell(ml, y, W, "EMAIL XML / BOLETO", n(d.email_xml));
+  y += rowH;
+
+  // Row 9 — título tabela
   doc.setFillColor(240, 240, 235);
   doc.rect(ml, y, W, 5, "F");
   doc.setDrawColor(160);

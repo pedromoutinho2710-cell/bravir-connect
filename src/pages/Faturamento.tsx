@@ -655,7 +655,10 @@ export default function Faturamento() {
 
     const uniqPct = (fn: (i: ExcelItemRaw) => number) => {
       const vals = [...new Set(p.itens.map(fn))];
-      return vals.length === 1 ? `${vals[0]}%` : `${Math.min(...vals)}%~${Math.max(...vals)}%`;
+      const toP = (v: number) => `${(v * 100).toFixed(1)}%`;
+      return vals.length === 1
+        ? toP(vals[0])
+        : `${toP(Math.min(...vals))}~${toP(Math.max(...vals))}`;
     };
     const descCluster = uniqPct((i) => i.desconto_perfil);
     const descVendedor = uniqPct((i) => i.desconto_comercial);
@@ -689,6 +692,7 @@ export default function Faturamento() {
       <h2>Pedido #${p.numero_pedido} — ${p.razao_social}</h2>
       <p>CNPJ: ${formatCNPJ(p.cnpj)} | Data: ${formatDate(p.data_pedido)} | Vendedor: ${vendedor}</p>
       ${p.codigo_cliente ? `<p><strong>Código Sankhya:</strong> ${p.codigo_cliente}</p>` : ""}
+      <p>Cidade/UF: ${p.cidade ?? "—"} - ${p.uf ?? "—"}</p>
       <p>Cond. Pagamento: ${p.cond_pagamento ?? "—"} | Cluster: ${p.cluster ?? "—"} | Agendamento: ${p.agendamento ? "Sim" : "Não"}</p>
       ${p.comprador ? `<p>Comprador: ${p.comprador}</p>` : ""}
       ${p.email_xml ? `<p>Email XML/Boleto: ${p.email_xml}</p>` : ""}
@@ -752,6 +756,7 @@ export default function Faturamento() {
       agendamento: p.agendamento,
       tabela_preco: p.tabela_preco,
       observacoes: p.observacoes,
+      email_xml: p.email_xml,
       vendedor: profiles[p.vendedor_id] ?? "—",
       itens: p.itens.map((i) => ({
         codigo_jiva: i.codigo,

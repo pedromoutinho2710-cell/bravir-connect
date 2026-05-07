@@ -415,6 +415,15 @@ export default function NovoPedido() {
         toast.warning("Pedido salvo, mas houve falha ao enviar o email de notificação.");
       }
 
+      // Salvar email_xml no cadastro do cliente (best-effort)
+      if (cliente.email_xml.trim()) {
+        supabase
+          .from("clientes")
+          .update({ email: cliente.email_xml.trim() })
+          .eq("cnpj", onlyDigits(cliente.cnpj))
+          .then(() => {});
+      }
+
       // Notificar todos os usuários de faturamento
       try {
         const { data: fatRoles } = await supabase
