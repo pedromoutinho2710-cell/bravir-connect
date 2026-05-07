@@ -15,7 +15,7 @@ import { gerarPedidoDocx } from "@/lib/docx";
 import { SecaoCliente, type DadosCliente } from "@/components/pedido/SecaoCliente";
 import { SecaoProdutos, type ItemPedido, type Produto } from "@/components/pedido/SecaoProdutos";
 import { ResumoFinanceiro } from "@/components/pedido/ResumoFinanceiro";
-import { FileDown, Eye, Send, Loader2, CalendarRange, RotateCcw, Users } from "lucide-react";
+import { FileDown, Eye, Send, Loader2, CalendarRange, RotateCcw, Users, Save } from "lucide-react";
 
 type Vendedor = { id: string; nome: string };
 type Vigencia = { id: string; nome: string; created_at: string; desconto_livre: boolean };
@@ -42,6 +42,7 @@ const initialCliente: DadosCliente = {
 export default function NovoPedidoGestora() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const rascunhoKey = `bravir:rascunho-gestora:${user?.id ?? "anonimo"}`;
 
   const [representanteId, setRepresentanteId] = useState("");
   const [representantes, setRepresentantes] = useState<Vendedor[]>([]);
@@ -54,12 +55,14 @@ export default function NovoPedidoGestora() {
   const [vigenciaId, setVigenciaId] = useState("");
   const [loading, setLoading] = useState(true);
   const [enviando, setEnviando] = useState(false);
+  const [salvandoRascunho, setSalvandoRascunho] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [showLimpar, setShowLimpar] = useState(false);
   const [pedidoId, setPedidoId] = useState<string | null>(null);
 
   const prevVigenciaRef = useRef<string | null>(null);
   const pedidoEnviadoRef = useRef(false);
+  const localSaveTimer = useRef<number | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -101,8 +104,20 @@ export default function NovoPedidoGestora() {
       }
 
       setLoading(false);
+
+      try {
+        const raw = localStorage.getItem(rascunhoKey);
+        if (raw) {
+          const saved = JSON.parse(raw);
+          if (saved.cliente) setCliente(saved.cliente);
+          if (saved.itens) setItens(saved.itens);
+          if (saved.pedidoId) setPedidoId(saved.pedidoId);
+          if (saved.vigenciaId) setVigenciaId(saved.vigenciaId);
+          if (saved.representanteId) setRepresentanteId(saved.representanteId);
+        }
+      } catch { /* ignore */ }
     })();
-  }, [user]);
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (prevVigenciaRef.current === null) { prevVigenciaRef.current = vigenciaId; return; }
@@ -112,6 +127,15 @@ export default function NovoPedidoGestora() {
     setItens([]);
     toast.info("Tabela de preços alterada. Os produtos foram removidos.");
   }, [vigenciaId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (loading || pedidoEnviadoRef.current) return;
+    if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
+    localSaveTimer.current = window.setTimeout(() => {
+      if (pedidoEnviadoRef.current) return;
+      localStorage.setItem(rascunhoKey, JSON.stringify({ cliente, itens, pedidoId, vigenciaId, representanteId }));
+    }, 500);
+  }, [cliente, itens, pedidoId, loading, representanteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const camposObrigatoriosOk = !!(
     cliente.cond_pagamento.trim() &&
@@ -304,6 +328,8 @@ export default function NovoPedidoGestora() {
       } catch { /* best-effort */ }
 
       pedidoEnviadoRef.current = true;
+      if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
+      localStorage.removeItem(rascunhoKey);
       toast.success("Pedido enviado para faturamento!");
       navigate("/gestora/pedidos");
     }
@@ -311,11 +337,22 @@ export default function NovoPedidoGestora() {
   };
 
   const limparPedido = () => {
+    localStorage.removeItem(rascunhoKey);
     setItens([]);
     setCliente(initialCliente);
     setPedidoId(null);
     setRepresentanteId("");
     setShowLimpar(false);
+  };
+
+  const salvarRascunhoManual = async () => {
+    if (!podeSalvar) {
+      toast.error("Preencha todos os campos obrigatórios antes de salvar.");
+      return;
+    }
+    setSalvandoRascunho(true);
+    toast.success("Rascunho salvo!");
+    setSalvandoRascunho(false);
   };
 
   const itensPdf: PdfItem[] = itens.map((i) => ({
@@ -453,6 +490,10 @@ export default function NovoPedidoGestora() {
             <Button variant="outline" onClick={baixarPDF} disabled={itens.length === 0}>
               <FileDown className="h-4 w-4" />
               PDF
+            </Button>
+            <Button variant="outline" onClick={salvarRascunhoManual} disabled={!podeSalvar || salvandoRascunho}>
+              {salvandoRascunho ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Salvar Rascunho
             </Button>
             <Button onClick={onEnviarFaturamento} disabled={!podeEnviar || enviando}>
               {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
