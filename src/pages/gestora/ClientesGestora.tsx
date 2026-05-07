@@ -164,10 +164,10 @@ export default function ClientesGestora() {
         "id, razao_social, cnpj, email, telefone, comprador, cidade, uf, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade",
         { count: "exact" }
       )
-      .order("razao_social")
-      .range(pagina * PAGE_SIZE, (pagina + 1) * PAGE_SIZE - 1);
+      .order("razao_social");
 
-    // Busca server-side
+    // Busca server-side: quando há texto, busca sem range (retorna todos os matches)
+    // quando vazio, limita ao range da página para não carregar tudo de uma vez
     if (buscaDebounced.trim()) {
       const buscaDigits = buscaDebounced.replace(/\D/g, "");
       if (buscaDigits.length >= 4) {
@@ -175,6 +175,8 @@ export default function ClientesGestora() {
       } else {
         query = query.ilike("razao_social", `%${buscaDebounced}%`);
       }
+    } else {
+      query = query.range(pagina * PAGE_SIZE, (pagina + 1) * PAGE_SIZE - 1);
     }
 
     if (filtroVendedor !== "todos") query = query.eq("vendedor_id", filtroVendedor);
@@ -460,33 +462,35 @@ export default function ClientesGestora() {
             </Table>
           </div>
 
-          {/* Paginação */}
-          <div className="flex items-center justify-between pt-1">
-            <span className="text-sm text-muted-foreground">
-              Mostrando {pagina * PAGE_SIZE + 1}–{Math.min((pagina + 1) * PAGE_SIZE, totalCount)} de {totalCount}
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPagina((p) => p - 1)}
-                disabled={pagina === 0}
-              >
-                <ChevronLeft className="h-4 w-4 mr-1" />
-                Anterior
-              </Button>
-              <span className="text-sm px-1">Página {pagina + 1}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPagina((p) => p + 1)}
-                disabled={!temProxima}
-              >
-                Próxima
-                <ChevronRight className="h-4 w-4 ml-1" />
-              </Button>
+          {/* Paginação — oculta durante busca ativa */}
+          {!buscaDebounced.trim() && (
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-sm text-muted-foreground">
+                Mostrando {pagina * PAGE_SIZE + 1}–{Math.min((pagina + 1) * PAGE_SIZE, totalCount)} de {totalCount}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPagina((p) => p - 1)}
+                  disabled={pagina === 0}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Anterior
+                </Button>
+                <span className="text-sm px-1">Página {pagina + 1}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPagina((p) => p + 1)}
+                  disabled={!temProxima}
+                >
+                  Próxima
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
             </div>
-          </div>
+          )}
         </>
       )}
 
