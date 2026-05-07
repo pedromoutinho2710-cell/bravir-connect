@@ -15,7 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { Loader2, FileSpreadsheet, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink } from "lucide-react";
+import { Loader2, FileSpreadsheet, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList } from "lucide-react";
+import { gerarFormularioPDF } from "@/lib/pdf";
 import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { exportarPedidoExcel } from "@/lib/excel";
@@ -44,6 +45,7 @@ type PedidoFat = {
   comprador: string | null;
   cep: string | null;
   codigo_parceiro: string | null;
+  codigo_cliente: string | null;
   cluster: string;
   tabela_preco: string;
   agendamento: boolean;
@@ -256,7 +258,7 @@ export default function Faturamento() {
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, observacoes, responsavel_id, motivo, vendedor_id,
           cliente_id, perfil_cliente, tabela_preco, agendamento,
-          clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, aceita_saldo, negativado, email),
+          clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, aceita_saldo, negativado, email),
           itens_pedido(
             id, total_item, quantidade, qtd_faturada, preco_unitario_bruto, preco_unitario_liquido,
             desconto_perfil, desconto_comercial, desconto_trade,
@@ -307,6 +309,7 @@ export default function Faturamento() {
           comprador: cl?.comprador ?? null,
           cep: cl?.cep ?? null,
           codigo_parceiro: cl?.codigo_parceiro ?? null,
+          codigo_cliente: cl?.codigo_cliente ?? null,
           aceita_saldo_cliente: cl?.aceita_saldo ?? false,
           negativado_cliente: cl?.negativado ?? false,
           email_xml: cl?.email ?? null,
@@ -644,32 +647,61 @@ export default function Faturamento() {
   const gerarPdf = (p: PedidoFat, e: React.MouseEvent) => {
     e.stopPropagation();
     const vendedor = profiles[p.vendedor_id] ?? "—";
+
+    const totalBruto = p.itens.reduce((s, i) => s + i.preco_bruto * i.quantidade, 0);
+    const totalVolumes = p.itens.reduce((s, i) => s + Math.ceil(i.quantidade / (i.cx_embarque || 1)), 0);
+    const pesoTotal = p.itens.reduce((s, i) => s + i.peso_unitario * i.quantidade, 0);
+    const totalDesconto = totalBruto - p.total;
+
+    const uniqPct = (fn: (i: ExcelItemRaw) => number) => {
+      const vals = [...new Set(p.itens.map(fn))];
+      return vals.length === 1 ? `${vals[0]}%` : `${Math.min(...vals)}%~${Math.max(...vals)}%`;
+    };
+    const descCluster = uniqPct((i) => i.desconto_perfil);
+    const descVendedor = uniqPct((i) => i.desconto_comercial);
+    const descTrade = uniqPct((i) => i.desconto_trade);
+
     const linhas = p.itens.map((i) => `
       <tr>
         <td>${i.codigo}</td>
         <td>${i.nome}</td>
         <td style="text-align:center">${i.cx_embarque}</td>
         <td style="text-align:center">${i.quantidade}</td>
+        <td style="text-align:center">${Math.ceil(i.quantidade / (i.cx_embarque || 1))}</td>
         <td style="text-align:center">${i.qtd_faturada}</td>
         <td style="text-align:center">${(i.peso_unitario * i.quantidade).toFixed(2)} kg</td>
+        <td style="text-align:right">R$ ${(i.preco_bruto * i.quantidade).toFixed(2)}</td>
         <td style="text-align:right">R$ ${i.total.toFixed(2)}</td>
       </tr>`).join("");
-    const pesoTotal = p.itens.reduce((s, i) => s + i.peso_unitario * i.quantidade, 0);
+
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Pedido #${p.numero_pedido}</title>
-      <style>body{font-family:sans-serif;font-size:12px;padding:20px}
-      table{width:100%;border-collapse:collapse;margin-top:10px}
-      th,td{border:1px solid #ccc;padding:4px 8px}th{background:#f0f0f0}
-      h2{margin:0 0 4px}p{margin:2px 0}.total{text-align:right;font-weight:bold;margin-top:8px}</style>
+      <style>
+        body{font-family:sans-serif;font-size:12px;padding:20px}
+        table{width:100%;border-collapse:collapse;margin-top:10px}
+        th,td{border:1px solid #ccc;padding:4px 8px}
+        th{background:#f0f0f0}
+        h2{margin:0 0 4px}p{margin:2px 0}
+        .total-box{margin-top:12px;border:1px solid #aaa;padding:8px 12px;display:inline-block;background:#f9f9f9}
+        .total-box p{margin:3px 0;font-size:12px}
+        .hl{font-weight:bold;color:#1a6b3a}
+      </style>
       </head><body>
       <h2>Pedido #${p.numero_pedido} — ${p.razao_social}</h2>
       <p>CNPJ: ${formatCNPJ(p.cnpj)} | Data: ${formatDate(p.data_pedido)} | Vendedor: ${vendedor}</p>
+      ${p.codigo_cliente ? `<p><strong>Código Sankhya:</strong> ${p.codigo_cliente}</p>` : ""}
       <p>Cond. Pagamento: ${p.cond_pagamento ?? "—"} | Cluster: ${p.cluster ?? "—"} | Agendamento: ${p.agendamento ? "Sim" : "Não"}</p>
       ${p.comprador ? `<p>Comprador: ${p.comprador}</p>` : ""}
       ${p.email_xml ? `<p>Email XML/Boleto: ${p.email_xml}</p>` : ""}
       <table><thead><tr>
-        <th>Código</th><th>Produto</th><th>Cx</th><th>Qtd Pedida</th><th>Qtd Faturada</th><th>Peso Total</th><th>Total</th>
+        <th>Código</th><th>Produto</th><th>Cx Emb.</th><th>Qtd Pedida</th><th>Qtd Volumes</th><th>Qtd Faturada</th><th>Peso Total</th><th>Total Bruto</th><th>Total c/ Desc.</th>
       </tr></thead><tbody>${linhas}</tbody></table>
-      <p class="total">Peso total: ${pesoTotal.toFixed(2)} kg | Total: R$ ${p.total.toFixed(2)}</p>
+      <div class="total-box">
+        <p>Peso total: ${pesoTotal.toFixed(2)} kg &nbsp;|&nbsp; Volumes: ${totalVolumes}</p>
+        <p>Desc. Cluster: ${descCluster} &nbsp;|&nbsp; Desc. Vendedor/Comercial: ${descVendedor} &nbsp;|&nbsp; Desc. Trade: ${descTrade}</p>
+        <p>Soma total de desconto: <strong>R$ ${totalDesconto.toFixed(2)}</strong></p>
+        <p>Valor líquido <em>sem</em> desconto: <strong>R$ ${totalBruto.toFixed(2)}</strong></p>
+        <p>Valor líquido <em>com</em> desconto: <span class="hl">R$ ${p.total.toFixed(2)}</span></p>
+      </div>
       </body></html>`;
     const win = window.open("", "_blank");
     if (win) { win.document.write(html); win.document.close(); win.print(); }
@@ -700,6 +732,45 @@ export default function Faturamento() {
       });
     } catch { toast.error("Erro ao gerar Excel"); }
     finally { setExportando(null); }
+  };
+
+  const gerarFormularioPdf = (p: PedidoFat, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const doc = gerarFormularioPDF({
+      numero_pedido: p.numero_pedido,
+      tipo: p.tipo,
+      data_pedido: p.data_pedido,
+      razao_social: p.razao_social,
+      cnpj: p.cnpj,
+      codigo_cliente: p.codigo_cliente,
+      cond_pagamento: p.cond_pagamento,
+      cidade: p.cidade,
+      uf: p.uf,
+      cep: p.cep,
+      cluster: p.cluster,
+      comprador: p.comprador,
+      agendamento: p.agendamento,
+      tabela_preco: p.tabela_preco,
+      observacoes: p.observacoes,
+      vendedor: profiles[p.vendedor_id] ?? "—",
+      itens: p.itens.map((i) => ({
+        codigo_jiva: i.codigo,
+        cx_embarque: i.cx_embarque,
+        quantidade: i.quantidade,
+        nome: i.nome,
+        preco_bruto: i.preco_bruto,
+        desconto_perfil: i.desconto_perfil,
+        desconto_comercial: i.desconto_comercial,
+        preco_apos_perfil: i.preco_apos_perfil,
+        desconto_trade: i.desconto_trade,
+        preco_final: i.preco_final,
+        total_item: i.total,
+        peso_unitario: i.peso_unitario,
+      })),
+      total: p.total,
+      peso_total: p.peso_total,
+    });
+    doc.save(`formulario-pedido-${p.numero_pedido}.pdf`);
   };
 
   // ── Sub-componentes ───────────────────────────────────────────────
@@ -802,10 +873,16 @@ export default function Faturamento() {
           <Eye className="h-3 w-3" />
         </Button>
 
-        {/* PDF */}
+        {/* PDF resumo */}
         <Button size="sm" variant="outline"
-          onClick={(e) => gerarPdf(p, e)} title="Baixar PDF">
+          onClick={(e) => gerarPdf(p, e)} title="Imprimir PDF resumo">
           <FileText className="h-3 w-3" />
+        </Button>
+
+        {/* PDF formulário antigo */}
+        <Button size="sm" variant="outline"
+          onClick={(e) => gerarFormularioPdf(p, e)} title="Formulário PDF (formato antigo)">
+          <ClipboardList className="h-3 w-3" />
         </Button>
 
         {/* Excel */}
