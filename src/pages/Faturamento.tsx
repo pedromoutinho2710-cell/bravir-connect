@@ -15,11 +15,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { Loader2, FileSpreadsheet, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList } from "lucide-react";
+import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList } from "lucide-react";
 import { gerarFormularioPDF } from "@/lib/pdf";
 import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
-import { exportarPedidoExcel } from "@/lib/excel";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -158,8 +157,6 @@ export default function Faturamento() {
   const [vendedores, setVendedores] = useState<{ id: string; label: string }[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [atualizando, setAtualizando] = useState<string | null>(null);
-  const [exportando, setExportando] = useState<string | null>(null);
-
   // Filtros
   const [filtroVendedor, setFiltroVendedor] = useState("todos");
   const [filtroStatus, setFiltroStatus] = useState("todos");
@@ -713,33 +710,6 @@ export default function Faturamento() {
     if (win) { win.document.write(html); win.document.close(); win.print(); }
   };
 
-  const handleExcel = async (p: PedidoFat, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setExportando(p.id);
-    try {
-      await exportarPedidoExcel({
-        numero_pedido: p.numero_pedido,
-        data_pedido: p.data_pedido,
-        cliente: { razao_social: p.razao_social, cnpj: p.cnpj, comprador: p.comprador ?? "", cidade: p.cidade ?? "", uf: p.uf ?? "", cep: p.cep ?? "" },
-        vendedor: profiles[p.vendedor_id] ?? "",
-        perfil: p.cluster,
-        tabela_preco: p.tabela_preco,
-        cond_pagamento: p.cond_pagamento ?? "",
-        agendamento: p.agendamento,
-        observacoes: p.observacoes ?? "",
-        itens: p.itens.map((i) => ({
-          codigo_jiva: i.codigo, cx_embarque: i.cx_embarque, quantidade: i.quantidade,
-          nome: i.nome, preco_bruto: i.preco_bruto, desconto_perfil: i.desconto_perfil,
-          desconto_comercial: i.desconto_comercial, desconto_trade: i.desconto_trade,
-          preco_apos_perfil: i.preco_apos_perfil, preco_apos_comercial: i.preco_apos_comercial,
-          preco_final: i.preco_final, total: i.total, peso_unitario: i.peso_unitario,
-          total_peso: i.peso_unitario * i.quantidade, qtd_volumes: Math.ceil(i.quantidade / (i.cx_embarque || 1)),
-        })),
-      });
-    } catch { toast.error("Erro ao gerar Excel"); }
-    finally { setExportando(null); }
-  };
-
   const gerarFormularioPdf = (p: PedidoFat, e: React.MouseEvent) => {
     e.stopPropagation();
     const doc = gerarFormularioPDF({
@@ -892,11 +862,6 @@ export default function Faturamento() {
           <ClipboardList className="h-3 w-3" />
         </Button>
 
-        {/* Excel */}
-        <Button size="sm" variant="outline" disabled={exportando === p.id}
-          onClick={(e) => handleExcel(p, e)} title="Exportar Excel">
-          {exportando === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileSpreadsheet className="h-3 w-3" />}
-        </Button>
       </div>
     );
   }
