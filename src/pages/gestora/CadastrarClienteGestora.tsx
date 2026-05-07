@@ -15,6 +15,7 @@ import { formatCNPJ, onlyDigits } from "@/lib/format";
 type Vendedor = { id: string; nome: string };
 
 type Form = {
+  nome_fantasia: string;
   razao_social: string;
   cnpj: string;
   email: string;
@@ -36,6 +37,7 @@ type Form = {
 };
 
 const EMPTY: Form = {
+  nome_fantasia: "",
   razao_social: "",
   cnpj: "",
   email: "",
@@ -89,6 +91,10 @@ export default function CadastrarClienteGestora() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.nome_fantasia.trim()) {
+      toast.error("Nome fantasia é obrigatório.");
+      return;
+    }
     if (!form.razao_social.trim()) {
       toast.error("Razão social é obrigatória.");
       return;
@@ -113,6 +119,7 @@ export default function CadastrarClienteGestora() {
     }
 
     const { error } = await (supabase.from("clientes") as any).insert({
+      nome_fantasia: form.nome_fantasia.trim() || null,
       razao_social: form.razao_social.trim(),
       cnpj: cnpjDigits,
       email: form.email || null,
@@ -163,6 +170,15 @@ export default function CadastrarClienteGestora() {
           <CardHeader><CardTitle>1. Dados do cliente</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Nome fantasia *</Label>
+                <Input
+                  required
+                  value={form.nome_fantasia}
+                  onChange={(e) => set("nome_fantasia", e.target.value)}
+                  placeholder="Como o cliente é conhecido"
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label>Razão social *</Label>
                 <Input
