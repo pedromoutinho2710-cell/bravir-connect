@@ -71,6 +71,7 @@ type Props = {
   vendedorEmail: string;
   vigenciaId: string;
   descontoLivre?: boolean;
+  bloqueado?: boolean;
 };
 
 export function SecaoProdutos({
@@ -83,6 +84,7 @@ export function SecaoProdutos({
   vendedorEmail,
   vigenciaId,
   descontoLivre = false,
+  bloqueado = false,
 }: Props) {
   const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
@@ -130,6 +132,10 @@ export function SecaoProdutos({
   };
 
   const adicionar = (p: Produto) => {
+    if (bloqueado) {
+      toast.error("Preencha todos os campos obrigatórios do cliente antes de adicionar produtos");
+      return;
+    }
     if (!tabelaPreco || !perfilCliente) {
       toast.error("Selecione perfil do cliente e tabela de preço primeiro");
       return;
@@ -266,6 +272,16 @@ export function SecaoProdutos({
         <CardTitle>Produtos</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {bloqueado && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
+            <span className="shrink-0 mt-0.5">⚠️</span>
+            <span>
+              Preencha todos os campos obrigatórios do cliente antes de adicionar produtos:{" "}
+              <strong>Comprador</strong>, <strong>Condição de pagamento</strong>,{" "}
+              <strong>Código do cliente</strong> e <strong>Email de XML/Boleto</strong>.
+            </span>
+          </div>
+        )}
         <div className="flex flex-col gap-3 md:flex-row md:items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -274,6 +290,7 @@ export function SecaoProdutos({
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar por SKU ou nome…"
               className="pl-9"
+              disabled={bloqueado}
             />
           </div>
           <div className="flex flex-wrap gap-2">
@@ -318,7 +335,7 @@ export function SecaoProdutos({
                         type="button"
                         size="sm"
                         variant={ja ? "secondary" : "default"}
-                        disabled={ja}
+                        disabled={bloqueado || ja}
                         onClick={() => adicionar(p)}
                       >
                         <Plus className="h-3 w-3" />

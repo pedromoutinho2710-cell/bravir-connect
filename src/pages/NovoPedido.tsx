@@ -162,12 +162,20 @@ export default function NovoPedido() {
   }, [loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── podeSalvar / podeEnviar ────────────────────────────────────────────────
+  const camposObrigatoriosOk = !!(
+    cliente.cond_pagamento.trim() &&
+    cliente.email_xml.trim() &&
+    cliente.codigo_cliente.trim() &&
+    cliente.comprador.trim()
+  );
+
   const podeSalvar = useMemo(() => (
     onlyDigits(cliente.cnpj).length === 14 &&
     cliente.razao_social.trim().length > 0 &&
     !!cliente.cluster &&
-    !!cliente.tabela_preco
-  ), [cliente]);
+    !!cliente.tabela_preco &&
+    camposObrigatoriosOk
+  ), [cliente, camposObrigatoriosOk]);
 
   const totalGeral = itens.reduce((s, i) => s + i.total, 0);
   const atingiuMinimo = totalGeral >= pedidoMinimo;
@@ -564,6 +572,7 @@ export default function NovoPedido() {
         vendedorEmail={user?.email ?? ""}
         vigenciaId={vigenciaId}
         descontoLivre={vigencias.find((v) => v.id === vigenciaId)?.desconto_livre ?? false}
+        bloqueado={!camposObrigatoriosOk}
       />
 
       <ResumoFinanceiro itens={itens} uf={cliente.uf} />

@@ -113,13 +113,21 @@ export default function NovoPedidoGestora() {
     toast.info("Tabela de preços alterada. Os produtos foram removidos.");
   }, [vigenciaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const camposObrigatoriosOk = !!(
+    cliente.cond_pagamento.trim() &&
+    cliente.email_xml.trim() &&
+    cliente.codigo_cliente.trim() &&
+    cliente.comprador.trim()
+  );
+
   const podeSalvar = useMemo(() => (
     onlyDigits(cliente.cnpj).length === 14 &&
     cliente.razao_social.trim().length > 0 &&
     !!cliente.cluster &&
     !!cliente.tabela_preco &&
-    !!representanteId
-  ), [cliente, representanteId]);
+    !!representanteId &&
+    camposObrigatoriosOk
+  ), [cliente, representanteId, camposObrigatoriosOk]);
 
   const totalGeral = itens.reduce((s, i) => s + i.total, 0);
   const podeEnviar = podeSalvar && itens.length > 0;
@@ -426,6 +434,7 @@ export default function NovoPedidoGestora() {
         vendedorEmail={representantes.find((r) => r.id === representanteId)?.nome ?? user?.email ?? ""}
         vigenciaId={vigenciaId}
         descontoLivre={true}
+        bloqueado={!camposObrigatoriosOk}
       />
 
       <ResumoFinanceiro itens={itens} uf={cliente.uf} />
