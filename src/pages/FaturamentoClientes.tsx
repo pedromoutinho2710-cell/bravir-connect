@@ -20,12 +20,14 @@ import { Loader2, Search, Users, Pencil, Trash2, SlidersHorizontal, X } from "lu
 type Cliente = {
   id: string;
   razao_social: string;
+  nome_fantasia: string | null;
   cnpj: string | null;
   email: string | null;
   telefone: string | null;
   cidade: string | null;
   uf: string | null;
   codigo_parceiro: string | null;
+  codigo_cliente: string | null;
   cluster: string | null;
   tabela_preco: string | null;
   vendedor_id: string | null;
@@ -84,6 +86,8 @@ export default function FaturamentoClientes() {
   // Modal edição
   const [modalCliente, setModalCliente] = useState<Cliente | null>(null);
   const [editRazaoSocial, setEditRazaoSocial] = useState("");
+  const [editNomeFantasia, setEditNomeFantasia] = useState("");
+  const [editCodigoCliente, setEditCodigoCliente] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editTelefone, setEditTelefone] = useState("");
   const [editPerfil, setEditPerfil] = useState("");
@@ -108,8 +112,9 @@ export default function FaturamentoClientes() {
     const [clientesRes, roleRes, loRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, cnpj, email, telefone, cidade, uf, codigo_parceiro, cluster, tabela_preco, vendedor_id, negativado, aceita_saldo, observacoes_trade")
-        .order("razao_social"),
+        .select("id, razao_social, nome_fantasia, cnpj, email, telefone, cidade, uf, codigo_parceiro, codigo_cliente, cluster, tabela_preco, vendedor_id, negativado, aceita_saldo, observacoes_trade")
+        .order("razao_social")
+        .range(0, 9999),
       supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
       supabase
         .from("pedidos")
@@ -216,6 +221,8 @@ export default function FaturamentoClientes() {
   const abrirModal = (c: Cliente) => {
     setModalCliente(c);
     setEditRazaoSocial(c.razao_social);
+    setEditNomeFantasia(c.nome_fantasia ?? "");
+    setEditCodigoCliente(c.codigo_cliente ?? "");
     setEditEmail(c.email ?? "");
     setEditTelefone(c.telefone ?? "");
     setEditPerfil(c.cluster ?? "");
@@ -236,6 +243,8 @@ export default function FaturamentoClientes() {
       .from("clientes")
       .update({
         razao_social: editRazaoSocial.trim() || modalCliente.razao_social,
+        nome_fantasia: editNomeFantasia.trim() || null,
+        codigo_cliente: editCodigoCliente.trim() || null,
         email: editEmail.trim() || null,
         telefone: editTelefone.trim() || null,
         cluster: editPerfil || null,
@@ -544,6 +553,16 @@ export default function FaturamentoClientes() {
             <div className="space-y-1.5">
               <Label>Razão social</Label>
               <Input value={editRazaoSocial} onChange={(e) => setEditRazaoSocial(e.target.value)} placeholder="Razão social" />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Nome fantasia</Label>
+                <Input value={editNomeFantasia} onChange={(e) => setEditNomeFantasia(e.target.value)} placeholder="Nome fantasia" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Código do cliente</Label>
+                <Input value={editCodigoCliente} onChange={(e) => setEditCodigoCliente(e.target.value)} placeholder="Código do cliente" />
+              </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
