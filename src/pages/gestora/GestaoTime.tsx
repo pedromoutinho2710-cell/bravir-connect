@@ -2,10 +2,17 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Loader2, Pencil } from "lucide-react";
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 const ANO = new Date().getFullYear();
 const MES = new Date().getMonth() + 1;
@@ -34,6 +41,7 @@ type Vendedor = {
   totalMes: number;
   meta: number;
   pct: number;
+  pedidoMinimo: number;
 };
 
 type PedidoHistorico = {
@@ -100,6 +108,9 @@ export default function GestaoTime() {
   const [selectedVendedor, setSelectedVendedor] = useState<Vendedor | null>(null);
   const [detalhe, setDetalhe] = useState<VendedorDetalhe | null>(null);
   const [loadingDetalhe, setLoadingDetalhe] = useState(false);
+  const [editVendedor, setEditVendedor] = useState<Vendedor | null>(null);
+  const [editPedidoMinimo, setEditPedidoMinimo] = useState(5000);
+  const [salvandoMinimo, setSalvandoMinimo] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -107,7 +118,7 @@ export default function GestaoTime() {
 
       const [rolesRes, profRes, pedidosMesRes, metasRes] = await Promise.all([
         supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
-        supabase.from("profiles").select("id, full_name, email"),
+        supabase.from("profiles").select("id, full_name, email, pedido_minimo"),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
           .from("pedidos")
@@ -118,9 +129,12 @@ export default function GestaoTime() {
         supabase.from("metas").select("vendedor_id, mes, ano, valor_meta_reais").eq("mes", MES).eq("ano", ANO),
       ]);
 
-      const profMap: Record<string, string> = {};
-      (profRes.data ?? []).forEach((p: { id: string; full_name: string | null; email: string | null }) => {
-        profMap[p.id] = p.full_name || p.email || p.id;
+      const profMap: Record<string, { nome: string; pedidoMinimo: number }> = {};
+      (profRes.data ?? []).forEach((p: { id: string; full_name: string | null; email: string | null; pedido_minimo: number | null }) => {
+        profMap[p.id] = {
+          nome: p.full_name || p.email || p.id,
+          pedidoMinimo: p.pedido_minimo ?? 5000,
+        };
       });
 
       const metaMap: Record<string, number> = {};
@@ -145,13 +159,15 @@ export default function GestaoTime() {
         .map((r: { user_id: string }) => {
           const dados = totaisMap[r.user_id] ?? { pedidos: 0, total: 0 };
           const meta = metaMap[r.user_id] ?? 0;
+          const prof = profMap[r.user_id];
           return {
             id: r.user_id,
-            nome: profMap[r.user_id] ?? r.user_id,
+            nome: prof?.nome ?? r.user_id,
             pedidosMes: dados.pedidos,
             totalMes: dados.total,
             meta,
             pct: meta > 0 ? (dados.total / meta) * 100 : 0,
+            pedidoMinimo: prof?.pedidoMinimo ?? 5000,
           };
         })
         .sort((a: Vendedor, b: Vendedor) => b.totalMes - a.totalMes);
@@ -162,6 +178,22 @@ export default function GestaoTime() {
 
     load();
   }, []);
+
+  const salvarPedidoMinimo = async () => {
+    if (!editVendedor) return;
+    setSalvandoMinimo(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ pedido_minimo: editPedidoMinimo })
+      .eq("id", editVendedor.id);
+    setSalvandoMinimo(false);
+    if (error) { toast.error("Erro ao salvar: " + error.message); return; }
+    toast.success("Pedido mínimo atualizado!");
+    setVendedores((prev) =>
+      prev.map((v) => v.id === editVendedor.id ? { ...v, pedidoMinimo: editPedidoMinimo } : v)
+    );
+    setEditVendedor(null);
+  };
 
   const abrirDetalhe = async (v: Vendedor) => {
     setSelectedVendedor(v);
@@ -321,10 +353,51 @@ export default function GestaoTime() {
                   </div>
                 </>
               )}
+
+              <div className="flex justify-between items-center text-sm mt-2 pt-2 border-t">
+                <span className="text-muted-foreground">Pedido mínimo</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{formatBRL(v.pedidoMinimo)}</span>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={(e) => { e.stopPropagation(); setEditVendedor(v); setEditPedidoMinimo(v.pedidoMinimo); }}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         ))}
       </div>
+
+      {/* Dialog de edição de pedido mínimo */}
+      <Dialog open={!!editVendedor} onOpenChange={(o) => !o && setEditVendedor(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Pedido mínimo — {editVendedor?.nome}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label>Valor mínimo do pedido (R$)</Label>
+            <Input
+              type="number"
+              min={0}
+              value={editPedidoMinimo}
+              onChange={(e) => setEditPedidoMinimo(Number(e.target.value))}
+              placeholder="5000"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditVendedor(null)}>Cancelar</Button>
+            <Button onClick={salvarPedidoMinimo} disabled={salvandoMinimo}>
+              {salvandoMinimo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Sheet de detalhe */}
       <Sheet open={!!selectedVendedor} onOpenChange={(o) => !o && setSelectedVendedor(null)}>
