@@ -171,16 +171,6 @@ export default function Faturamento() {
   const [motivoDialog, setMotivoDialog] = useState<{ type: "devolver" | "cancelar" | "com_problema"; id: string; numero: number } | null>(null);
   const [motivo, setMotivo] = useState("");
 
-  // Edit dialog
-  const [editDialog, setEditDialog] = useState<PedidoFat | null>(null);
-  const [editCondPag, setEditCondPag] = useState("");
-  const [editObs, setEditObs] = useState("");
-  const [editTipo, setEditTipo] = useState("Pedido");
-  const [editAgendamento, setEditAgendamento] = useState(false);
-  const [editAceitaSaldo, setEditAceitaSaldo] = useState(false);
-  const [editMotivo, setEditMotivo] = useState("");
-  const [salvandoEdit, setSalvandoEdit] = useState(false);
-
   // Dialog detalhes
   const [detalhesId, setDetalhesId] = useState<string | null>(null);
   const [detalhesOpen, setDetalhesOpen] = useState(false);
@@ -557,46 +547,6 @@ export default function Faturamento() {
     }
   };
 
-  const abrirEditar = (p: PedidoFat, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditDialog(p);
-    setEditCondPag(p.cond_pagamento ?? "");
-    setEditObs(p.observacoes ?? "");
-    setEditTipo(p.tipo);
-    setEditAgendamento(p.agendamento);
-    setEditAceitaSaldo(p.aceita_saldo_cliente);
-    setEditMotivo(p.motivo ?? "");
-  };
-
-  const salvarEdicao = async () => {
-    if (!editDialog) return;
-    setSalvandoEdit(true);
-
-    const pedidoUpdates: Record<string, unknown> = {
-      cond_pagamento: editCondPag || null,
-      observacoes: editObs || null,
-      tipo: editTipo,
-      agendamento: editAgendamento,
-    };
-    if (editDialog.status === "devolvido") pedidoUpdates.motivo = editMotivo || null;
-
-    const promises: Promise<unknown>[] = [
-      supabase.from("pedidos").update(pedidoUpdates).eq("id", editDialog.id),
-    ];
-
-    if (editDialog.cliente_id) {
-      promises.push(
-        supabase.from("clientes").update({ aceita_saldo: editAceitaSaldo }).eq("id", editDialog.cliente_id)
-      );
-    }
-
-    await Promise.all(promises);
-    setSalvandoEdit(false);
-    setEditDialog(null);
-    toast.success("Pedido atualizado");
-    setRefreshKey((k) => k + 1);
-  };
-
   const excluirPedido = async () => {
     if (!excluirTarget) return;
     setExcluindo(true);
@@ -797,7 +747,7 @@ export default function Faturamento() {
 
         {/* Editar */}
         {isAtivo && (
-          <Button size="sm" variant="outline" onClick={(e) => abrirEditar(p, e)}>Editar</Button>
+          <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`/faturamento/pedidos/${p.id}/editar`); }}>Editar</Button>
         )}
 
         {/* Com problema */}
@@ -1133,64 +1083,6 @@ export default function Faturamento() {
               onClick={confirmarMotivo}
               disabled={!motivo.trim()}>
               Confirmar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog: editar pedido */}
-      <Dialog open={!!editDialog} onOpenChange={(o) => !o && setEditDialog(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Editar pedido #{editDialog?.numero_pedido}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Tipo</Label>
-                <Select value={editTipo} onValueChange={setEditTipo}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pedido">Pedido</SelectItem>
-                    <SelectItem value="Bonificação">Bonificação</SelectItem>
-                    <SelectItem value="Brinde">Brinde</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Condição de pagamento</Label>
-                <Input value={editCondPag} onChange={(e) => setEditCondPag(e.target.value)}
-                  placeholder="Ex: 30/60/90 dias" />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Observações do faturamento</Label>
-              <Textarea rows={3} value={editObs} onChange={(e) => setEditObs(e.target.value)}
-                placeholder="Informações adicionais…" />
-            </div>
-            <div className="flex gap-6">
-              <div className="flex items-center gap-3">
-                <Switch checked={editAgendamento} onCheckedChange={setEditAgendamento} id="edit-agend" />
-                <Label htmlFor="edit-agend">Agendamento</Label>
-              </div>
-              <div className="flex items-center gap-3">
-                <Switch checked={editAceitaSaldo} onCheckedChange={setEditAceitaSaldo} id="edit-saldo" />
-                <Label htmlFor="edit-saldo">Aceita saldo</Label>
-              </div>
-            </div>
-            {editDialog?.status === "devolvido" && (
-              <div className="space-y-1.5">
-                <Label>Motivo de devolução</Label>
-                <Textarea rows={2} value={editMotivo} onChange={(e) => setEditMotivo(e.target.value)}
-                  placeholder="Motivo…" />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditDialog(null)}>Fechar</Button>
-            <Button onClick={salvarEdicao} disabled={salvandoEdit}>
-              {salvandoEdit && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Salvar
             </Button>
           </DialogFooter>
         </DialogContent>

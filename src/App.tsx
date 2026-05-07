@@ -23,6 +23,7 @@ import TradeCampanhas from "./pages/TradeCampanhas";
 import FaturamentoClientesPendentes from "./pages/FaturamentoClientesPendentes";
 import FaturamentoClientes from "./pages/FaturamentoClientes";
 import FilaCadastros from "./pages/faturamento/FilaCadastros";
+import EditarPedido from "./pages/faturamento/EditarPedido";
 import PedidosAdmin from "./pages/admin/PedidosAdmin";
 import ClientesAdmin from "./pages/admin/ClientesAdmin";
 import ImportarClientes from "./pages/admin/ImportarClientes";
@@ -85,6 +86,11 @@ const App = () => (
               <Route path="/faturamento/clientes-pendentes" element={<FaturamentoClientesPendentes />} />
               <Route path="/faturamento/clientes" element={<FaturamentoClientes />} />
               <Route path="/faturamento/cadastros" element={<FilaCadastros />} />
+            </Route>
+
+            {/* Edição de pedido — acessível por faturamento e admin */}
+            <Route element={<ProtectedRoute allow={["faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/faturamento/pedidos/:id/editar" element={<EditarPedido />} />
             </Route>
 
             {/* Detalhe de cliente — acessível por vendedor, admin, faturamento, trade, gestora, logistica */}

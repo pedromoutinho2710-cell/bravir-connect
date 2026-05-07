@@ -57,10 +57,11 @@ type Props = {
   value: DadosCliente;
   onChange: (v: DadosCliente) => void;
   vendedorId: string;
+  lockCNPJ?: boolean;
 };
 
 
-export function SecaoCliente({ value, onChange, vendedorId }: Props) {
+export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: Props) {
   const [cnpjStatus, setCnpjStatus] = useState<"idle" | "buscando" | "encontrado" | "novo" | "invalido">("idle");
   const [ultimosPedidos, setUltimosPedidos] = useState<UltimoPedido[]>([]);
   const [alertaMesmoDia, setAlertaMesmoDia] = useState(false);
@@ -297,50 +298,52 @@ export function SecaoCliente({ value, onChange, vendedorId }: Props) {
       <CardContent className="space-y-5">
 
         {/* Campo de busca unificado */}
-        <div className="space-y-1.5" ref={searchRef}>
-          <Label className="text-base font-semibold">Buscar cliente (CNPJ ou nome) *</Label>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              value={searchText}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              onFocus={() => sugestoes.length > 0 && setShowSugestoes(true)}
-              placeholder="00.000.000/0000-00 ou nome da empresa"
-              className="h-11 text-base pl-9"
-            />
-            {showSugestoes && sugestoes.length > 0 && (
-              <div className="absolute z-50 w-full bg-background border rounded-md shadow-lg mt-1 max-h-56 overflow-y-auto">
-                {sugestoes.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onMouseDown={(e) => { e.preventDefault(); selecionarSugestao(s); }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b last:border-0"
-                  >
-                    <div className="font-medium">{s.razao_social}</div>
-                    <div className="text-xs text-muted-foreground">{formatCNPJ(s.cnpj)}</div>
-                  </button>
-                ))}
-              </div>
-            )}
+        {!lockCNPJ && (
+          <div className="space-y-1.5" ref={searchRef}>
+            <Label className="text-base font-semibold">Buscar cliente (CNPJ ou nome) *</Label>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                value={searchText}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                onFocus={() => sugestoes.length > 0 && setShowSugestoes(true)}
+                placeholder="00.000.000/0000-00 ou nome da empresa"
+                className="h-11 text-base pl-9"
+              />
+              {showSugestoes && sugestoes.length > 0 && (
+                <div className="absolute z-50 w-full bg-background border rounded-md shadow-lg mt-1 max-h-56 overflow-y-auto">
+                  {sugestoes.map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onMouseDown={(e) => { e.preventDefault(); selecionarSugestao(s); }}
+                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b last:border-0"
+                    >
+                      <div className="font-medium">{s.razao_social}</div>
+                      <div className="text-xs text-muted-foreground">{formatCNPJ(s.cnpj)}</div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="text-xs">
+              {cnpjStatus === "invalido" && (
+                <span className="flex items-center gap-1 text-destructive">
+                  <AlertCircle className="h-3 w-3" /> CNPJ inválido
+                </span>
+              )}
+              {cnpjStatus === "encontrado" && (
+                <span className="flex items-center gap-1 text-primary">
+                  <CheckCircle2 className="h-3 w-3" /> Cliente cadastrado — dados preenchidos
+                </span>
+              )}
+              {cnpjStatus === "novo" && (
+                <span className="text-muted-foreground">Novo cliente — preencha os dados abaixo</span>
+              )}
+              {cnpjStatus === "buscando" && <span className="text-muted-foreground">Buscando…</span>}
+            </div>
           </div>
-          <div className="text-xs">
-            {cnpjStatus === "invalido" && (
-              <span className="flex items-center gap-1 text-destructive">
-                <AlertCircle className="h-3 w-3" /> CNPJ inválido
-              </span>
-            )}
-            {cnpjStatus === "encontrado" && (
-              <span className="flex items-center gap-1 text-primary">
-                <CheckCircle2 className="h-3 w-3" /> Cliente cadastrado — dados preenchidos
-              </span>
-            )}
-            {cnpjStatus === "novo" && (
-              <span className="text-muted-foreground">Novo cliente — preencha os dados abaixo</span>
-            )}
-            {cnpjStatus === "buscando" && <span className="text-muted-foreground">Buscando…</span>}
-          </div>
-        </div>
+        )}
 
         {/* Endereço e telefone do cliente encontrado */}
         {cnpjStatus === "encontrado" && (enderecoDisplay || telefoneDisplay) && (

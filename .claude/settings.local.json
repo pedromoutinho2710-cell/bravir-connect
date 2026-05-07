@@ -8,7 +8,11 @@
       "Bash(npx supabase *)",
       "Bash(npm install *)",
       "Bash(npm run *)",
-      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_3dbc9af8eeeb68adf6f179041396f5bd42eac64a\" npx supabase functions deploy admin-usuario --project-ref qsiobsseyuomqcygjjcp)"
+      "Bash(SUPABASE_ACCESS_TOKEN=\"sbp_3dbc9af8eeeb68adf6f179041396f5bd42eac64a\" npx supabase functions deploy admin-usuario --project-ref qsiobsseyuomqcygjjcp)",
+      "Bash(mkdir -p ~/.traycer/yolo_artifacts)",
+      "Bash(echo '{}')",
+      "PowerShell(New-Item *)",
+      "Bash(dir \"C:\\\\Users\\\\pedro\\\\AppData\\\\Local\\\\Temp\\\\traycer-epics\\\\\" 2>&1 *)"
     ]
   }
 }
