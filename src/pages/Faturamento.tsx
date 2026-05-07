@@ -673,15 +673,18 @@ export default function Faturamento() {
         <td style="text-align:center">${Math.ceil(i.quantidade / (i.cx_embarque || 1))}</td>
         <td style="text-align:center">${i.qtd_faturada}</td>
         <td style="text-align:center">${(i.peso_unitario * i.quantidade).toFixed(2)} kg</td>
+        <td style="text-align:center">${(i.desconto_perfil * 100).toFixed(1)}%</td>
+        <td style="text-align:center">${Number(i.desconto_comercial).toFixed(1)}%</td>
+        <td style="text-align:center">${Number(i.desconto_trade).toFixed(1)}%</td>
         <td style="text-align:right">R$ ${(i.preco_bruto * i.quantidade).toFixed(2)}</td>
         <td style="text-align:right">R$ ${i.total.toFixed(2)}</td>
       </tr>`).join("");
 
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Pedido #${p.numero_pedido}</title>
       <style>
-        body{font-family:sans-serif;font-size:12px;padding:20px}
+        body{font-family:sans-serif;font-size:11px;padding:20px}
         table{width:100%;border-collapse:collapse;margin-top:10px}
-        th,td{border:1px solid #ccc;padding:4px 8px}
+        th,td{border:1px solid #ccc;padding:3px 6px}
         th{background:#f0f0f0}
         h2{margin:0 0 4px}p{margin:2px 0}
         .total-box{margin-top:12px;border:1px solid #aaa;padding:8px 12px;display:inline-block;background:#f9f9f9}
@@ -697,11 +700,10 @@ export default function Faturamento() {
       ${p.comprador ? `<p>Comprador: ${p.comprador}</p>` : ""}
       ${p.email_xml ? `<p>Email XML/Boleto: ${p.email_xml}</p>` : ""}
       <table><thead><tr>
-        <th>Código</th><th>Produto</th><th>Cx Emb.</th><th>Qtd Pedida</th><th>Qtd Volumes</th><th>Qtd Faturada</th><th>Peso Total</th><th>Total Bruto</th><th>Total c/ Desc.</th>
+        <th>Código</th><th>Produto</th><th>Cx Emb.</th><th>Qtd Pedida</th><th>Qtd Volumes</th><th>Qtd Faturada</th><th>Peso Total</th><th>Desc. Cluster</th><th>Desc. Comercial</th><th>Desc. Trade</th><th>Total Bruto</th><th>Total c/ Desc.</th>
       </tr></thead><tbody>${linhas}</tbody></table>
       <div class="total-box">
         <p>Peso total: ${pesoTotal.toFixed(2)} kg &nbsp;|&nbsp; Volumes: ${totalVolumes}</p>
-        <p>Desc. Cluster: ${descCluster} &nbsp;|&nbsp; Desc. Vendedor/Comercial: ${descVendedor} &nbsp;|&nbsp; Desc. Trade: ${descTrade}</p>
         <p>Soma total de desconto: <strong>R$ ${totalDesconto.toFixed(2)}</strong></p>
         <p>Valor líquido <em>sem</em> desconto: <strong>R$ ${totalBruto.toFixed(2)}</strong></p>
         <p>Valor líquido <em>com</em> desconto: <span class="hl">R$ ${p.total.toFixed(2)}</span></p>
