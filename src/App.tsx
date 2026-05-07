@@ -8,12 +8,11 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
-import PlaceholderPage from "@/components/PlaceholderPage";
-import NovoPedido from "./pages/NovoPedido";
-import MeusPedidos from "./pages/MeusPedidos";
-import MeuPainel from "./pages/MeuPainel";
-import MeusClientes from "./pages/MeusClientes";
-import CadastrarCliente from "./pages/CadastrarCliente";
+import NovoPedido from "./pages/vendedor/NovoPedido";
+import MeusPedidos from "./pages/vendedor/MeusPedidos";
+import MeuPainel from "./pages/vendedor/MeuPainel";
+import MeusClientes from "./pages/vendedor/MeusClientes";
+import CadastrarCliente from "./pages/vendedor/CadastrarCliente";
 import Faturamento from "./pages/Faturamento";
 import Formularios from "./pages/admin/Formularios";
 import Equipe from "./pages/admin/Equipe";
@@ -88,8 +87,8 @@ const App = () => (
               <Route path="/faturamento/cadastros" element={<FilaCadastros />} />
             </Route>
 
-            {/* Detalhe de cliente — acessível por vendedor, admin, faturamento, trade, gestora */}
-            <Route element={<ProtectedRoute allow={["vendedor", "admin", "faturamento", "trade", "gestora"]}><AppLayout /></ProtectedRoute>}>
+            {/* Detalhe de cliente — acessível por vendedor, admin, faturamento, trade, gestora, logistica */}
+            <Route element={<ProtectedRoute allow={["vendedor", "admin", "faturamento", "trade", "gestora", "logistica"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/clientes/:id" element={<ClienteDetalhe />} />
             </Route>
 

@@ -14,6 +14,10 @@ import {
   UserPlus,
   Megaphone,
   Store,
+  Upload,
+  Tag,
+  Settings,
+  ClipboardCheck,
 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
@@ -38,11 +42,19 @@ const ADMIN_SECTIONS: Section[] = [
     ],
   },
   {
-    label: "Faturamento",
+    label: "Pré-faturamento",
     items: [
       { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
       { title: "Clientes", url: "/faturamento/clientes", icon: Users },
+      { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
       { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
+    ],
+  },
+  {
+    label: "Logística",
+    items: [
+      { title: "Dashboard", url: "/logistica", icon: LayoutDashboard },
+      { title: "Fila de Pedidos", url: "/logistica/fila", icon: Truck },
     ],
   },
   {
@@ -53,11 +65,25 @@ const ADMIN_SECTIONS: Section[] = [
     ],
   },
   {
+    label: "Gestora",
+    items: [
+      { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
+      { title: "Meu Time", url: "/gestora/time", icon: Users },
+      { title: "Clientes", url: "/gestora/clientes", icon: Users },
+      { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
+      { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
+      { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
+    ],
+  },
+  {
     label: "Administração",
     items: [
       { title: "Equipe", url: "/admin/equipe", icon: UserCog },
       { title: "Metas", url: "/admin/metas", icon: Target },
       { title: "Formulários", url: "/admin/formularios", icon: FileStack },
+      { title: "Importar Clientes", url: "/admin/importar-clientes", icon: Upload },
+      { title: "Tabelas de Preço", url: "/admin/tabelas-preco", icon: Tag },
+      { title: "Configurações", url: "/admin/configuracoes", icon: Settings },
     ],
   },
 ];
@@ -77,7 +103,8 @@ const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
   ],
   logistica: [
-    { title: "Painel de Entregas", url: "/logistica", icon: Truck },
+    { title: "Dashboard", url: "/logistica", icon: LayoutDashboard },
+    { title: "Fila de Pedidos", url: "/logistica/fila", icon: ListChecks },
   ],
   gestora: [
     { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
@@ -85,7 +112,7 @@ const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Clientes", url: "/gestora/clientes", icon: Users },
     { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
     { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
-    { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ListChecks },
+    { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
   ],
   trade: [
     { title: "Clientes aguardando", url: "/trade", icon: Store },
@@ -120,7 +147,7 @@ export function MobileNav({ onNavigate }: Props) {
   };
 
   const adminSections: Section[] = ADMIN_SECTIONS.map((section) =>
-    section.label === "Faturamento"
+    section.label === "Pré-faturamento"
       ? {
           ...section,
           items: section.items.map((item) =>

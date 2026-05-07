@@ -20,7 +20,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { CLUSTERS } from "@/lib/constants";
 import {
   Loader2, TrendingUp, ShoppingCart, Users, Clock, AlertTriangle,
-  Target, Settings, Tag, ClipboardCheck, ExternalLink, UserPlus,
+  ClipboardCheck, ExternalLink, UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -611,15 +611,6 @@ export default function DashboardGestora() {
         <div className="flex flex-wrap gap-3">
           <Button onClick={() => navigate("/gestora/cadastrar-cliente")} className="gap-2">
             <UserPlus className="h-4 w-4" /> Cadastrar Cliente
-          </Button>
-          <Button variant="outline" onClick={() => navigate("/admin/metas")} className="gap-2">
-            <Target className="h-4 w-4" /> Definir metas
-          </Button>
-          <Button variant="outline" onClick={() => navigate("/admin/configuracoes")} className="gap-2">
-            <Settings className="h-4 w-4" /> % Bolsão
-          </Button>
-          <Button variant="outline" onClick={() => navigate("/admin/tabelas-preco")} className="gap-2">
-            <Tag className="h-4 w-4" /> Tabelas de preço
           </Button>
           <Button variant="outline" onClick={() => navigate("/gestora/time")} className="gap-2">
             <ExternalLink className="h-4 w-4" /> Ver time completo
