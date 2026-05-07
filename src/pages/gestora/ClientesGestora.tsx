@@ -35,6 +35,8 @@ type Cliente = {
   negativado: boolean | null;
   aceita_saldo: boolean;
   observacoes_trade: string | null;
+  nome_fantasia: string | null;
+  codigo_cliente: string | null;
 };
 
 type Vendedor = { id: string; nome: string };
@@ -99,6 +101,8 @@ export default function ClientesGestora() {
   const [editNegativado, setEditNegativado] = useState(false);
   const [editAceitaSaldo, setEditAceitaSaldo] = useState(false);
   const [editObs, setEditObs] = useState("");
+  const [editNomeFantasia, setEditNomeFantasia] = useState("");
+  const [editCodigoCliente, setEditCodigoCliente] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   // Debounce da busca — 400 ms
@@ -161,7 +165,7 @@ export default function ClientesGestora() {
     let query: any = supabase
       .from("clientes")
       .select(
-        "id, razao_social, cnpj, email, telefone, comprador, cidade, uf, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade",
+        "id, razao_social, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente",
         { count: "exact" }
       )
       .order("razao_social");
@@ -211,6 +215,8 @@ export default function ClientesGestora() {
     setEditNegativado(c.negativado ?? false);
     setEditAceitaSaldo(c.aceita_saldo);
     setEditObs(c.observacoes_trade ?? "");
+    setEditNomeFantasia(c.nome_fantasia ?? "");
+    setEditCodigoCliente(c.codigo_cliente ?? "");
   };
 
   const salvar = async () => {
@@ -220,6 +226,8 @@ export default function ClientesGestora() {
       .from("clientes")
       .update({
         razao_social: editRazaoSocial.trim() || modalCliente.razao_social,
+        nome_fantasia: editNomeFantasia.trim() || null,
+        codigo_cliente: editCodigoCliente.trim() || null,
         email: editEmail.trim() || null,
         telefone: editTelefone.trim() || null,
         comprador: editComprador.trim() || null,
@@ -505,6 +513,17 @@ export default function ClientesGestora() {
             <div className="space-y-1.5">
               <Label>Razão social</Label>
               <Input value={editRazaoSocial} onChange={(e) => setEditRazaoSocial(e.target.value)} />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Nome fantasia</Label>
+                <Input value={editNomeFantasia} onChange={(e) => setEditNomeFantasia(e.target.value)} placeholder="Como o cliente é conhecido" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Código do cliente</Label>
+                <Input value={editCodigoCliente} onChange={(e) => setEditCodigoCliente(e.target.value)} placeholder="Código interno" />
+              </div>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
