@@ -78,24 +78,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
         setRole(getRoleFromUser(newSession.user));
-        setTimeout(() => {
-          fetchRole(newSession.user);
-          fetchFullName(newSession.user);
-        }, 0);
+        fetchRole(newSession.user);
+        fetchFullName(newSession.user);
       } else {
         setRole(null);
         setFullName(null);
       }
     });
 
-    supabase.auth.getSession().then(({ data: { session: existing } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: existing } }) => {
       setSession(existing);
       setUser(existing?.user ?? null);
       if (existing?.user) {
-        fetchRole(existing.user);
-        fetchFullName(existing.user);
-        setLoading(false);
-      } else setLoading(false);
+        await Promise.all([
+          fetchRole(existing.user),
+          fetchFullName(existing.user),
+        ]);
+      }
+      setLoading(false);
     });
 
     return () => sub.subscription.unsubscribe();
