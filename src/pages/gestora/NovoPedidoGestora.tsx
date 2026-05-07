@@ -269,6 +269,14 @@ export default function NovoPedidoGestora() {
         toast.warning("Pedido salvo, mas houve falha ao enviar o email de notificação.");
       }
 
+      if (cliente.email_xml.trim()) {
+        supabase
+          .from("clientes")
+          .update({ email: cliente.email_xml.trim() })
+          .eq("cnpj", onlyDigits(cliente.cnpj))
+          .then(() => {});
+      }
+
       try {
         const { data: fatRoles } = await supabase.from("user_roles").select("user_id").eq("role", "faturamento");
         const fatIds = (fatRoles ?? []).map((r) => r.user_id);
