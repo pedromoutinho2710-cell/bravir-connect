@@ -37,6 +37,7 @@ type Cliente = {
   observacoes_trade: string | null;
   nome_fantasia: string | null;
   codigo_cliente: string | null;
+  cep: string | null;
 };
 
 type Vendedor = { id: string; nome: string };
@@ -103,6 +104,7 @@ export default function ClientesGestora() {
   const [editObs, setEditObs] = useState("");
   const [editNomeFantasia, setEditNomeFantasia] = useState("");
   const [editCodigoCliente, setEditCodigoCliente] = useState("");
+  const [editCep, setEditCep] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   // Debounce da busca — 400 ms
@@ -165,7 +167,7 @@ export default function ClientesGestora() {
     let query: any = supabase
       .from("clientes")
       .select(
-        "id, razao_social, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente",
+        "id, razao_social, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente",
         { count: "exact" }
       )
       .order("razao_social");
@@ -217,6 +219,7 @@ export default function ClientesGestora() {
     setEditObs(c.observacoes_trade ?? "");
     setEditNomeFantasia(c.nome_fantasia ?? "");
     setEditCodigoCliente(c.codigo_cliente ?? "");
+    setEditCep(c.cep ?? "");
   };
 
   const salvar = async () => {
@@ -228,6 +231,7 @@ export default function ClientesGestora() {
         razao_social: editRazaoSocial.trim() || modalCliente.razao_social,
         nome_fantasia: editNomeFantasia.trim() || null,
         codigo_cliente: editCodigoCliente.trim() || null,
+        cep: editCep.trim() || null,
         email: editEmail.trim() || null,
         telefone: editTelefone.trim() || null,
         comprador: editComprador.trim() || null,
@@ -557,6 +561,11 @@ export default function ClientesGestora() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>CEP</Label>
+              <Input value={editCep} onChange={(e) => setEditCep(e.target.value)} placeholder="00000-000" maxLength={9} />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
