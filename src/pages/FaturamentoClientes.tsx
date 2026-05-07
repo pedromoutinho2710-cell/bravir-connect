@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
-import { CLUSTERS, TABELAS_PRECO } from "@/lib/constants";
+import { CLUSTERS, TABELAS_PRECO, UFS } from "@/lib/constants";
 import { Loader2, Search, Users, Pencil, Trash2, SlidersHorizontal, X } from "lucide-react";
 
 type Cliente = {
@@ -24,13 +24,16 @@ type Cliente = {
   cnpj: string | null;
   email: string | null;
   telefone: string | null;
+  comprador: string | null;
   cidade: string | null;
   uf: string | null;
+  cep: string | null;
   codigo_parceiro: string | null;
   codigo_cliente: string | null;
   cluster: string | null;
   tabela_preco: string | null;
   vendedor_id: string | null;
+  status: string | null;
   negativado: boolean;
   aceita_saldo: boolean;
   observacoes_trade: string | null;
@@ -56,6 +59,12 @@ const ATIVIDADE_COLOR: Record<string, string> = {
   em_risco: "bg-yellow-100 text-yellow-800 border-yellow-300",
   inativo: "bg-red-100 text-red-800 border-red-300",
 };
+
+const STATUS_OPTIONS = [
+  { value: "ativo", label: "Ativo" },
+  { value: "inativo", label: "Inativo" },
+  { value: "aguardando_trade", label: "Aguardando Trade" },
+];
 
 function computeAtividade(data: string | null): "ativo" | "em_risco" | "inativo" {
   if (!data) return "inativo";
@@ -95,6 +104,11 @@ export default function FaturamentoClientes() {
   const [editVendedorId, setEditVendedorId] = useState("");
   const [editNegativado, setEditNegativado] = useState(false);
   const [editAceitaSaldo, setEditAceitaSaldo] = useState(false);
+  const [editComprador, setEditComprador] = useState("");
+  const [editCidade, setEditCidade] = useState("");
+  const [editUF, setEditUF] = useState("");
+  const [editCep, setEditCep] = useState("");
+  const [editStatus, setEditStatus] = useState("");
   const [editObs, setEditObs] = useState("");
   const [salvando, setSalvando] = useState(false);
 
@@ -112,7 +126,7 @@ export default function FaturamentoClientes() {
     const [clientesRes, roleRes, loRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, nome_fantasia, cnpj, email, telefone, cidade, uf, codigo_parceiro, codigo_cliente, cluster, tabela_preco, vendedor_id, negativado, aceita_saldo, observacoes_trade")
+        .select("id, razao_social, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, codigo_parceiro, codigo_cliente, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade")
         .order("razao_social")
         .range(0, 9999),
       supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
@@ -228,6 +242,11 @@ export default function FaturamentoClientes() {
     setEditPerfil(c.cluster ?? "");
     setEditTabela(c.tabela_preco ?? "");
     setEditVendedorId(c.vendedor_id ?? "");
+    setEditComprador(c.comprador ?? "");
+    setEditCidade(c.cidade ?? "");
+    setEditUF(c.uf ?? "");
+    setEditCep(c.cep ?? "");
+    setEditStatus(c.status ?? "ativo");
     setEditNegativado(c.negativado);
     setEditAceitaSaldo(c.aceita_saldo);
     setEditObs(c.observacoes_trade ?? "");
@@ -247,6 +266,11 @@ export default function FaturamentoClientes() {
         codigo_cliente: editCodigoCliente.trim() || null,
         email: editEmail.trim() || null,
         telefone: editTelefone.trim() || null,
+        comprador: editComprador.trim() || null,
+        cidade: editCidade.trim() || null,
+        uf: editUF || null,
+        cep: editCep.trim() || null,
+        status: editStatus || "ativo",
         cluster: editPerfil || null,
         tabela_preco: editTabela || null,
         vendedor_id: editVendedorId || null,
@@ -544,7 +568,7 @@ export default function FaturamentoClientes() {
 
       {/* Modal de edição */}
       <Dialog open={!!modalCliente} onOpenChange={(o) => !o && setModalCliente(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar cliente — {modalCliente?.razao_social}</DialogTitle>
           </DialogHeader>
@@ -574,6 +598,46 @@ export default function FaturamentoClientes() {
                 <Input value={editTelefone} onChange={(e) => setEditTelefone(e.target.value)} placeholder="(00) 00000-0000" />
               </div>
             </div>
+
+            <div className="space-y-1.5">
+              <Label>Comprador / Contato</Label>
+              <Input value={editComprador} onChange={(e) => setEditComprador(e.target.value)} placeholder="Nome do responsável" />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Cidade</Label>
+                <Input value={editCidade} onChange={(e) => setEditCidade(e.target.value)} placeholder="Cidade" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>UF</Label>
+                <Select value={editUF || "__none__"} onValueChange={(v) => setEditUF(v === "__none__" ? "" : v)}>
+                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Sem UF —</SelectItem>
+                    {UFS.map((uf) => (
+                      <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>CEP</Label>
+              <Input value={editCep} onChange={(e) => setEditCep(e.target.value)} placeholder="00000-000" maxLength={9} />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={editStatus || "ativo"} onValueChange={setEditStatus}>
+                <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent>
+                  {STATUS_OPTIONS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label>Cluster</Label>
