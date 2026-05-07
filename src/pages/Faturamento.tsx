@@ -882,13 +882,13 @@ export default function Faturamento() {
 
         {/* PDF resumo */}
         <Button size="sm" variant="outline"
-          onClick={(e) => gerarPdf(p, e)} title="Imprimir PDF resumo">
+          onClick={(e) => gerarPdf(p, e)} title="Resumo PDF">
           <FileText className="h-3 w-3" />
         </Button>
 
         {/* PDF formulário antigo */}
         <Button size="sm" variant="outline"
-          onClick={(e) => gerarFormularioPdf(p, e)} title="Formulário PDF (formato antigo)">
+          onClick={(e) => gerarFormularioPdf(p, e)} title="Formulário Completo PDF">
           <ClipboardList className="h-3 w-3" />
         </Button>
 

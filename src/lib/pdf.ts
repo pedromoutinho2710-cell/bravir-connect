@@ -205,151 +205,147 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
   const fPInt = (v: number) => `${Number(v).toFixed(1)}%`;
 
   const GREEN: [number, number, number] = [26, 107, 58];
-  const rH = 6;   // altura padrão das linhas de cabeçalho
-  const c3 = W / 3;
-  const c2 = W / 2;
+  const fH = 7; // altura padrão por campo
 
-  // ── Helpers ─────────────────────────────────────────────────────────────
+  // Paste Bravir logo base64 here to enable it
+  const LOGO_B64 = "";
 
-  // Célula com label pequeno (cinza, topo) + valor normal (baixo)
-  function cell(x: number, cy: number, w: number, h: number, label: string, value: string) {
-    doc.setDrawColor(160);
-    doc.rect(x, cy, w, h);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(5.5);
-    doc.setTextColor(80);
-    doc.text(label, x + 1, cy + 2.5);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.setTextColor(0);
-    doc.text(doc.splitTextToSize(value, w - 2)[0] ?? "", x + 1, cy + h - 1.5);
+  // ── 3 colunas do cabeçalho ────────────────────────────────────────────────
+  const cL = W * 0.25;  // ~71.75
+  const cC = W * 0.45;  // ~129.15
+  const cR = W * 0.30;  // ~86.10
+  const xL = ml;
+  const xC = ml + cL;
+  const xR = ml + cL + cC;
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+
+  function dotLine(x: number, y: number, w: number) {
+    doc.setDrawColor(180);
+    doc.setLineDashPattern([0.5, 1], 0);
+    doc.line(x, y, x + w, y);
+    doc.setLineDashPattern([], 0);
+    doc.setDrawColor(0);
   }
 
-  // Célula dupla: dois pares label+valor empilhados
-  function cell2(x: number, cy: number, w: number, h: number,
-    label1: string, val1: string, label2: string, val2: string) {
-    doc.setDrawColor(160);
-    doc.rect(x, cy, w, h);
-    const half = h / 2;
+  // Imprime label (negrito pequeno) + valor + linha pontilhada embaixo; retorna próximo y
+  function field(x: number, y: number, w: number, label: string, value: string, h = fH): number {
     doc.setFont("helvetica", "bold"); doc.setFontSize(5.5); doc.setTextColor(80);
-    doc.text(label1, x + 1, cy + 2.5);
+    doc.text(label, x, y + 2.5);
     doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0);
-    doc.text(doc.splitTextToSize(val1, w - 2)[0] ?? "", x + 1, cy + half - 0.5);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(5.5); doc.setTextColor(80);
-    doc.text(label2, x + 1, cy + half + 2.5);
-    doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0);
-    doc.text(doc.splitTextToSize(val2, w - 2)[0] ?? "", x + 1, cy + h - 1.5);
+    doc.text(doc.splitTextToSize(value, w - 1)[0] ?? "", x, y + h - 1.5);
+    dotLine(x, y + h, w);
+    return y + h + 1;
   }
 
-  // Célula somente com texto centralizado (sem label)
-  function cellCenter(x: number, cy: number, w: number, h: number, text: string) {
-    doc.setDrawColor(160);
-    doc.rect(x, cy, w, h);
-    doc.setFont("helvetica", "bold"); doc.setFontSize(6); doc.setTextColor(60);
-    doc.text(text, x + w / 2, cy + h / 2 + 1, { align: "center" });
-  }
-
-  let y = 2;
-
-  // ── Linha 1: Título (verde) ──────────────────────────────────────────
+  // ── Datas ────────────────────────────────────────────────────────────────
   const mesAno = new Date(d.data_pedido + "T12:00:00")
     .toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
     .toUpperCase();
-  doc.setFillColor(...GREEN);
-  doc.rect(ml, y, W, 8, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-  doc.text(`FORMULARIO DE PEDIDO - ${mesAno}`, pageW / 2, y + 5.5, { align: "center" });
-  y += 8;
-
-  // ── Linha 2: TABELA (fundo verde claro, alinhado à direita) ─────────
-  doc.setFillColor(230, 245, 230);
-  doc.rect(ml, y, W, 5, "F");
-  doc.setDrawColor(160); doc.rect(ml, y, W, 5);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(30, 80, 30);
-  doc.text(`TABELA: ${n(d.tabela_preco)}`, ml + W - 2, y + 3.5, { align: "right" });
-  y += 5;
-
-  // ── Linha 3: DATA PEDIDO | CLIENTE | CÓDIGO ──────────────────────────
-  doc.setTextColor(0);
   const dataPedido = new Date(d.data_pedido + "T12:00:00").toLocaleDateString("pt-BR");
-  cell(ml, y, c3, rH, "DATA PEDIDO", dataPedido);
-  cell(ml + c3, y, c3, rH, "CLIENTE", d.razao_social);
-  cell(ml + 2 * c3, y, c3, rH, "CODIGO (SANKHYA)", n(d.codigo_cliente));
-  y += rH;
 
-  // ── Linha 4 (separador fino) ─────────────────────────────────────────
-  doc.setDrawColor(200); doc.setLineWidth(0.1);
-  doc.line(ml, y, ml + W, y);
-  y += 2;
+  // ══════════════════════════════════════════════════════════════════════════
+  // COLUNA ESQUERDA
+  // ══════════════════════════════════════════════════════════════════════════
+  let yL = 2;
 
-  // ── Linha 5: PEDIDO | CNPJ | COND. PAGAMENTO ────────────────────────
-  cell(ml, y, c3, rH, "PEDIDO", d.tipo);
-  cell(ml + c3, y, c3, rH, "CNPJ", formatCNPJ(d.cnpj));
-  cell(ml + 2 * c3, y, c3, rH, "COND. PAGAMENTO", n(d.cond_pagamento));
-  y += rH;
+  if (LOGO_B64) {
+    doc.addImage(LOGO_B64, "PNG", xL, yL, 35, 14);
+    yL += 16;
+  } else {
+    doc.setDrawColor(180); doc.rect(xL, yL, 35, 14);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(26, 107, 58);
+    doc.text("BRAVIR GROUP", xL + 17.5, yL + 8.5, { align: "center" });
+    yL += 16;
+  }
 
-  // ── Linha 6: BONIFICAÇÃO | CIDADE/UF | CEP ──────────────────────────
-  cell(ml, y, c3, rH, "BONIFICACAO", "");
-  cell(ml + c3, y, c3, rH, "CIDADE / UF", `${n(d.cidade)} - ${n(d.uf)}`);
-  cell(ml + 2 * c3, y, c3, rH, "CEP", n(d.cep));
-  y += rH;
+  const pedidoTipo = d.tipo === "Bonificação" || d.tipo === "Bonificacao"
+    ? "[ ] PEDIDO  [X] BONIFICACAO"
+    : "[X] PEDIDO  [ ] BONIFICACAO";
+  yL = field(xL, yL, cL, "DATA PEDIDO:", dataPedido);
+  yL = field(xL, yL, cL, "PEDIDO:", pedidoTipo);
+  yL = field(xL, yL, cL, "No PEDIDO:", String(d.numero_pedido));
 
-  // ── Linha 7: Nº PEDIDO | (vazio) | DESCONTO: ESPECIAL ───────────────
-  cell(ml, y, c3, rH, "No PEDIDO", String(d.numero_pedido));
-  doc.setDrawColor(160); doc.rect(ml + c3, y, c3, rH); // célula vazia
-  cell(ml + 2 * c3, y, c3, rH, "DESCONTO", "ESPECIAL");
-  y += rH;
+  // ══════════════════════════════════════════════════════════════════════════
+  // COLUNA CENTRAL
+  // ══════════════════════════════════════════════════════════════════════════
+  let yC = 2;
 
-  // ── Linha 8 (separador) ──────────────────────────────────────────────
-  doc.setDrawColor(200);
-  doc.line(ml, y, ml + W, y);
-  y += 2;
+  // Título verde
+  doc.setFillColor(...GREEN);
+  doc.rect(xC, yC, cC, 8, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+  doc.text("FORMULARIO DE PEDIDO", xC + cC / 2, yC + 5.5, { align: "center" });
+  yC += 9;
 
-  // ── Linhas 9-10: PERFIL | *DADOS AGENDAMENTO | COMPRADOR / VENDEDOR ─
-  const dH = rH * 2; // altura dupla
-  cell(ml, y, c3, dH, "PERFIL DO CLIENTE", n(d.cluster));
-  cellCenter(ml + c3, y, c3, dH, "*DADOS P/ AGENDAMENTO:");
-  cell2(ml + 2 * c3, y, c3, dH, "COMPRADOR", n(d.comprador), "VENDEDOR", d.vendedor);
-  y += dH;
+  // TABELA (verde claro)
+  doc.setFillColor(230, 245, 230);
+  doc.rect(xC, yC, cC, 5, "F");
+  doc.setDrawColor(160); doc.rect(xC, yC, cC, 5);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(6.5); doc.setTextColor(30, 80, 30);
+  doc.text(`TABELA: ${n(d.tabela_preco)}`, xC + cC - 2, yC + 3.5, { align: "right" });
+  yC += 6;
 
-  // ── Linha 11 (separador) ─────────────────────────────────────────────
-  doc.setDrawColor(200);
-  doc.line(ml, y, ml + W, y);
-  y += 1;
+  doc.setTextColor(0);
+  yC = field(xC, yC, cC, "CLIENTE:", d.razao_social);
+  yC = field(xC, yC, cC, "CNPJ:", formatCNPJ(d.cnpj));
+  yC = field(xC, yC, cC, "CIDADE / UF:", `${n(d.cidade)} - ${n(d.uf)}`);
 
-  // ── Linhas 12-13: AGENDAMENTO ────────────────────────────────────────
-  const agH = rH + 2;
-  cell(ml, y, c2, agH, "AGENDAMENTO", d.agendamento ? "(X) SIM" : "( ) SIM  (X) NAO");
-  doc.setDrawColor(160); doc.rect(ml + c2, y, c2, agH); // célula vazia direita
-  y += agH;
-
-  // ── Linhas 14-15: OBSERVAÇÕES (largura total) ────────────────────────
-  const obsH = rH + 2;
-  doc.setDrawColor(160); doc.rect(ml, y, W, obsH);
   doc.setFont("helvetica", "bold"); doc.setFontSize(5.5); doc.setTextColor(80);
-  doc.text("OBSERVACOES", ml + 1, y + 2.5);
+  doc.text("*DADOS P/ AGENDAMENTO:", xC, yC + 2.5);
+  yC += 4;
+
+  yC = field(xC, yC, cC, "PERFIL DO CLIENTE:", n(d.cluster));
+
+  const agendStr = d.agendamento ? "[X] SIM  [ ] NAO" : "[ ] SIM  [X] NAO";
+  yC = field(xC, yC, cC, "AGENDAMENTO:", agendStr);
+
+  doc.setFont("helvetica", "bold"); doc.setFontSize(5.5); doc.setTextColor(80);
+  doc.text("OBSERVACOES:", xC, yC + 2.5);
   doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0);
-  doc.text(doc.splitTextToSize(n(d.observacoes), W - 2)[0] ?? "", ml + 1, y + obsH - 1.5);
-  y += obsH;
+  doc.text(doc.splitTextToSize(n(d.observacoes), cC - 1)[0] ?? "", xC, yC + fH - 1.5);
+  dotLine(xC, yC + fH, cC);
+  yC += fH + 1;
 
-  // ── Linha 16 (separador) ─────────────────────────────────────────────
-  y += 1;
+  // ══════════════════════════════════════════════════════════════════════════
+  // COLUNA DIREITA
+  // ══════════════════════════════════════════════════════════════════════════
+  let yR = 2;
 
-  // ── Linha 17: Atenção ────────────────────────────────────────────────
+  doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(0);
+  doc.text(mesAno, xR + cR, yR + 6, { align: "right" });
+  yR += 9;
+
+  yR = field(xR, yR, cR, "CODIGO:", n(d.codigo_cliente));
+  yR = field(xR, yR, cR, "COND. PAGAMENTO:", n(d.cond_pagamento));
+  yR = field(xR, yR, cR, "CEP:", n(d.cep));
+  yR = field(xR, yR, cR, "DESCONTO:", "ESPECIAL");
+  yR = field(xR, yR, cR, "COMPRADOR:", n(d.comprador));
+  yR = field(xR, yR, cR, "VENDEDOR:", d.vendedor);
+  yR = field(xR, yR, cR, "EMAIL:", n(d.email_xml));
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // LINHA DE ATENÇÃO + TABELA
+  // ══════════════════════════════════════════════════════════════════════════
+  let y = Math.max(yL, yC, yR) + 3;
+
   doc.setFillColor(255, 255, 204);
   doc.rect(ml, y, W, 5, "F");
   doc.setDrawColor(160); doc.rect(ml, y, W, 5);
-  doc.setFont("helvetica", "bold"); doc.setFontSize(6); doc.setTextColor(120, 0, 0);
-  doc.text("*ATENCAO: FAVOR PREENCHER APENAS AS CELULAS EM VERDE", pageW / 2, y + 3.5, { align: "center" });
-  y += 5;
+  doc.setFont("helvetica", "italic"); doc.setFontSize(6); doc.setTextColor(80, 80, 0);
+  doc.text(
+    "*ATENCAO: FAVOR PREENCHER APENAS AS CELULAS EM VERDE",
+    pageW / 2, y + 3.5, { align: "center" },
+  );
+  y += 6;
 
-  // ── Cálculos totais ──────────────────────────────────────────────────
+  // ── Cálculos ─────────────────────────────────────────────────────────────
   const totalBruto = d.itens.reduce((s, i) => s + i.preco_bruto * i.quantidade, 0);
   const totalVolumes = d.itens.reduce((s, i) => s + Math.ceil(i.quantidade / (i.cx_embarque || 1)), 0);
   const pesoTotal = d.itens.reduce((s, i) => s + i.peso_unitario * i.quantidade, 0);
 
-  // ── Linha 18+: Tabela de itens ───────────────────────────────────────
+  // ── Tabela de itens ───────────────────────────────────────────────────────
   const heads = [
     "COD.\nJIVA",
     "CX DE\nEMBARQUE",
@@ -406,8 +402,14 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
       minCellHeight: 8,
     },
     bodyStyles: { fontSize: 6.5, cellPadding: 1 },
-    alternateRowStyles: { fillColor: [249, 249, 249] },
+    alternateRowStyles: { fillColor: [245, 245, 245] },
     styles: { overflow: "ellipsize", lineColor: [180, 180, 180], lineWidth: 0.2 },
+    // Coluna QTD PEDIDA (índice 2) com fundo verde claro — simula campo editável
+    didParseCell: (data) => {
+      if (data.section === "body" && data.column.index === 2) {
+        data.cell.styles.fillColor = [214, 236, 210];
+      }
+    },
     columnStyles: {
       0:  { cellWidth: 14, halign: "center" },
       1:  { cellWidth: 10, halign: "center" },
@@ -431,20 +433,23 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
   // @ts-expect-error lastAutoTable
   const finalY: number = doc.lastAutoTable.finalY + 2;
 
-  // ── Rodapé: Área reservada faturamento ──────────────────────────────
-  const resH = 6;
+  // ── Área reservada faturamento ────────────────────────────────────────────
+  const resH = 8;
   doc.setFillColor(235, 245, 235);
   doc.rect(ml, finalY, W, resH, "F");
   doc.setDrawColor(120); doc.rect(ml, finalY, W, resH);
   doc.setFont("helvetica", "bold"); doc.setFontSize(6); doc.setTextColor(30, 80, 30);
   doc.text("*AREA RESERVADA PARA PREENCHIMENTO APENAS DO FATURAMENTO", ml + 1, finalY + 2.5);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(6.5); doc.setTextColor(0);
-  doc.text(
-    `No PEDIDO: ___________    QTD. VOLUMES: ${totalVolumes}    PESO: ${pesoTotal.toFixed(2)} kg    COTACOES DE TRANSPORTE: ___________`,
-    ml + 1, finalY + resH - 1,
-  );
+  const rfw = W / 3;
+  const resLabels = ["No PEDIDO:", "QTD. VOLUMES:", "COTACOES DE TRANSPORTE:"];
+  const resVals = ["___________", String(totalVolumes), "___________"];
+  resLabels.forEach((lbl, idx) => {
+    const rx = ml + idx * rfw + 1;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(5.5); doc.setTextColor(60);
+    doc.text(`${lbl} ${resVals[idx]}`, rx, finalY + resH - 1.5);
+  });
 
-  // ── Rodapé: Resumo final (cinza claro) ──────────────────────────────
+  // ── Resumo final ──────────────────────────────────────────────────────────
   const sumY = finalY + resH + 1;
   const sumH = 6;
   doc.setFillColor(235, 235, 230);
@@ -461,7 +466,7 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
     doc.text(text, ml + idx * sumW + 1, sumY + sumH - 1.5);
   });
 
-  // ── Rodapé de páginas ────────────────────────────────────────────────
+  // ── Rodapé de páginas ─────────────────────────────────────────────────────
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i);
