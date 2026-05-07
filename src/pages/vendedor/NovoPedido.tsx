@@ -32,8 +32,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 
-const RASCUNHO_KEY = "bravir:rascunho-pedido";
-
 const initialCliente: DadosCliente = {
   cnpj: "",
   razao_social: "",
@@ -56,6 +54,7 @@ const initialCliente: DadosCliente = {
 
 export default function NovoPedido() {
   const { user } = useAuth();
+  const rascunhoKey = `bravir:rascunho-pedido:${user?.id ?? "anonimo"}`;
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -127,7 +126,7 @@ export default function NovoPedido() {
 
       // Restaura rascunho do localStorage silenciosamente
       try {
-        const raw = localStorage.getItem(RASCUNHO_KEY);
+        const raw = localStorage.getItem(rascunhoKey);
         if (raw) {
           const saved = JSON.parse(raw);
           if (saved.cliente) setCliente(saved.cliente);
@@ -319,7 +318,7 @@ export default function NovoPedido() {
     if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
     localSaveTimer.current = window.setTimeout(() => {
       if (pedidoEnviadoRef.current) return;
-      localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ cliente, itens, pedidoId, vigenciaId }));
+      localStorage.setItem(rascunhoKey, JSON.stringify({ cliente, itens, pedidoId, vigenciaId }));
     }, 500);
   }, [cliente, itens, pedidoId, loading]);
 
@@ -328,7 +327,7 @@ export default function NovoPedido() {
     setItens([]);
     setCliente(initialCliente);
     setPedidoId(null);
-    localStorage.removeItem(RASCUNHO_KEY);
+    localStorage.removeItem(rascunhoKey);
     setShowLimpar(false);
   };
 
@@ -452,7 +451,7 @@ export default function NovoPedido() {
 
       pedidoEnviadoRef.current = true;
       if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
-      localStorage.removeItem(RASCUNHO_KEY);
+      localStorage.removeItem(rascunhoKey);
       toast.success("Pedido enviado para faturamento!");
       navigate("/meus-pedidos");
     }
