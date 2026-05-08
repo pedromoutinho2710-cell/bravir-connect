@@ -50,6 +50,11 @@ type PedidoFat = {
   aceita_saldo_cliente: boolean;
   negativado_cliente: boolean;
   email_xml: string | null;
+  rua: string | null;
+  numero_endereco: string | null;
+  bairro: string | null;
+  telefone: string | null;
+  vendedor_nome: string;
   total: number;
   peso_total: number;
   marcas: string[];
@@ -244,7 +249,7 @@ export default function Faturamento() {
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, observacoes, responsavel_id, motivo, vendedor_id,
           cliente_id, perfil_cliente, tabela_preco, agendamento,
-          clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, aceita_saldo, negativado, email),
+          clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, aceita_saldo, negativado, email, rua, numero, bairro, telefone),
           itens_pedido(
             id, total_item, quantidade, qtd_faturada, preco_unitario_bruto, preco_unitario_liquido,
             desconto_perfil, desconto_comercial, desconto_trade,
@@ -299,6 +304,11 @@ export default function Faturamento() {
           aceita_saldo_cliente: cl?.aceita_saldo ?? false,
           negativado_cliente: cl?.negativado ?? false,
           email_xml: cl?.email ?? null,
+          rua: cl?.rua ?? null,
+          numero_endereco: cl?.numero ?? null,
+          bairro: cl?.bairro ?? null,
+          telefone: cl?.telefone ?? null,
+          vendedor_nome: profiles[p.vendedor_id] ?? "—",
           total,
           peso_total: pesoTotal,
           marcas,
@@ -645,6 +655,8 @@ export default function Faturamento() {
       <p>Cond. Pagamento: ${p.cond_pagamento ?? "—"} | Cluster: ${p.cluster ?? "—"} | Agendamento: ${p.agendamento ? "Sim" : "Não"}</p>
       ${p.comprador ? `<p>Comprador: ${p.comprador}</p>` : ""}
       ${p.email_xml ? `<p>Email XML/Boleto: ${p.email_xml}</p>` : ""}
+      ${p.rua ? `<p>Endereço: ${[p.rua, p.numero_endereco, p.bairro].filter(Boolean).join(", ")}</p>` : ""}
+      ${p.telefone ? `<p>Telefone: ${p.telefone}</p>` : ""}
       <table><thead><tr>
         <th>Código</th><th>Produto</th><th>Cx Emb.</th><th>Qtd Pedida</th><th>Qtd Volumes</th><th>Qtd Faturada</th><th>Peso Total</th><th>Desc. Cluster</th><th>Desc. Comercial</th><th>Desc. Trade</th><th>Total Bruto</th><th>Total c/ Desc.</th>
       </tr></thead><tbody>${linhas}</tbody></table>
@@ -943,7 +955,18 @@ export default function Faturamento() {
                       {p.codigo_parceiro && (
                         <div className="text-xs text-muted-foreground font-mono">Cód: {p.codigo_parceiro}</div>
                       )}
-                      <div className="text-xs text-muted-foreground">{profiles[p.vendedor_id] ?? "—"}</div>
+                      <div className="text-xs text-muted-foreground">Vendedor: {p.vendedor_nome}</div>
+                      {p.email_xml && (
+                        <div className="text-xs text-muted-foreground truncate">Email: {p.email_xml}</div>
+                      )}
+                      {p.rua && (
+                        <div className="text-xs text-muted-foreground">
+                          {[p.rua, p.numero_endereco, p.bairro].filter(Boolean).join(", ")}
+                        </div>
+                      )}
+                      {p.telefone && (
+                        <div className="text-xs text-muted-foreground">Tel: {p.telefone}</div>
+                      )}
                     </div>
                     <div className="text-right text-sm font-semibold text-green-700">{formatBRL(p.total)}</div>
                   </div>
@@ -1014,8 +1037,16 @@ export default function Faturamento() {
                       {p.email_xml && (
                         <div className="text-xs text-muted-foreground truncate max-w-[160px]" title={p.email_xml}>{p.email_xml}</div>
                       )}
+                      {p.rua && (
+                        <div className="text-xs text-muted-foreground truncate max-w-[160px]">
+                          {[p.rua, p.numero_endereco, p.bairro].filter(Boolean).join(", ")}
+                        </div>
+                      )}
+                      {p.telefone && (
+                        <div className="text-xs text-muted-foreground">{p.telefone}</div>
+                      )}
                     </TableCell>
-                    <TableCell className="text-sm">{profiles[p.vendedor_id] ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{p.vendedor_nome}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {p.marcas.map((m) => <Badge key={m} variant="outline" className="text-xs">{m}</Badge>)}
