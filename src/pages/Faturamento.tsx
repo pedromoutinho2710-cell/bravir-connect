@@ -17,7 +17,6 @@ import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
 import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList } from "lucide-react";
 import { MARCAS } from "@/lib/constants";
-import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -124,9 +123,9 @@ function horasDesde(dt: string | null): number {
 
 function urgencyClass(p: PedidoFat): string {
   if (!STATUS_ACTIVE.has(p.status)) return "";
-  const h = horasDesde(p.status_atualizado_em ?? p.data_pedido);
-  if (h > 48) return "bg-red-50";
-  if (h > 24) return "bg-yellow-50";
+  const dias = Math.floor((Date.now() - new Date(p.status_atualizado_em ?? p.data_pedido).getTime()) / 86400000);
+  if (dias >= 4) return "bg-red-100";
+  if (dias >= 2) return "bg-yellow-50";
   return "";
 }
 
@@ -176,8 +175,7 @@ export default function Faturamento() {
   const [motivo, setMotivo] = useState("");
 
   // Dialog detalhes
-  const [detalhesId, setDetalhesId] = useState<string | null>(null);
-  const [detalhesOpen, setDetalhesOpen] = useState(false);
+  const [detalhePedido, setDetalhePedido] = useState<PedidoFat | null>(null);
 
   // Dialog faturar NF
   type ItemFat = { marcar: boolean; qtd: number; alreadyFaturado: number };
@@ -807,7 +805,7 @@ export default function Faturamento() {
 
         {/* Ver detalhes */}
         <Button size="sm" variant="outline"
-          onClick={wrap(() => { setDetalhesId(p.id); setDetalhesOpen(true); })}
+          onClick={wrap(() => setDetalhePedido(p))}
           title="Ver detalhes">
           <Eye className="h-3 w-3" />
         </Button>
@@ -928,8 +926,8 @@ export default function Faturamento() {
 
       {/* Legenda urgência */}
       <div className="flex gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-yellow-100 border border-yellow-300 inline-block" /> &gt;24h aguardando</span>
-        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-red-100 border border-red-300 inline-block" /> &gt;48h aguardando</span>
+        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-yellow-50 border border-yellow-200 inline-block" /> 2-3 dias aguardando</span>
+        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-red-100 border border-red-300 inline-block" /> 4+ dias aguardando</span>
       </div>
 
       {loading ? (
@@ -943,7 +941,7 @@ export default function Faturamento() {
             {pedidos.length === 0 && <p className="text-center text-muted-foreground py-12">Nenhum pedido encontrado</p>}
             {pedidos.map((p) => (
               <Card key={p.id} className={`cursor-pointer active:opacity-70 ${urgencyClass(p)}`}
-                onClick={() => { setDetalhesId(p.id); setDetalhesOpen(true); }}>
+                onClick={() => setDetalhePedido(p)}>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-start justify-between gap-2">
                     <div>
@@ -1013,7 +1011,7 @@ export default function Faturamento() {
                 {pedidos.map((p) => (
                   <TableRow key={p.id}
                     className={`cursor-pointer hover:bg-muted/50 ${urgencyClass(p)}`}
-                    onClick={() => { setDetalhesId(p.id); setDetalhesOpen(true); }}>
+                    onClick={() => setDetalhePedido(p)}>
                     <TableCell className="font-mono font-semibold text-sm">
                       <div>#{p.numero_pedido}</div>
                       <div className="text-xs font-normal text-muted-foreground">{formatDate(p.data_pedido)}</div>
@@ -1234,7 +1232,113 @@ export default function Faturamento() {
         </DialogContent>
       </Dialog>
 
-      <PedidoDetalhesDialog pedidoId={detalhesId} open={detalhesOpen} onOpenChange={setDetalhesOpen} />
+      {/* Dialog: detalhes pedido */}
+      <Dialog open={!!detalhePedido} onOpenChange={(o) => !o && setDetalhePedido(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Pedido #{detalhePedido?.numero_pedido} — {detalhePedido?.razao_social}</DialogTitle>
+          </DialogHeader>
+          {detalhePedido && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+                <div><span className="text-muted-foreground">CNPJ:</span> {formatCNPJ(detalhePedido.cnpj)}</div>
+                <div><span className="text-muted-foreground">Data:</span> {formatDate(detalhePedido.data_pedido)}</div>
+                <div><span className="text-muted-foreground">Cidade/UF:</span> {detalhePedido.cidade ?? "—"} / {detalhePedido.uf ?? "—"}</div>
+                <div><span className="text-muted-foreground">Cond. Pagamento:</span> {detalhePedido.cond_pagamento ?? "—"}</div>
+                <div><span className="text-muted-foreground">Cluster:</span> {detalhePedido.cluster ?? "—"}</div>
+                <div><span className="text-muted-foreground">Tabela Preço:</span> {detalhePedido.tabela_preco ?? "—"}</div>
+                <div><span className="text-muted-foreground">Agendamento:</span> {detalhePedido.agendamento ? "Sim" : "Não"}</div>
+                <div><span className="text-muted-foreground">Vendedor:</span> {detalhePedido.vendedor_nome}</div>
+                {detalhePedido.comprador && <div><span className="text-muted-foreground">Comprador:</span> {detalhePedido.comprador}</div>}
+                {detalhePedido.codigo_cliente && <div><span className="text-muted-foreground">Cód. Sankhya:</span> {detalhePedido.codigo_cliente}</div>}
+                {detalhePedido.codigo_parceiro && <div><span className="text-muted-foreground">Cód. Parceiro:</span> {detalhePedido.codigo_parceiro}</div>}
+                {detalhePedido.email_xml && (
+                  <div className="col-span-2"><span className="text-muted-foreground">Email XML/Boleto:</span> {detalhePedido.email_xml}</div>
+                )}
+                {detalhePedido.rua && (
+                  <div className="col-span-2"><span className="text-muted-foreground">Endereço:</span> {[detalhePedido.rua, detalhePedido.numero_endereco, detalhePedido.bairro].filter(Boolean).join(", ")}</div>
+                )}
+                {detalhePedido.telefone && <div><span className="text-muted-foreground">Telefone:</span> {detalhePedido.telefone}</div>}
+                {detalhePedido.observacoes && (
+                  <div className="col-span-2"><span className="text-muted-foreground">Obs:</span> {detalhePedido.observacoes}</div>
+                )}
+                {detalhePedido.motivo && (
+                  <div className="col-span-2"><span className="text-muted-foreground">Motivo:</span> <span className="text-amber-700">{detalhePedido.motivo}</span></div>
+                )}
+              </div>
+
+              <div className="rounded-md border overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left px-3 py-2">Produto</th>
+                      <th className="text-center px-2 py-2">Cx</th>
+                      <th className="text-center px-2 py-2">Qtd</th>
+                      <th className="text-center px-2 py-2">Perf%</th>
+                      <th className="text-center px-2 py-2">Com%</th>
+                      <th className="text-center px-2 py-2">Trade%</th>
+                      <th className="text-right px-3 py-2">Bruto un.</th>
+                      <th className="text-right px-3 py-2">Final un.</th>
+                      <th className="text-right px-3 py-2">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detalhePedido.itens.map((i) => (
+                      <tr key={i.id} className="border-b last:border-0">
+                        <td className="px-3 py-2">
+                          <div className="font-medium">{i.nome}</div>
+                          <div className="text-muted-foreground font-mono">{i.codigo}</div>
+                        </td>
+                        <td className="text-center px-2 py-2">{i.cx_embarque}</td>
+                        <td className="text-center px-2 py-2">{i.quantidade}</td>
+                        <td className="text-center px-2 py-2">{(i.desconto_perfil * 100).toFixed(1)}%</td>
+                        <td className="text-center px-2 py-2">{i.desconto_comercial.toFixed(1)}%</td>
+                        <td className="text-center px-2 py-2">{i.desconto_trade.toFixed(1)}%</td>
+                        <td className="text-right px-3 py-2">{formatBRL(i.preco_bruto)}</td>
+                        <td className="text-right px-3 py-2">{formatBRL(i.preco_final)}</td>
+                        <td className="text-right px-3 py-2 font-medium">{formatBRL(i.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-end gap-4 text-sm">
+                <span className="text-muted-foreground">Peso total: {detalhePedido.peso_total.toFixed(2)} kg</span>
+                <span className="font-bold text-green-700">Total: {formatBRL(detalhePedido.total)}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button variant="outline" onClick={() => {
+              if (!detalhePedido) return;
+              const endereco = [detalhePedido.rua, detalhePedido.numero_endereco, detalhePedido.bairro].filter(Boolean).join(", ");
+              const linhas = [
+                `Pedido #${detalhePedido.numero_pedido}`,
+                `Razão Social: ${detalhePedido.razao_social}`,
+                `CNPJ: ${formatCNPJ(detalhePedido.cnpj)}`,
+                detalhePedido.codigo_cliente ? `Código Sankhya: ${detalhePedido.codigo_cliente}` : null,
+                detalhePedido.codigo_parceiro ? `Código Parceiro: ${detalhePedido.codigo_parceiro}` : null,
+                `Cidade/UF: ${detalhePedido.cidade ?? "—"}/${detalhePedido.uf ?? "—"}`,
+                detalhePedido.cep ? `CEP: ${detalhePedido.cep}` : null,
+                endereco ? `Endereço: ${endereco}` : null,
+                detalhePedido.telefone ? `Telefone: ${detalhePedido.telefone}` : null,
+                detalhePedido.email_xml ? `Email XML: ${detalhePedido.email_xml}` : null,
+                `Cond. Pagamento: ${detalhePedido.cond_pagamento ?? "—"}`,
+                `Tabela Preço: ${detalhePedido.tabela_preco ?? "—"}`,
+                `Cluster: ${detalhePedido.cluster ?? "—"}`,
+                detalhePedido.comprador ? `Comprador: ${detalhePedido.comprador}` : null,
+                `Agendamento: ${detalhePedido.agendamento ? "Sim" : "Não"}`,
+                detalhePedido.observacoes ? `Obs: ${detalhePedido.observacoes}` : null,
+              ].filter(Boolean).join("\n");
+              navigator.clipboard.writeText(linhas).then(() => toast.success("Dados copiados!"));
+            }}>
+              Copiar dados para Sankhya
+            </Button>
+            <Button variant="outline" onClick={() => setDetalhePedido(null)}>Fechar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog: faturamento por produto */}
       <Dialog open={!!prodFatDialog} onOpenChange={(o) => !o && setProdFatDialog(null)}>
