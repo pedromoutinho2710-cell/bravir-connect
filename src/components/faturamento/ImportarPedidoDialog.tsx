@@ -105,21 +105,19 @@ export default function ImportarPedidoDialog({
       const cel = (row: number, col: number): string =>
         String(aoa[row]?.[col] ?? "").trim();
 
-      const tabela_preco = cel(2, 6);   // G3
-      const codigo_cliente = cel(3, 13); // N4
-      const cond_pagamento = cel(4, 12); // M5
-      const vendedor_excel = cel(8, 12); // M9
-      void vendedor_excel; // lido mas não usado diretamente — cliente traz o vendedor_id
+      const tabelaRaw = cel(1, 7); // H2
+      const tabela_preco = (tabelaRaw.match(/\d+|suframa/i) ?? [""])[0].toLowerCase();
+      const codigo_cliente = cel(2, 14); // O3
+      const cond_pagamento = cel(4, 14); // O5
 
-      // Agendamento: linha 10 (índice 9) — procura "SIM" em qualquer célula da linha
-      const linhaAg = (aoa[9] ?? []) as unknown[];
-      const agendamento = linhaAg.some((c) => String(c ?? "").toUpperCase().includes("SIM"));
+      // Agendamento: linha 12 (índice 11), coluna F (índice 5)
+      const agendamento = cel(11, 5).toUpperCase().includes("SIM");
 
       const observacoes = cel(11, 12); // M12
 
-      // Produtos: linha 14 em diante (índice 13)
+      // Produtos: linha 19 em diante (índice 18)
       const rawProdutos: ProdutoRow[] = [];
-      for (let i = 13; i < aoa.length; i++) {
+      for (let i = 18; i < aoa.length; i++) {
         const row = aoa[i] as unknown[];
         const cod = String(row?.[2] ?? "").trim(); // C
         if (!cod) break;
