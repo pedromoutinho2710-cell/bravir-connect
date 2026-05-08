@@ -40,6 +40,7 @@ export default function NovoPedido() {
     cliente, setCliente,
     itens, setItens,
     vigenciaId, setVigenciaId,
+    setPedidoId,
     previewOpen, setPreviewOpen,
     showLimpar, setShowLimpar,
     produtos,
@@ -85,6 +86,67 @@ export default function NovoPedido() {
       cluster: fc.cluster ?? "",
       tabela_preco: fc.tabela_preco ?? "",
     }));
+  }, [hookLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (hookLoading) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const pedidoId = (location.state as any)?.pedidoId;
+    if (!pedidoId) return;
+
+    (async () => {
+      const { data: ped } = await supabase
+        .from("pedidos")
+        .select("*, clientes(*), itens_pedido(*, produtos(*))")
+        .eq("id", pedidoId)
+        .single();
+      if (!ped) return;
+
+      const cl = ped.clientes as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      setCliente((c) => ({
+        ...c,
+        cliente_id: cl.id,
+        cnpj: formatCNPJ(cl.cnpj ?? ""),
+        razao_social: cl.razao_social ?? "",
+        cidade: cl.cidade ?? "",
+        uf: cl.uf ?? "",
+        cep: cl.cep ? formatCEP(cl.cep) : "",
+        comprador: ped.perfil_cliente ?? cl.comprador ?? "",
+        cluster: cl.cluster ?? "",
+        tabela_preco: cl.tabela_preco ?? "",
+        cond_pagamento: ped.cond_pagamento ?? "",
+        observacoes: ped.observacoes ?? "",
+        agendamento: ped.agendamento ?? false,
+        codigo_cliente: cl.codigo_parceiro ?? cl.codigo_cliente ?? "",
+        aceita_saldo: cl.aceita_saldo ?? true,
+        email_xml: cl.email ?? "",
+        tipo: ped.tipo ?? "Pedido",
+      }));
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const itensRestaurados = ((ped.itens_pedido ?? []) as any[]).map((i) => ({
+        produto_id: i.produto_id,
+        codigo: i.produtos?.codigo_jiva ?? "",
+        nome: i.produtos?.nome ?? "",
+        marca: i.produtos?.marca ?? "",
+        cx_embarque: i.produtos?.cx_embarque ?? 1,
+        peso_unitario: Number(i.produtos?.peso_unitario ?? 0),
+        quantidade: i.quantidade,
+        preco_bruto: Number(i.preco_unitario_bruto),
+        desconto_perfil: Number(i.desconto_perfil),
+        desconto_comercial: Number(i.desconto_comercial),
+        desconto_trade: Number(i.desconto_trade),
+        preco_apos_perfil: Number(i.preco_apos_perfil),
+        preco_apos_comercial: Number(i.preco_apos_comercial),
+        preco_final: Number(i.preco_final),
+        total: Number(i.total_item),
+        bolsao: 0,
+      }));
+      setItens(itensRestaurados);
+
+      setPedidoId(pedidoId);
+      if (ped.vigencia_id) setVigenciaId(ped.vigencia_id);
+    })();
   }, [hookLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const atingiuMinimo = totalGeral >= pedidoMinimo;

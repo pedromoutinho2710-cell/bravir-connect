@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -96,6 +96,7 @@ function tempoNoStatus(dt: string | null) {
 
 export default function MeusPedidos() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [pedidos, setPedidos] = useState<MeuPedido[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -205,6 +206,11 @@ export default function MeusPedidos() {
   const temFiltro = filtroStatus !== "todos" || filtroCliente || filtroMarca !== "todas" || filtroDataInicio || filtroDataFim;
 
   const abrirDetalhes = (id: string) => {
+    const pedido = pedidos.find((p) => p.id === id);
+    if (pedido?.status === "rascunho") {
+      navigate("/novo-pedido", { state: { pedidoId: id } });
+      return;
+    }
     setDetalhesId(id);
     setDetalhesOpen(true);
   };
