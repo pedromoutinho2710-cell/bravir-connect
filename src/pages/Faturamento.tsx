@@ -15,7 +15,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList } from "lucide-react";
+import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload } from "lucide-react";
+import ImportarPedidoDialog from "@/components/faturamento/ImportarPedidoDialog";
 import { MARCAS } from "@/lib/constants";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { formatDistanceToNow } from "date-fns";
@@ -198,6 +199,9 @@ export default function Faturamento() {
   const [prodFatDialog, setProdFatDialog] = useState<PedidoFat | null>(null);
   const [prodFatQtds, setProdFatQtds] = useState<Record<string, number>>({});
   const [salvandoProdFat, setSalvandoProdFat] = useState(false);
+
+  // Dialog importar pedido
+  const [importarOpen, setImportarOpen] = useState(false);
 
   const carregar = useCallback(() => setRefreshKey((k) => k + 1), []);
   usePullToRefresh(carregar);
@@ -829,10 +833,22 @@ export default function Faturamento() {
   // ── Render ────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 pb-6">
-      <div>
-        <h1 className="text-2xl font-bold">Pré-faturamento</h1>
-        <p className="text-sm text-muted-foreground">Gerencie e processe pedidos enviados pelos vendedores</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Pré-faturamento</h1>
+          <p className="text-sm text-muted-foreground">Gerencie e processe pedidos enviados pelos vendedores</p>
+        </div>
+        <Button onClick={() => setImportarOpen(true)} variant="outline" className="shrink-0">
+          <Upload className="h-4 w-4 mr-2" />
+          Importar Pedido
+        </Button>
       </div>
+
+      <ImportarPedidoDialog
+        open={importarOpen}
+        onOpenChange={setImportarOpen}
+        onImportado={carregar}
+      />
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
