@@ -162,7 +162,6 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
 
   const camposObrigatoriosOk = !!(
     cliente.cond_pagamento.trim() &&
-    cliente.email_xml.trim() &&
     cliente.codigo_cliente.trim() &&
     cliente.comprador.trim()
   );
