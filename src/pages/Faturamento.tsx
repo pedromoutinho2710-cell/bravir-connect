@@ -953,7 +953,7 @@ export default function Faturamento() {
                       {p.codigo_parceiro && (
                         <div className="text-xs text-muted-foreground font-mono">Cód: {p.codigo_parceiro}</div>
                       )}
-                      <div className="text-xs text-muted-foreground">Vendedor: {p.vendedor_nome}</div>
+                      <div className="text-xs text-muted-foreground">Vendedor: {profiles[p.vendedor_id] ?? p.vendedor_nome}</div>
                       {p.email_xml && (
                         <div className="text-xs text-muted-foreground truncate">Email: {p.email_xml}</div>
                       )}
@@ -1044,7 +1044,7 @@ export default function Faturamento() {
                         <div className="text-xs text-muted-foreground">{p.telefone}</div>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm">{p.vendedor_nome}</TableCell>
+                    <TableCell className="text-sm">{profiles[p.vendedor_id] ?? p.vendedor_nome}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
                         {p.marcas.map((m) => <Badge key={m} variant="outline" className="text-xs">{m}</Badge>)}
