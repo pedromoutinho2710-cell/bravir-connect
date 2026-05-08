@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Eye, Copy } from "lucide-react";
@@ -83,6 +84,13 @@ export default function FilaCadastros() {
   const [showReprovar, setShowReprovar] = useState(false);
   const [motivoReprovacao, setMotivoReprovacao] = useState("");
   const [saving, setSaving] = useState(false);
+  const [aprovarDialog, setAprovarDialog] = useState<Cadastro | null>(null);
+  const [aprovarForm, setAprovarForm] = useState({
+    codigo_cliente: "",
+    codigo_parceiro: "",
+    cluster: "",
+    tabela_preco: "",
+  });
 
   const load = async () => {
     setLoading(true);
@@ -140,8 +148,9 @@ export default function FilaCadastros() {
     setMotivoReprovacao("");
   };
 
-  const handleAprovar = async () => {
-    if (!selected) return;
+  const handleAprovar = async (form: { codigo_cliente: string; codigo_parceiro: string; cluster: string; tabela_preco: string }) => {
+    const cadastro = aprovarDialog;
+    if (!cadastro) return;
     if (!vendedorSelecionado) {
       toast.error("Selecione um vendedor para encarteirar o cliente.");
       return;
@@ -151,48 +160,51 @@ export default function FilaCadastros() {
       const { error } = await (supabase.from("cadastros_pendentes") as any)
         .update({
           status: "aguardando_faturamento",
-          cluster_sugerido: clusterEdit || null,
+          cluster_sugerido: form.cluster || null,
           negativado: negativadoEdit,
           vendedor_id: vendedorSelecionado,
           vendedor_nome: vendedores.find((v) => v.id === vendedorSelecionado)?.nome ?? null,
         })
-        .eq("id", selected.id);
+        .eq("id", cadastro.id);
       if (error) throw error;
 
-      if (selected.cnpj) {
+      if (cadastro.cnpj) {
         const { data: existing } = await (supabase.from("clientes") as any)
           .select("id")
-          .eq("cnpj", selected.cnpj)
+          .eq("cnpj", cadastro.cnpj)
           .maybeSingle();
         if (existing) {
           toast.error("CNPJ já cadastrado na base de clientes.");
-          setSelected(null);
+          setAprovarDialog(null);
           load();
           return;
         }
       }
 
       const { error: insErr } = await (supabase.from("clientes") as any).insert({
-        razao_social: selected.razao_social ?? selected.nome_cliente ?? "Sem nome",
-        cnpj: selected.cnpj ?? null,
-        email: selected.email ?? null,
-        telefone: selected.telefone ?? null,
+        razao_social: cadastro.razao_social ?? cadastro.nome_cliente ?? "Sem nome",
+        cnpj: cadastro.cnpj ?? null,
+        email: cadastro.email ?? null,
+        telefone: cadastro.telefone ?? null,
         cidade: null,
         uf: null,
         cep: null,
         rua: null,
         numero: null,
         bairro: null,
-        comprador: selected.contato_principal ?? null,
-        cluster: clusterEdit || null,
+        comprador: cadastro.contato_principal ?? null,
+        cluster: form.cluster || null,
         vendedor_id: vendedorSelecionado,
         status: "ativo",
         negativado: negativadoEdit,
+        codigo_cliente: form.codigo_cliente || null,
+        tabela_preco: form.tabela_preco ? Number(form.tabela_preco) : null,
+        codigo_parceiro: form.codigo_parceiro || null,
       });
       if (insErr) toast.error("Cadastro aprovado, mas erro ao criar cliente: " + insErr.message);
       else toast.success("Cadastro aprovado e cliente criado!");
 
-      setSelected(null);
+      setAprovarDialog(null);
       load();
     } catch (err: any) {
       toast.error(err.message ?? "Erro ao aprovar.");
@@ -443,8 +455,113 @@ export default function FilaCadastros() {
                 >
                   Reprovar
                 </Button>
-                <Button onClick={handleAprovar} disabled={saving || !vendedorSelecionado}>
-                  {saving ? "Salvando..." : "Enviar para faturamento"}
+                <Button
+                  onClick={() => {
+                    setAprovarDialog(selected);
+                    setAprovarForm({ codigo_cliente: "", codigo_parceiro: "", cluster: selected!.cluster_sugerido ?? "", tabela_preco: "" });
+                    setSelected(null);
+                  }}
+                  disabled={saving || !vendedorSelecionado}
+                >
+                  Marcar como cadastrado
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de aprovação — dados Sankhya */}
+      <Dialog open={!!aprovarDialog} onOpenChange={(o) => !o && setAprovarDialog(null)}>
+        <DialogContent className="max-w-lg">
+          {aprovarDialog && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Cadastrar cliente no sistema</DialogTitle>
+              </DialogHeader>
+
+              <div className="space-y-4 py-2">
+                {/* Resumo do cliente */}
+                <div className="rounded-md border p-3 space-y-1 bg-muted/40 text-sm">
+                  <div><span className="font-medium">Nome:</span> {aprovarDialog.nome_cliente ?? aprovarDialog.razao_social ?? "—"}</div>
+                  <div><span className="font-medium">CNPJ:</span> {aprovarDialog.cnpj ? formatCNPJ(aprovarDialog.cnpj) : "—"}</div>
+                  <div><span className="font-medium">Classificação:</span> {aprovarDialog.classificacao ?? "—"}</div>
+                  <div><span className="font-medium">Cluster sugerido:</span> {aprovarDialog.cluster_sugerido ?? "—"}</div>
+                </div>
+
+                {/* Respostas do vendedor */}
+                <div>
+                  <h4 className="text-sm font-semibold mb-2">Respostas do vendedor</h4>
+                  <div className="space-y-1 text-sm text-muted-foreground">
+                    {aprovarDialog.classificacao && <div><span className="font-medium text-foreground">Classificação:</span> {aprovarDialog.classificacao}</div>}
+                    {aprovarDialog.qtd_lojas && <div><span className="font-medium text-foreground">Qtd lojas:</span> {aprovarDialog.qtd_lojas}</div>}
+                    {aprovarDialog.qtd_vendedores != null && <div><span className="font-medium text-foreground">Qtd vendedores:</span> {aprovarDialog.qtd_vendedores}</div>}
+                    {aprovarDialog.marcas_interesse && aprovarDialog.marcas_interesse.length > 0 && (
+                      <div><span className="font-medium text-foreground">Marcas interesse:</span> {aprovarDialog.marcas_interesse.join(", ")}</div>
+                    )}
+                    {aprovarDialog.vende_digital != null && <div><span className="font-medium text-foreground">Vende digital:</span> {aprovarDialog.vende_digital ? "Sim" : "Não"}</div>}
+                    {aprovarDialog.percentual_b2c != null && <div><span className="font-medium text-foreground">% B2C:</span> {aprovarDialog.percentual_b2c}%</div>}
+                    {aprovarDialog.percentual_b2b != null && <div><span className="font-medium text-foreground">% B2B:</span> {aprovarDialog.percentual_b2b}%</div>}
+                    {aprovarDialog.observacoes && <div><span className="font-medium text-foreground">Observações:</span> {aprovarDialog.observacoes}</div>}
+                  </div>
+                </div>
+
+                {/* Campos obrigatórios */}
+                <div className="space-y-3 border-t pt-3">
+                  <h4 className="text-sm font-semibold">Dados para cadastro</h4>
+
+                  <div className="space-y-1.5">
+                    <Label>Código Sankhya *</Label>
+                    <Input
+                      value={aprovarForm.codigo_cliente}
+                      onChange={(e) => setAprovarForm((f) => ({ ...f, codigo_cliente: e.target.value }))}
+                      placeholder="Ex: 12345"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Cluster</Label>
+                    <Select
+                      value={aprovarForm.cluster}
+                      onValueChange={(v) => setAprovarForm((f) => ({ ...f, cluster: v }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectContent>
+                        {CLUSTERS.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Tabela de preço *</Label>
+                    <Input
+                      type="number"
+                      value={aprovarForm.tabela_preco}
+                      onChange={(e) => setAprovarForm((f) => ({ ...f, tabela_preco: e.target.value }))}
+                      placeholder="Ex: 1"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Código parceiro</Label>
+                    <Input
+                      value={aprovarForm.codigo_parceiro}
+                      onChange={(e) => setAprovarForm((f) => ({ ...f, codigo_parceiro: e.target.value }))}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button variant="outline" onClick={() => setAprovarDialog(null)}>Cancelar</Button>
+                <Button
+                  onClick={() => handleAprovar(aprovarForm)}
+                  disabled={saving || !aprovarForm.codigo_cliente || !aprovarForm.tabela_preco}
+                >
+                  {saving ? "Salvando..." : "Confirmar cadastro"}
                 </Button>
               </DialogFooter>
             </>
