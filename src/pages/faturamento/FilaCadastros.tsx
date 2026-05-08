@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Eye, Copy } from "lucide-react";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -112,6 +113,24 @@ export default function FilaCadastros() {
     load();
     loadVendedores();
   }, []);
+
+  const handleCopiar = () => {
+    if (!selected) return;
+    const texto = [
+      `Nome Fantasia: ${selected.nome_cliente ?? "—"}`,
+      `Razão Social: ${selected.razao_social ?? "—"}`,
+      `CNPJ: ${selected.cnpj ? formatCNPJ(selected.cnpj) : "—"}`,
+      `Contato: ${selected.contato_principal ?? "—"}`,
+      `Email: ${selected.email ?? "—"}`,
+      `Telefone: ${selected.telefone ?? "—"}`,
+      `Classificação: ${selected.classificacao ?? "—"}`,
+      `Cluster: ${selected.cluster_sugerido ?? "—"}`,
+      `Vendedor: ${selected.vendedor_nome ?? "—"}`,
+      `Observações: ${selected.observacoes ?? "—"}`,
+    ].join("\n");
+    navigator.clipboard.writeText(texto);
+    toast.success("Dados copiados!");
+  };
 
   const openDialog = (c: Cadastro) => {
     setSelected(c);
@@ -225,7 +244,12 @@ export default function FilaCadastros() {
                 <TableHead>Data</TableHead>
                 <TableHead>Nome do cliente</TableHead>
                 <TableHead>CNPJ</TableHead>
+                <TableHead>Telefone</TableHead>
+                <TableHead>Email</TableHead>
                 <TableHead>Contato</TableHead>
+                <TableHead>Classificação</TableHead>
+                <TableHead>Cluster sugerido</TableHead>
+                <TableHead>Observações</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Ações</TableHead>
               </TableRow>
@@ -233,17 +257,26 @@ export default function FilaCadastros() {
             <TableBody>
               {cadastros.map((c) => {
                 const st = STATUS_BADGE[c.status] ?? { label: c.status, variant: "outline" as const };
+                const obs = c.observacoes
+                  ? c.observacoes.length > 60 ? c.observacoes.slice(0, 60) + "..." : c.observacoes
+                  : "—";
                 return (
                   <TableRow key={c.id}>
                     <TableCell className="text-sm text-muted-foreground">{formatDate(c.created_at.slice(0, 10))}</TableCell>
                     <TableCell className="font-medium">{c.nome_cliente ?? c.razao_social ?? "—"}</TableCell>
                     <TableCell className="text-sm">{c.cnpj ? formatCNPJ(c.cnpj) : "—"}</TableCell>
+                    <TableCell className="text-sm">{c.telefone ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{c.email ?? "—"}</TableCell>
                     <TableCell className="text-sm">{c.contato_principal ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{c.classificacao ?? "—"}</TableCell>
+                    <TableCell className="text-sm">{c.cluster_sugerido ?? "—"}</TableCell>
+                    <TableCell className="text-sm max-w-[200px] truncate" title={c.observacoes ?? ""}>{obs}</TableCell>
                     <TableCell>
                       <Badge variant={st.variant}>{st.label}</Badge>
                     </TableCell>
                     <TableCell>
                       <Button size="sm" variant="outline" onClick={() => openDialog(c)}>
+                        <Eye className="h-4 w-4 mr-1" />
                         Ver detalhes
                       </Button>
                     </TableCell>
@@ -282,7 +315,8 @@ export default function FilaCadastros() {
                 <div>
                   <h3 className="font-semibold mb-2">Classificação</h3>
                   <div className="space-y-1">
-                    <InfoRow label="Tipo" value={selected.classificacao} />
+                    <InfoRow label="Classificação" value={selected.classificacao} />
+                    <InfoRow label="Cluster sugerido" value={selected.cluster_sugerido} />
                     {selected.qtd_vendedores != null && (
                       <InfoRow label="Qtd. vendedores" value={selected.qtd_vendedores} />
                     )}
@@ -292,11 +326,38 @@ export default function FilaCadastros() {
                     {selected.qtd_lojas && (
                       <InfoRow label="Qtd. lojas" value={selected.qtd_lojas} />
                     )}
-                    {selected.marcas_interesse && selected.marcas_interesse.length > 0 && (
-                      <InfoRow label="Marcas de interesse" value={selected.marcas_interesse.join(", ")} />
-                    )}
                   </div>
                 </div>
+
+                {/* Marcas e produtos */}
+                {(
+                  (selected.marcas_interesse && selected.marcas_interesse.length > 0) ||
+                  (selected.produtos_alivik && selected.produtos_alivik.length > 0) ||
+                  (selected.produtos_bravir && selected.produtos_bravir.length > 0) ||
+                  (selected.produtos_bendita && selected.produtos_bendita.length > 0) ||
+                  (selected.produtos_laby && selected.produtos_laby.length > 0)
+                ) && (
+                  <div>
+                    <h3 className="font-semibold mb-2">Marcas e produtos</h3>
+                    <div className="space-y-1">
+                      {selected.marcas_interesse && selected.marcas_interesse.length > 0 && (
+                        <InfoRow label="Marcas interesse" value={selected.marcas_interesse.join(", ")} />
+                      )}
+                      {selected.produtos_alivik && selected.produtos_alivik.length > 0 && (
+                        <InfoRow label="Produtos Alivik" value={selected.produtos_alivik.join(", ")} />
+                      )}
+                      {selected.produtos_bravir && selected.produtos_bravir.length > 0 && (
+                        <InfoRow label="Produtos Bravir" value={selected.produtos_bravir.join(", ")} />
+                      )}
+                      {selected.produtos_bendita && selected.produtos_bendita.length > 0 && (
+                        <InfoRow label="Produtos Bendita" value={selected.produtos_bendita.join(", ")} />
+                      )}
+                      {selected.produtos_laby && selected.produtos_laby.length > 0 && (
+                        <InfoRow label="Produtos Laby" value={selected.produtos_laby.join(", ")} />
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Digital */}
                 <div>
@@ -319,13 +380,18 @@ export default function FilaCadastros() {
                   </div>
                 </div>
 
-                {/* Info comercial */}
-                {selected.observacoes && (
-                  <div>
-                    <h3 className="font-semibold mb-2">Observações</h3>
-                    <p className="text-sm">{selected.observacoes}</p>
+                {/* Outros */}
+                <div>
+                  <h3 className="font-semibold mb-2">Outros</h3>
+                  <div className="space-y-1">
+                    {selected.observacoes && (
+                      <InfoRow label="Observações" value={selected.observacoes} />
+                    )}
+                    <InfoRow label="Vendedor" value={selected.vendedor_nome} />
+                    <InfoRow label="Origem" value={selected.origem} />
+                    <InfoRow label="Status" value={STATUS_BADGE[selected.status]?.label ?? selected.status} />
                   </div>
-                )}
+                </div>
 
                 {/* Ações da gestora — análise */}
                 <div className="space-y-4 border-t pt-4">
@@ -366,6 +432,10 @@ export default function FilaCadastros() {
 
               <DialogFooter className="gap-2 flex-wrap">
                 <Button variant="outline" onClick={() => setSelected(null)}>Fechar</Button>
+                <Button variant="secondary" onClick={handleCopiar}>
+                  <Copy className="h-4 w-4 mr-1" />
+                  Copiar dados para Sankhya
+                </Button>
                 <Button
                   variant="destructive"
                   onClick={() => setShowReprovar(true)}
