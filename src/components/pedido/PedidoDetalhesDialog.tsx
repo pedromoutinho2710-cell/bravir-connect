@@ -130,7 +130,7 @@ function tempoNaEtapa(dt: string | null): { texto: string; urgente: boolean } | 
   }
 }
 
-export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir, onExcluir }: Props) {
+export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir, onExcluir, onEditar }: Props) {
   const [pedido, setPedido] = useState<PedidoDetalhe | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -308,6 +308,12 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
               {pedido.status === "devolvido" && onExcluir && (
                 <Button size="sm" variant="outline" className="text-destructive border-destructive hover:bg-destructive/10" onClick={onExcluir}>
                   Excluir pedido
+                </Button>
+              )}
+
+              {pedido.status === "aguardando_faturamento" && onEditar && (
+                <Button size="sm" variant="outline" onClick={onEditar}>
+                  Editar pedido
                 </Button>
               )}
             </div>

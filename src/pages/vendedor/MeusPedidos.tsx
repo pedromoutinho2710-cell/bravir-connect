@@ -451,6 +451,10 @@ export default function MeusPedidos() {
           setExcluirDevolvido(detalhesId);
           setDetalhesOpen(false);
         } : undefined}
+        onEditar={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "aguardando_faturamento" ? () => {
+          setDetalhesOpen(false);
+          navigate("/novo-pedido", { state: { pedidoId: detalhesId, editando: true } });
+        } : undefined}
       />
 
       <AlertDialog open={!!excluirDevolvido} onOpenChange={(o) => { if (!o) setExcluirDevolvido(null); }}>
