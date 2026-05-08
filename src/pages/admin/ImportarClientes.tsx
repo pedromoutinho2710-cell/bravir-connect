@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Loader2, Upload, Users, UserCheck, Award, ArrowLeft, ChevronRight, Trash2 } from "lucide-react";
-import * as XLSX from "xlsx";
 import { onlyDigits } from "@/lib/format";
 
 type Etapa = "upload" | "mapear" | "importar" | "concluido";
@@ -130,7 +129,8 @@ export default function ImportarClientes() {
       return;
     }
 
-    let workbook: XLSX.WorkBook;
+    const XLSX = await import("xlsx");
+    let workbook: ReturnType<typeof XLSX.read>;
     try {
       workbook = XLSX.read(data, { type: "binary", cellDates: false, raw: false });
     } catch {

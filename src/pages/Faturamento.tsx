@@ -16,7 +16,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
 import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList } from "lucide-react";
-import { gerarFormularioPDF } from "@/lib/pdf";
 import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -660,8 +659,9 @@ export default function Faturamento() {
     if (win) { win.document.write(html); win.document.close(); win.print(); }
   };
 
-  const gerarFormularioPdf = (p: PedidoFat, e: React.MouseEvent) => {
+  const gerarFormularioPdf = async (p: PedidoFat, e: React.MouseEvent) => {
     e.stopPropagation();
+    const { gerarFormularioPDF } = await import("@/lib/pdf");
     const doc = gerarFormularioPDF({
       numero_pedido: p.numero_pedido,
       tipo: p.tipo,

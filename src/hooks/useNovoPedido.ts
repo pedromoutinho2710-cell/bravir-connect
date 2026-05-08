@@ -4,8 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { onlyDigits, formatDate } from "@/lib/format";
-import { gerarPedidoPDF, type PdfItem } from "@/lib/pdf";
-import { gerarPedidoDocx } from "@/lib/docx";
+import type { PdfItem } from "@/lib/pdf";
 import type { DadosCliente } from "@/components/pedido/SecaoCliente";
 import type { ItemPedido, Produto } from "@/components/pedido/SecaoProdutos";
 
@@ -357,6 +356,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
           .eq("id", id)
           .single();
         if (pedData) {
+          const { gerarPedidoDocx } = await import("@/lib/docx");
           const docxBlob = await gerarPedidoDocx({
             numero_pedido: pedData.numero_pedido,
             data_pedido: formatDate(new Date()),
@@ -463,7 +463,8 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
     total: i.total,
   }));
 
-  const baixarPDF = () => {
+  const baixarPDF = async () => {
+    const { gerarPedidoPDF } = await import("@/lib/pdf");
     const doc = gerarPedidoPDF({
       data: new Date(),
       tipo: cliente.tipo,

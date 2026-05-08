@@ -3,7 +3,6 @@
 // ALTER TABLE tabelas_vigencia ADD COLUMN IF NOT EXISTS desconto_livre boolean DEFAULT false;
 
 import { useEffect, useRef, useState } from "react";
-import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -132,6 +131,7 @@ export default function TabelasPreco() {
 
     try {
       // Lê o Excel
+      const XLSX = await import("xlsx");
       const buffer = await importFile.arrayBuffer();
       const wb = XLSX.read(buffer, { type: "array" });
       const ws = wb.Sheets["Planilha1"];
