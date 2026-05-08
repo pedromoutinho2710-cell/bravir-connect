@@ -113,6 +113,9 @@ export default function MeusPedidos() {
   const [excluirId, setExcluirId] = useState<string | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
+  const [excluirDevolvido, setExcluirDevolvido] = useState<string | null>(null);
+  const [excluindoDevolvido, setExcluindoDevolvido] = useState(false);
+
   const carregar = () => setRefreshKey((k) => k + 1);
   usePullToRefresh(carregar);
 
@@ -213,6 +216,18 @@ export default function MeusPedidos() {
     }
     setDetalhesId(id);
     setDetalhesOpen(true);
+  };
+
+  const excluirPedidoDevolvido = async () => {
+    if (!excluirDevolvido) return;
+    setExcluindoDevolvido(true);
+    const { error } = await supabase.from("pedidos").delete().eq("id", excluirDevolvido);
+    setExcluindoDevolvido(false);
+    if (error) { toast.error("Erro ao excluir pedido"); return; }
+    toast.success("Pedido excluído");
+    setPedidos((prev) => prev.filter((p) => p.id !== excluirDevolvido));
+    setExcluirDevolvido(null);
+    setDetalhesOpen(false);
   };
 
   const excluirRascunho = async () => {
@@ -432,7 +447,32 @@ export default function MeusPedidos() {
           setDetalhesOpen(false);
           navigate("/novo-pedido", { state: { pedidoId: detalhesId, corrigindo: true } });
         } : undefined}
+        onExcluir={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "devolvido" ? () => {
+          setExcluirDevolvido(detalhesId);
+          setDetalhesOpen(false);
+        } : undefined}
       />
+
+      <AlertDialog open={!!excluirDevolvido} onOpenChange={(o) => { if (!o) setExcluirDevolvido(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir pedido devolvido?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. O pedido será excluído permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindoDevolvido}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={excluirPedidoDevolvido}
+              disabled={excluindoDevolvido}
+            >
+              {excluindoDevolvido ? <Loader2 className="h-4 w-4 animate-spin" /> : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!excluirId} onOpenChange={(o) => { if (!o) setExcluirId(null); }}>
         <AlertDialogContent>

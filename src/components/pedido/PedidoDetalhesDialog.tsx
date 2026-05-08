@@ -112,6 +112,8 @@ type Props = {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onCorrigir?: () => void;
+  onExcluir?: () => void;
+  onEditar?: () => void;
 };
 
 function tempoNaEtapa(dt: string | null): { texto: string; urgente: boolean } | null {
@@ -128,7 +130,7 @@ function tempoNaEtapa(dt: string | null): { texto: string; urgente: boolean } | 
   }
 }
 
-export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir }: Props) {
+export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir, onExcluir }: Props) {
   const [pedido, setPedido] = useState<PedidoDetalhe | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -300,6 +302,12 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir 
               {pedido.status === "devolvido" && onCorrigir && (
                 <Button size="sm" variant="destructive" onClick={onCorrigir}>
                   Corrigir pedido
+                </Button>
+              )}
+
+              {pedido.status === "devolvido" && onExcluir && (
+                <Button size="sm" variant="outline" className="text-destructive border-destructive hover:bg-destructive/10" onClick={onExcluir}>
+                  Excluir pedido
                 </Button>
               )}
             </div>
