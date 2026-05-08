@@ -223,7 +223,7 @@ export default function ImportarPedidoDialog({
           cliente_id: cliente.id,
           vendedor_id: cliente.vendedor_id,
           status: "aguardando_faturamento",
-          tipo: "pedido",
+          tipo: "Pedido",
           data_pedido: hoje,
           cond_pagamento: condPag || null,
           observacoes: obs || null,
