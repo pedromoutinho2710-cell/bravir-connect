@@ -13,8 +13,8 @@ import { ResumoFinanceiro } from "@/components/pedido/ResumoFinanceiro";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
-  aguardando_faturamento: "Aguardando faturamento",
-  no_sankhya: "No Sankhya",
+  aguardando_faturamento: "Pré-faturamento",
+  no_sankhya: "Aguardando faturamento",
   faturado: "Pré-faturado",
   parcialmente_faturado: "Parc. pré-faturado",
   com_problema: "Com problema",

@@ -85,8 +85,8 @@ type ExcelItemRaw = {
 // ── Status ────────────────────────────────────────────────────────
 export const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
-  aguardando_faturamento: "Aguardando faturamento",
-  no_sankhya: "No Sankhya",
+  aguardando_faturamento: "Pré-faturamento",
+  no_sankhya: "Aguardando faturamento",
   faturado: "Pré-faturado",
   parcialmente_faturado: "Parc. pré-faturado",
   com_problema: "Com problema",
@@ -854,14 +854,14 @@ export default function Faturamento() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Aguardando</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pré-faturamento</CardTitle>
             <Clock className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent><div className="text-2xl font-bold text-yellow-700">{kpis.aguardando}</div></CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">No Sankhya</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Aguardando faturamento</CardTitle>
             <Database className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent><div className="text-2xl font-bold text-blue-700">{kpis.noSankhya}</div></CardContent>

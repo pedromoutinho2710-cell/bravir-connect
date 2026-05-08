@@ -13,7 +13,7 @@ import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 
 const STATUS_LABEL: Record<string, string> = {
-  aguardando_faturamento: "Aguardando",
+  aguardando_faturamento: "Pré-fat.",
   em_faturamento: "Em faturamento",
   faturado: "Faturado",
   parcialmente_faturado: "Parc. faturado",

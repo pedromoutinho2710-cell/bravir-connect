@@ -12,7 +12,10 @@
       "Bash(mkdir -p ~/.traycer/yolo_artifacts)",
       "Bash(echo '{}')",
       "PowerShell(New-Item *)",
-      "Bash(dir \"C:\\\\Users\\\\pedro\\\\AppData\\\\Local\\\\Temp\\\\traycer-epics\\\\\" 2>&1 *)"
+      "Bash(dir \"C:\\\\Users\\\\pedro\\\\AppData\\\\Local\\\\Temp\\\\traycer-epics\\\\\" 2>&1 *)",
+      "Bash(New-Item -ItemType Directory -Force -Path '__TRACKED_VAR__\\\\.traycer\\\\yolo_artifacts')",
+      "Bash(Out-Null)",
+      "Bash(Set-Content -Path '__TRACKED_VAR__\\\\.traycer\\\\yolo_artifacts\\\\689aae79-2744-49ad-877f-701667037ade.json' -Value '{}' -Encoding utf8)"
     ]
   }
 }

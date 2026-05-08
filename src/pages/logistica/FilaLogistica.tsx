@@ -49,7 +49,7 @@ const ICMS_UF: Record<string, number> = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  no_sankhya: "No Sankhya",
+  no_sankhya: "Aguardando faturamento",
   parcialmente_faturado: "Parc. pré-faturado",
 };
 const STATUS_COLOR: Record<string, string> = {

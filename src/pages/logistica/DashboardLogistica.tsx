@@ -129,7 +129,7 @@ export default function DashboardLogistica() {
           onClick={() => navigate("/logistica/fila")}
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Aguardando faturamento</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pré-faturamento</CardTitle>
             <Clock className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>

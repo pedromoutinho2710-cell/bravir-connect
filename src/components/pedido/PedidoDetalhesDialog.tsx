@@ -75,8 +75,8 @@ type PedidoDetalhe = {
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
-  aguardando_faturamento: "Aguardando faturamento",
-  no_sankhya: "Cadastrado no Sankhya",
+  aguardando_faturamento: "Pré-faturamento",
+  no_sankhya: "Aguardando faturamento",
   faturado: "Faturado",
   parcialmente_faturado: "Parc. faturado",
   com_problema: "Com problema",
