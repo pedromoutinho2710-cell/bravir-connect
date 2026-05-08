@@ -1248,7 +1248,7 @@ export default function Faturamento() {
                 <div><span className="text-muted-foreground">Cluster:</span> {detalhePedido.cluster ?? "—"}</div>
                 <div><span className="text-muted-foreground">Tabela Preço:</span> {detalhePedido.tabela_preco ?? "—"}</div>
                 <div><span className="text-muted-foreground">Agendamento:</span> {detalhePedido.agendamento ? "Sim" : "Não"}</div>
-                <div><span className="text-muted-foreground">Vendedor:</span> {detalhePedido.vendedor_nome}</div>
+                <div><span className="text-muted-foreground">Vendedor:</span> {profiles[detalhePedido.vendedor_id] ?? detalhePedido.vendedor_nome}</div>
                 {detalhePedido.comprador && <div><span className="text-muted-foreground">Comprador:</span> {detalhePedido.comprador}</div>}
                 {detalhePedido.codigo_cliente && <div><span className="text-muted-foreground">Cód. Sankhya:</span> {detalhePedido.codigo_cliente}</div>}
                 {detalhePedido.codigo_parceiro && <div><span className="text-muted-foreground">Cód. Parceiro:</span> {detalhePedido.codigo_parceiro}</div>}
