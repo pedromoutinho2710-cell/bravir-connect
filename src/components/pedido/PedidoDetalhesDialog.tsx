@@ -111,6 +111,7 @@ type Props = {
   pedidoId: string | null;
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  onCorrigir?: () => void;
 };
 
 function tempoNaEtapa(dt: string | null): { texto: string; urgente: boolean } | null {
@@ -127,7 +128,7 @@ function tempoNaEtapa(dt: string | null): { texto: string; urgente: boolean } | 
   }
 }
 
-export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
+export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir }: Props) {
   const [pedido, setPedido] = useState<PedidoDetalhe | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -294,6 +295,12 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange }: Props) {
                 <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
                   {pedido.motivo}
                 </span>
+              )}
+
+              {pedido.status === "devolvido" && onCorrigir && (
+                <Button size="sm" variant="destructive" onClick={onCorrigir}>
+                  Corrigir pedido
+                </Button>
               )}
             </div>
 

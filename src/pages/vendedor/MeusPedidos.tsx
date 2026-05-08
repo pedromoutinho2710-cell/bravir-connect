@@ -428,6 +428,10 @@ export default function MeusPedidos() {
         pedidoId={detalhesId}
         open={detalhesOpen}
         onOpenChange={setDetalhesOpen}
+        onCorrigir={detalhesId ? () => {
+          setDetalhesOpen(false);
+          navigate("/novo-pedido", { state: { pedidoId: detalhesId, corrigindo: true } });
+        } : undefined}
       />
 
       <AlertDialog open={!!excluirId} onOpenChange={(o) => { if (!o) setExcluirId(null); }}>
