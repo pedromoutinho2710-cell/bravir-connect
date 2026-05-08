@@ -96,8 +96,7 @@ export default function FilaCadastros() {
     setLoading(true);
     const { data } = await (supabase.from("cadastros_pendentes") as any)
       .select("*")
-      .eq("origem", "site")
-      .eq("status", "pendente")
+      .in("status", ["pendente", "aguardando_faturamento"])
       .order("created_at", { ascending: false });
     setCadastros((data ?? []) as Cadastro[]);
     setLoading(false);
