@@ -49,9 +49,9 @@ export function calcularPrecos(
   dTrade: number = 0,
   qtd: number = 1
 ) {
-  const apos_perfil = bruto * (1 - dPerfil); // dPerfil é decimal (0.20 = 20%)
-  const apos_comercial = apos_perfil * (1 - dCom / 100); // dCom é percentual (2.5 = 2.5%)
-  const preco_final = apos_comercial * (1 - dTrade / 100);
+  const apos_perfil = bruto * (1 - dPerfil - dCom / 100); // cluster + adicional somados antes de aplicar
+  const apos_comercial = apos_perfil; // mantido por compatibilidade
+  const preco_final = apos_perfil * (1 - dTrade / 100);
 
   return {
     preco_apos_perfil: apos_perfil,
