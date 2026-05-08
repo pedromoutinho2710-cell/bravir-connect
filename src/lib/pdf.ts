@@ -365,7 +365,7 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
   ];
 
   const rows = d.itens.map((i) => {
-    const descontoReal = (i.preco_bruto - i.preco_final) * i.quantidade;
+    const descontoReal = ((i.preco_bruto - i.preco_final) / i.preco_bruto) * 100;
     const qtdVol = Math.ceil(i.quantidade / (i.cx_embarque || 1));
     return [
       i.codigo_jiva,
@@ -378,7 +378,7 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
       fR(i.preco_apos_perfil),
       fPInt(i.desconto_trade),
       fR(i.preco_final),
-      fR(descontoReal),
+      `${descontoReal.toFixed(1)}%`,
       fR(i.total_item),
       i.peso_unitario > 0 ? i.peso_unitario.toFixed(3) : "—",
       i.peso_unitario > 0 ? (i.peso_unitario * i.quantidade).toFixed(2) : "—",
