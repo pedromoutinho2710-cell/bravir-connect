@@ -100,7 +100,7 @@ export function gerarPedidoPDF(d: PdfData): jsPDF {
       body: itens.map((i) => [
         `${i.codigo} — ${i.nome}`,
         String(i.quantidade),
-        `${(i.desconto_perfil * 100).toFixed(1)}%`,
+        `${(i.desconto_perfil * 100).toFixed(2)}%`,
         `${Number(i.desconto_comercial).toFixed(1)}%`,
         `${Number(i.desconto_trade).toFixed(1)}%`,
         formatBRL(i.preco_final),
@@ -365,8 +365,8 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
   ];
 
   const rows = d.itens.map((i) => {
-    const precoLiqSImp = i.preco_bruto * (1 - i.desconto_perfil - i.desconto_comercial / 100);
-    const precoLiqFinal = precoLiqSImp * (1 - i.desconto_trade / 100);
+    const precoLiqSImp = Math.round(i.preco_bruto * (1 - i.desconto_perfil - i.desconto_comercial / 100) * 100) / 100;
+    const precoLiqFinal = Math.round(precoLiqSImp * (1 - i.desconto_trade / 100) * 100) / 100;
     const descontoReal = ((i.preco_bruto - precoLiqFinal) / i.preco_bruto) * 100;
     const qtdVol = i.quantidade / (i.cx_embarque || 1);
     return [
