@@ -126,7 +126,7 @@ export default function ImportarPedidoDialog({
         const dPerfilRaw = Number(row?.[9] ?? 0);   // J — decimal
         const dComRaw = Number(row?.[10] ?? 0);     // K — decimal → converter pra %
         const dTradeRaw = Number(row?.[12] ?? 0);   // M — decimal → converter pra %
-        if (!quantidade && !preco_bruto) continue;
+        if (!quantidade || quantidade <= 0) continue;
         rawProdutos.push({
           codigo_jiva: cod,
           quantidade,
