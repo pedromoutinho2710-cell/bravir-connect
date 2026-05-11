@@ -49,15 +49,15 @@ export function calcularPrecos(
   dTrade: number = 0,
   qtd: number = 1
 ) {
-  const apos_perfil = bruto * (1 - dPerfil - dCom / 100); // cluster + adicional somados antes de aplicar
+  const apos_perfil = Math.round(bruto * (1 - dPerfil - dCom / 100) * 100) / 100; // cluster + adicional somados antes de aplicar
   const apos_comercial = apos_perfil; // mantido por compatibilidade
-  const preco_final = apos_perfil * (1 - dTrade / 100);
+  const preco_final = Math.round(apos_perfil * (1 - dTrade / 100) * 100) / 100;
 
   return {
     preco_apos_perfil: apos_perfil,
     preco_apos_comercial: apos_comercial,
     preco_final: preco_final,
-    total: preco_final * qtd,
+    total: Math.round(preco_final * qtd * 100) / 100,
   };
 }
 
@@ -107,7 +107,7 @@ export function SecaoProdutos({
   const [filtroMarca, setFiltroMarca] = useState<string>("Todas");
 
   const calcItem = (p: Produto, qtd: number): ItemPedido => {
-    const bruto = precos[p.id]?.[tabelaPreco] ?? 0;
+    const bruto = Math.round((precos[p.id]?.[tabelaPreco] ?? 0) * 100) / 100;
     const dPerfil = descontoLivre ? 0 : (descontos[p.id]?.[perfilCliente] ?? 0);
     const precos_calc = calcularPrecos(bruto, dPerfil, 0, 0, qtd);
     
@@ -224,7 +224,7 @@ export function SecaoProdutos({
   // Recalcula tudo se mudar tabela/perfil
   const itensRecalculados = useMemo(() => {
     return itens.map((i) => {
-      const bruto = precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto;
+      const bruto = Math.round((precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto) * 100) / 100;
       const dPerfil = descontoLivre
         ? i.desconto_perfil
         : (descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_perfil);
