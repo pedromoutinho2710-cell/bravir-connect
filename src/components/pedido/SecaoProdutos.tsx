@@ -52,13 +52,14 @@ export function calcularPrecos(
   const apos_perfil_raw = bruto * (1 - dPerfil - dCom / 100); // cluster + adicional somados antes de aplicar
   const apos_perfil = Math.round(apos_perfil_raw * 100) / 100;
   const apos_comercial = apos_perfil; // mantido por compatibilidade
-  const preco_final = Math.round(apos_perfil_raw * (1 - dTrade / 100) * 100) / 100;
+  const preco_final_raw = apos_perfil_raw * (1 - dTrade / 100);
+  const preco_final = Math.round(preco_final_raw * 100) / 100;
 
   return {
     preco_apos_perfil: apos_perfil,
     preco_apos_comercial: apos_comercial,
     preco_final: preco_final,
-    total: Math.round(preco_final * qtd * 100) / 100,
+    total: Math.round(preco_final_raw * qtd * 100) / 100,
   };
 }
 
