@@ -371,7 +371,7 @@ export default function ImportarPedidoDialog({
                       </TableCell>
                       <TableCell className="text-right text-xs">{p.quantidade}</TableCell>
                       <TableCell className="text-right text-xs">{formatBRL(p.preco_bruto)}</TableCell>
-                      <TableCell className="text-right text-xs">{(p.desconto_perfil * 100).toFixed(1)}%</TableCell>
+                      <TableCell className="text-right text-xs">{(p.desconto_perfil * 100).toFixed(2)}%</TableCell>
                       <TableCell className="text-right text-xs">{p.desconto_comercial.toFixed(1)}%</TableCell>
                       <TableCell className="text-right text-xs">{p.desconto_trade.toFixed(1)}%</TableCell>
                       <TableCell className="text-right text-xs">{formatBRL(p.preco_final)}</TableCell>

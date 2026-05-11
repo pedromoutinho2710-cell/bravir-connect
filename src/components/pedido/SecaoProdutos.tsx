@@ -423,7 +423,7 @@ export function SecaoProdutos({
                           placeholder="0"
                         />
                       ) : (
-                        <span className="text-[10px] text-muted-foreground">{(i.desconto_perfil * 100).toFixed(1)}%</span>
+                        <span className="text-[10px] text-muted-foreground">{(i.desconto_perfil * 100).toFixed(2)}%</span>
                       )}
                     </TableCell>
 
