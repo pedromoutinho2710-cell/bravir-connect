@@ -124,172 +124,176 @@ export default function DashboardGestora() {
 
   const load = async () => {
     setLoading(true);
+    try {
+      const ha60Dias = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const ha90Dias = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 
-    const ha60Dias = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const ha90Dias = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      const [
+        pedidosMesRes,
+        clientesAprovadosRes,
+        pendentesRes,
+        metasRes,
+        vendedoresRes,
+        profRes,
+        pedidosRecentesRes,
+        clientesRes,
+        analisesRes,
+        cadastrosRes,
+      ] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("pedidos")
+          .select("id, vendedor_id, itens_pedido(total_item)")
+          .gte("data_pedido", INICIO_MES)
+          .lte("data_pedido", FIM_MES)
+          .not("status", "in", '("rascunho","cancelado")'),
 
-    const [
-      pedidosMesRes,
-      clientesAprovadosRes,
-      pendentesRes,
-      metasRes,
-      vendedoresRes,
-      profRes,
-      pedidosRecentesRes,
-      clientesRes,
-      analisesRes,
-      cadastrosRes,
-    ] = await Promise.all([
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("cadastros_pendentes")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "aprovado")
+          .gte("created_at", `${INICIO_MES}T00:00:00`),
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("cadastros_pendentes")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pendente"),
+
+        supabase.from("metas").select("vendedor_id, valor_meta_reais").eq("mes", MES).eq("ano", ANO),
+
+        supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
+
+        supabase.from("profiles").select("id, full_name, email"),
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("pedidos")
+          .select("cliente_id, data_pedido")
+          .gte("data_pedido", ha90Dias)
+          .not("status", "in", '("rascunho","cancelado")'),
+
+        supabase.from("clientes").select("id, razao_social"),
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("solicitacoes_analise")
+          .select("id, cliente_id, observacoes, created_at")
+          .eq("status", "pendente")
+          .order("created_at", { ascending: false }),
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("cadastros_pendentes")
+          .select("*")
+          .eq("status", "pendente")
+          .order("created_at", { ascending: true }),
+      ]);
+
+      // KPIs — pedidos do mês
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase as any)
-        .from("pedidos")
-        .select("id, vendedor_id, itens_pedido(total_item)")
-        .gte("data_pedido", INICIO_MES)
-        .lte("data_pedido", FIM_MES)
-        .not("status", "in", '("rascunho","cancelado")'),
-
+      const pedidosMes = (pedidosMesRes.data ?? []) as any[];
+      let faturado = 0;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase as any)
-        .from("cadastros_pendentes")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "aprovado")
-        .gte("created_at", `${INICIO_MES}T00:00:00`),
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase as any)
-        .from("cadastros_pendentes")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pendente"),
-
-      supabase.from("metas").select("vendedor_id, valor_meta_reais").eq("mes", MES).eq("ano", ANO),
-
-      supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
-
-      supabase.from("profiles").select("id, full_name, email"),
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase as any)
-        .from("pedidos")
-        .select("cliente_id, data_pedido")
-        .gte("data_pedido", ha90Dias)
-        .not("status", "in", '("rascunho","cancelado")'),
-
-      supabase.from("clientes").select("id, razao_social"),
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase as any)
-        .from("solicitacoes_analise")
-        .select("id, cliente_id, observacoes, created_at")
-        .eq("status", "pendente")
-        .order("created_at", { ascending: false }),
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (supabase as any)
-        .from("cadastros_pendentes")
-        .select("*")
-        .eq("status", "pendente")
-        .order("created_at", { ascending: true }),
-    ]);
-
-    // KPIs — pedidos do mês
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pedidosMes = (pedidosMesRes.data ?? []) as any[];
-    let faturado = 0;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    pedidosMes.forEach((p: any) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (p.itens_pedido ?? []).forEach((i: any) => { faturado += Number(i.total_item ?? 0); });
-    });
-    setTotalFaturado(faturado);
-    setTotalPedidos(pedidosMes.length);
-    setNovasClientes(clientesAprovadosRes.count ?? 0);
-    setLeadsPendentes(pendentesRes.count ?? 0);
-
-    // Ranking vendedores
-    const profMap: Record<string, string> = {};
-    (profRes.data ?? []).forEach((p: { id: string; full_name: string | null; email: string | null }) => {
-      profMap[p.id] = p.full_name || p.email || p.id;
-    });
-    const metaMap: Record<string, number> = {};
-    (metasRes.data ?? []).forEach((m: { vendedor_id: string; valor_meta_reais: number }) => {
-      metaMap[m.vendedor_id] = Number(m.valor_meta_reais);
-    });
-
-    // Group pedidos por vendedor
-    const vendedorTotais: Record<string, { total: number; pedidos: number }> = {};
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    pedidosMes.forEach((p: any) => {
-      const vid = p.vendedor_id;
-      if (!vid) return;
-      if (!vendedorTotais[vid]) vendedorTotais[vid] = { total: 0, pedidos: 0 };
-      vendedorTotais[vid].pedidos += 1;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (p.itens_pedido ?? []).forEach((i: any) => {
-        vendedorTotais[vid].total += Number(i.total_item ?? 0);
+      pedidosMes.forEach((p: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (p.itens_pedido ?? []).forEach((i: any) => { faturado += Number(i.total_item ?? 0); });
       });
-    });
+      setTotalFaturado(faturado);
+      setTotalPedidos(pedidosMes.length);
+      setNovasClientes(clientesAprovadosRes.count ?? 0);
+      setLeadsPendentes(pendentesRes.count ?? 0);
 
-    const vendedorIds = new Set([
-      ...(vendedoresRes.data ?? []).map((r: { user_id: string }) => r.user_id),
-      ...Object.keys(vendedorTotais),
-    ]);
+      // Ranking vendedores
+      const profMap: Record<string, string> = {};
+      (profRes.data ?? []).forEach((p: { id: string; full_name: string | null; email: string | null }) => {
+        profMap[p.id] = p.full_name || p.email || p.id;
+      });
+      const metaMap: Record<string, number> = {};
+      (metasRes.data ?? []).forEach((m: { vendedor_id: string; valor_meta_reais: number }) => {
+        metaMap[m.vendedor_id] = Number(m.valor_meta_reais);
+      });
 
-    const rankingList: VendedorRanking[] = Array.from(vendedorIds).map((vid) => {
-      const dados = vendedorTotais[vid] ?? { total: 0, pedidos: 0 };
-      const meta = metaMap[vid] ?? 0;
-      const pct = meta > 0 ? (dados.total / meta) * 100 : 0;
-      return {
-        id: vid,
-        nome: profMap[vid] ?? vid,
-        pedidos: dados.pedidos,
-        total: dados.total,
-        meta,
-        pct,
-      };
-    });
-    rankingList.sort((a, b) => b.total - a.total);
-    setRanking(rankingList);
+      // Group pedidos por vendedor
+      const vendedorTotais: Record<string, { total: number; pedidos: number }> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      pedidosMes.forEach((p: any) => {
+        const vid = p.vendedor_id;
+        if (!vid) return;
+        if (!vendedorTotais[vid]) vendedorTotais[vid] = { total: 0, pedidos: 0 };
+        vendedorTotais[vid].pedidos += 1;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (p.itens_pedido ?? []).forEach((i: any) => {
+          vendedorTotais[vid].total += Number(i.total_item ?? 0);
+        });
+      });
 
-    // Alertas — clientes inativos (>60 dias)
-    const ultimoPedidoMap: Record<string, string> = {};
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (pedidosRecentesRes.data ?? []).forEach((p: any) => {
-      const cid = p.cliente_id;
-      if (!ultimoPedidoMap[cid] || p.data_pedido > ultimoPedidoMap[cid]) {
-        ultimoPedidoMap[cid] = p.data_pedido;
-      }
-    });
-    const clienteNomeMap: Record<string, string> = {};
-    (clientesRes.data ?? []).forEach((c: { id: string; razao_social: string }) => {
-      clienteNomeMap[c.id] = c.razao_social;
-    });
-    const inativos: AlertaCliente[] = Object.entries(ultimoPedidoMap)
-      .filter(([, date]) => date < ha60Dias)
-      .map(([id, ultimoPedido]) => ({ id, razao_social: clienteNomeMap[id] ?? id, ultimoPedido }))
-      .sort((a, b) => a.ultimoPedido.localeCompare(b.ultimoPedido));
-    setClientesInativos(inativos.slice(0, 10));
+      const vendedorIds = new Set([
+        ...(vendedoresRes.data ?? []).map((r: { user_id: string }) => r.user_id),
+        ...Object.keys(vendedorTotais),
+      ]);
 
-    // Alertas — solicitações análise
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const analisesRaw = (analisesRes.data ?? []) as any[];
-    const analisesComNome = analisesRaw.map((a) => ({
-      ...a,
-      razao_social: clienteNomeMap[a.cliente_id] ?? "—",
-    }));
-    setAnalises(analisesComNome);
+      const rankingList: VendedorRanking[] = Array.from(vendedorIds).map((vid) => {
+        const dados = vendedorTotais[vid] ?? { total: 0, pedidos: 0 };
+        const meta = metaMap[vid] ?? 0;
+        const pct = meta > 0 ? (dados.total / meta) * 100 : 0;
+        return {
+          id: vid,
+          nome: profMap[vid] ?? vid,
+          pedidos: dados.pedidos,
+          total: dados.total,
+          meta,
+          pct,
+        };
+      });
+      rankingList.sort((a, b) => b.total - a.total);
+      setRanking(rankingList);
 
-    // Alertas — vendedores sem pedido no mês
-    const comPedido = new Set(Object.keys(vendedorTotais));
-    const semPedido = (vendedoresRes.data ?? [])
-      .map((r: { user_id: string }) => r.user_id)
-      .filter((id: string) => !comPedido.has(id))
-      .map((id: string) => profMap[id] ?? id);
-    setVendedoresSemPedido(semPedido);
+      // Alertas — clientes inativos (>60 dias)
+      const ultimoPedidoMap: Record<string, string> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (pedidosRecentesRes.data ?? []).forEach((p: any) => {
+        const cid = p.cliente_id;
+        if (!ultimoPedidoMap[cid] || p.data_pedido > ultimoPedidoMap[cid]) {
+          ultimoPedidoMap[cid] = p.data_pedido;
+        }
+      });
+      const clienteNomeMap: Record<string, string> = {};
+      (clientesRes.data ?? []).forEach((c: { id: string; razao_social: string }) => {
+        clienteNomeMap[c.id] = c.razao_social;
+      });
+      const inativos: AlertaCliente[] = Object.entries(ultimoPedidoMap)
+        .filter(([, date]) => date < ha60Dias)
+        .map(([id, ultimoPedido]) => ({ id, razao_social: clienteNomeMap[id] ?? id, ultimoPedido }))
+        .sort((a, b) => a.ultimoPedido.localeCompare(b.ultimoPedido));
+      setClientesInativos(inativos.slice(0, 10));
 
-    // Fila de cadastros pendentes
-    setCadastros((cadastrosRes.data ?? []) as Cadastro[]);
+      // Alertas — solicitações análise
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const analisesRaw = (analisesRes.data ?? []) as any[];
+      const analisesComNome = analisesRaw.map((a) => ({
+        ...a,
+        razao_social: clienteNomeMap[a.cliente_id] ?? "—",
+      }));
+      setAnalises(analisesComNome);
 
-    setLoading(false);
+      // Alertas — vendedores sem pedido no mês
+      const comPedido = new Set(Object.keys(vendedorTotais));
+      const semPedido = (vendedoresRes.data ?? [])
+        .map((r: { user_id: string }) => r.user_id)
+        .filter((id: string) => !comPedido.has(id))
+        .map((id: string) => profMap[id] ?? id);
+      setVendedoresSemPedido(semPedido);
+
+      // Fila de cadastros pendentes
+      setCadastros((cadastrosRes.data ?? []) as Cadastro[]);
+    } catch (err) {
+      console.error("Erro no DashboardGestora:", err);
+      toast.error("Erro ao carregar dashboard.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openDialog = (c: Cadastro) => {
