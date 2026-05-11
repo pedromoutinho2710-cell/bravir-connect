@@ -423,7 +423,7 @@ export function SecaoProdutos({
                           placeholder="0"
                         />
                       ) : (
-                        <span className="text-[10px] text-muted-foreground">{(i.preco_bruto > 0 ? (1 - i.preco_final / i.preco_bruto) * 100 : 0).toFixed(2)}%</span>
+                        <span className="text-[10px] text-muted-foreground">{(i.desconto_perfil * 100).toFixed(2)}%</span>
                       )}
                     </TableCell>
 
