@@ -416,14 +416,14 @@ export function SecaoProdutos({
                       {descontoLivre ? (
                         <Input
                           type="number" min={0} max={100} step={0.01}
-                          value={parseFloat((i.desconto_perfil * 100).toFixed(2))}
+                          value={parseFloat((i.preco_bruto > 0 ? (1 - i.preco_final / i.preco_bruto) * 100 : 0).toFixed(2))}
                           onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(1, Math.max(0, (parseFloat(e.target.value) || 0) / 100)))}
                           onFocus={(e) => e.target.select()}
                           className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
                           placeholder="0"
                         />
                       ) : (
-                        <span className="text-[10px] text-muted-foreground">{(i.desconto_perfil * 100).toFixed(2)}%</span>
+                        <span className="text-[10px] text-muted-foreground">{(i.preco_bruto > 0 ? (1 - i.preco_final / i.preco_bruto) * 100 : 0).toFixed(2)}%</span>
                       )}
                     </TableCell>
 

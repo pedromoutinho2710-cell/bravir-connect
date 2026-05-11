@@ -100,7 +100,7 @@ export function gerarPedidoPDF(d: PdfData): jsPDF {
       body: itens.map((i) => [
         `${i.codigo} — ${i.nome}`,
         String(i.quantidade),
-        `${(i.desconto_perfil * 100).toFixed(2)}%`,
+        `${(i.preco_bruto > 0 ? (1 - i.preco_final / i.preco_bruto) * 100 : 0).toFixed(2)}%`,
         `${Number(i.desconto_comercial).toFixed(1)}%`,
         `${Number(i.desconto_trade).toFixed(1)}%`,
         formatBRL(i.preco_final),

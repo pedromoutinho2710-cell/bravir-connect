@@ -631,7 +631,7 @@ export default function Faturamento() {
         <td style="text-align:center">${Math.ceil(i.quantidade / (i.cx_embarque || 1))}</td>
         <td style="text-align:center">${i.qtd_faturada}</td>
         <td style="text-align:center">${(i.peso_unitario * i.quantidade).toFixed(2)} kg</td>
-        <td style="text-align:center">${(i.desconto_perfil * 100).toFixed(2)}%</td>
+        <td style="text-align:center">${(i.preco_bruto > 0 ? (1 - i.preco_final / i.preco_bruto) * 100 : 0).toFixed(2)}%</td>
         <td style="text-align:center">${Number(i.desconto_comercial).toFixed(1)}%</td>
         <td style="text-align:center">${Number(i.desconto_trade).toFixed(1)}%</td>
         <td style="text-align:right">R$ ${(i.preco_bruto * i.quantidade).toFixed(2)}</td>
@@ -1307,7 +1307,7 @@ export default function Faturamento() {
                         </td>
                         <td className="text-center px-2 py-2">{i.cx_embarque}</td>
                         <td className="text-center px-2 py-2">{i.quantidade}</td>
-                        <td className="text-center px-2 py-2">{(i.desconto_perfil * 100).toFixed(2)}%</td>
+                        <td className="text-center px-2 py-2">{(i.preco_bruto > 0 ? (1 - i.preco_final / i.preco_bruto) * 100 : 0).toFixed(2)}%</td>
                         <td className="text-center px-2 py-2">{i.desconto_comercial.toFixed(1)}%</td>
                         <td className="text-center px-2 py-2">{i.desconto_trade.toFixed(1)}%</td>
                         <td className="text-right px-3 py-2">{formatBRL(i.preco_bruto)}</td>
