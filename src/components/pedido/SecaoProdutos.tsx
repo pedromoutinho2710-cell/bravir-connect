@@ -499,10 +499,10 @@ function useMemoEffect(novos: ItemPedido[], atuais: ItemPedido[], onChange: (i: 
   const ref = useRef<string>("");
   useEffect(() => {
     const sig = novos
-      .map((i) => `${i.produto_id}:${i.preco_bruto}:${i.desconto_perfil}:${i.desconto_comercial}:${i.desconto_trade}:${i.quantidade}`)
+      .map((i) => `${i.produto_id}:${Number(i.preco_bruto).toFixed(6)}:${i.desconto_perfil}:${i.desconto_comercial}:${i.desconto_trade}:${i.quantidade}`)
       .join("|");
     const sigAtual = atuais
-      .map((i) => `${i.produto_id}:${i.preco_bruto}:${i.desconto_perfil}:${i.desconto_comercial}:${i.desconto_trade}:${i.quantidade}`)
+      .map((i) => `${i.produto_id}:${Number(i.preco_bruto).toFixed(6)}:${i.desconto_perfil}:${i.desconto_comercial}:${i.desconto_trade}:${i.quantidade}`)
       .join("|");
     if (sig !== sigAtual && sig !== ref.current) {
       ref.current = sig;
