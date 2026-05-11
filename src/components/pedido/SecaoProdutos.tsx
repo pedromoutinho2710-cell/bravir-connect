@@ -108,7 +108,7 @@ export function SecaoProdutos({
   const [filtroMarca, setFiltroMarca] = useState<string>("Todas");
 
   const calcItem = (p: Produto, qtd: number): ItemPedido => {
-    const bruto = Math.round((precos[p.id]?.[tabelaPreco] ?? 0) * 100) / 100;
+    const bruto = precos[p.id]?.[tabelaPreco] ?? 0;
     const dPerfil = descontoLivre ? 0 : (descontos[p.id]?.[perfilCliente] ?? 0);
     const precos_calc = calcularPrecos(bruto, dPerfil, 0, 0, qtd);
     
@@ -225,7 +225,7 @@ export function SecaoProdutos({
   // Recalcula tudo se mudar tabela/perfil
   const itensRecalculados = useMemo(() => {
     return itens.map((i) => {
-      const bruto = Math.round((precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto) * 100) / 100;
+      const bruto = precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto;
       const dPerfil = descontoLivre
         ? i.desconto_perfil
         : (descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_perfil);
