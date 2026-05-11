@@ -49,7 +49,8 @@ export function calcularPrecos(
   dTrade: number = 0,
   qtd: number = 1
 ) {
-  const apos_perfil = Math.round(bruto * (1 - dPerfil - dCom / 100) * 100) / 100; // cluster + adicional somados antes de aplicar
+  const brutoArr = Math.round(bruto * 100) / 100;
+  const apos_perfil = Math.round(brutoArr * (1 - dPerfil - dCom / 100) * 100) / 100; // cluster + adicional somados antes de aplicar
   const apos_comercial = apos_perfil; // mantido por compatibilidade
   const preco_final = Math.round(apos_perfil * (1 - dTrade / 100) * 100) / 100;
 
