@@ -28,7 +28,7 @@ const ANO = new Date().getFullYear();
 const MES = new Date().getMonth() + 1;
 const DIA = new Date().getDate();
 const INICIO_MES = `${ANO}-${String(MES).padStart(2, "0")}-01`;
-const FIM_MES = `${ANO}-${String(MES).padStart(2, "0")}-31`;
+const FIM_MES = new Date(ANO, MES, 0).toISOString().slice(0, 10);
 
 type VendedorRanking = {
   id: string;
