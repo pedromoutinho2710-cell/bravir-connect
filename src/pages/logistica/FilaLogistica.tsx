@@ -30,6 +30,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2,
   CheckCircle2,
@@ -38,6 +39,8 @@ import {
   Trash2,
   Eye,
   XCircle,
+  Truck,
+  PackageCheck,
 } from "lucide-react";
 
 // ICMS padrão interno por UF (%)
@@ -51,11 +54,46 @@ const ICMS_UF: Record<string, number> = {
 const STATUS_LABEL: Record<string, string> = {
   no_sankhya: "Aguardando faturamento",
   parcialmente_faturado: "Parc. pré-faturado",
+  despachado: "Despachado",
+  em_rota: "Em rota",
+  entregue: "Entregue",
+  faturado: "Faturado",
 };
 const STATUS_COLOR: Record<string, string> = {
   no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
   parcialmente_faturado: "bg-teal-100 text-teal-800 border-teal-300",
+  despachado: "bg-indigo-100 text-indigo-800 border-indigo-300",
+  em_rota: "bg-violet-100 text-violet-800 border-violet-300",
+  entregue: "bg-green-100 text-green-800 border-green-300",
+  faturado: "bg-green-100 text-green-800 border-green-300",
 };
+
+const ABAS_LOGISTICA = [
+  {
+    key: "a_faturar",
+    label: "A Faturar",
+    status: ["no_sankhya", "parcialmente_faturado"],
+    descricao: "Pedidos cadastrados no Sankhya aguardando confirmação",
+  },
+  {
+    key: "faturado",
+    label: "Faturado",
+    status: ["faturado"],
+    descricao: "Pedidos confirmados aguardando despacho",
+  },
+  {
+    key: "em_transito",
+    label: "Em Trânsito",
+    status: ["despachado", "em_rota"],
+    descricao: "Pedidos despachados",
+  },
+  {
+    key: "entregues",
+    label: "Entregues",
+    status: ["entregue"],
+    descricao: "Pedidos concluídos",
+  },
+];
 
 type ItemPedido = {
   id: string;
@@ -102,6 +140,7 @@ export default function FilaLogistica() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
+  const [abaAtiva, setAbaAtiva] = useState("a_faturar");
 
   // Dialog de detalhes / confirmação
   const [selecionado, setSelecionado] = useState<Pedido | null>(null);
@@ -128,7 +167,7 @@ export default function FilaLogistica() {
           produtos(nome, codigo_jiva, cx_embarque, peso_unitario)
         )
       `)
-      .in("status", ["no_sankhya", "parcialmente_faturado"])
+      .in("status", ["no_sankhya", "parcialmente_faturado", "faturado", "despachado", "em_rota", "entregue"])
       .order("data_pedido", { ascending: true });
 
     if (error) { toast.error("Erro ao carregar pedidos"); setLoading(false); return; }
@@ -293,6 +332,38 @@ export default function FilaLogistica() {
     carregar();
   };
 
+  const pedidosFiltrados = pedidos.filter((p) => {
+    const aba = ABAS_LOGISTICA.find((a) => a.key === abaAtiva);
+    return aba?.status.includes(p.status) ?? false;
+  });
+
+  const atualizarStatusEntrega = async (novoStatus: string) => {
+    if (!selecionado) return;
+    setConfirmando(true);
+    const { error } = await supabase
+      .from("pedidos")
+      .update({
+        status: novoStatus,
+        status_atualizado_em: new Date().toISOString(),
+      } as any)
+      .eq("id", selecionado.id);
+    setConfirmando(false);
+    if (error) { toast.error("Erro ao atualizar status"); return; }
+    toast.success(`Pedido #${selecionado.numero_pedido} marcado como ${STATUS_LABEL[novoStatus]}`);
+
+    if (novoStatus === "entregue") {
+      await supabase.from("notificacoes").insert({
+        destinatario_id: selecionado.vendedor_id,
+        destinatario_role: "vendedor",
+        tipo: "pedido_entregue",
+        mensagem: `Pedido #${selecionado.numero_pedido} foi entregue!`,
+      } as any);
+    }
+
+    setSelecionado(null);
+    carregar();
+  };
+
   // Gerar PDF para impressão
   const gerarPdf = (p: Pedido) => {
     const vendedor = profiles[p.vendedor_id] ?? "—";
@@ -383,91 +454,116 @@ export default function FilaLogistica() {
         <div className="flex h-48 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
-      ) : pedidos.length === 0 ? (
-        <div className="flex h-48 items-center justify-center">
-          <p className="text-muted-foreground">Nenhum pedido aguardando faturamento</p>
-        </div>
       ) : (
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-28"># / Data</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Vendedor</TableHead>
-                <TableHead>Produtos</TableHead>
-                <TableHead className="text-right">Peso Total</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {pedidos.map((p) => (
-                <TableRow key={p.id} className="hover:bg-muted/40">
-                  <TableCell className="font-mono font-semibold text-sm">
-                    <div>#{p.numero_pedido}</div>
-                    <div className="text-xs font-normal text-muted-foreground">{formatDate(p.data_pedido)}</div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="font-medium text-sm flex items-center gap-1.5 flex-wrap">
-                      {p.razao_social}
-                      {p.negativado && <BadgeNegativado />}
-                    </div>
-                    {p.cnpj && <div className="text-xs font-mono text-muted-foreground">{formatCNPJ(p.cnpj)}</div>}
-                    {(p.cidade || p.uf) && (
-                      <div className="text-xs text-muted-foreground">{[p.cidade, p.uf].filter(Boolean).join(" / ")}</div>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">{profiles[p.vendedor_id] ?? "—"}</TableCell>
-                  <TableCell>
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                      {p.itens.slice(0, 3).map((i) => (
-                        <div key={i.id} className="truncate max-w-[180px]">{i.nome}</div>
-                      ))}
-                      {p.itens.length > 3 && (
-                        <div className="text-muted-foreground">+{p.itens.length - 3} produtos</div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right text-sm">
-                    {p.peso_total > 0 ? `${p.peso_total.toFixed(1)} kg` : "—"}
-                  </TableCell>
-                  <TableCell className="text-right font-bold text-sm text-green-700">
-                    {formatBRL(p.total)}
-                  </TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[p.status] ?? "bg-gray-100 text-gray-700 border-gray-300"}`}>
-                      {STATUS_LABEL[p.status] ?? p.status}
+        <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
+          <TabsList className="w-full grid grid-cols-4">
+            {ABAS_LOGISTICA.map((aba) => {
+              const count = pedidos.filter((p) => aba.status.includes(p.status)).length;
+              return (
+                <TabsTrigger key={aba.key} value={aba.key}>
+                  {aba.label}
+                  {count > 0 && (
+                    <span className="ml-1.5 inline-flex items-center rounded-full bg-primary text-primary-foreground px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                      {count}
                     </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1.5">
-                      {/* Ver detalhes + confirmar */}
-                      <Button size="sm" onClick={() => abrirDialog(p)}>
-                        <Eye className="h-3.5 w-3.5 mr-1" />
-                        Ver detalhes
-                      </Button>
-                      {/* PDF */}
-                      <Button size="sm" variant="outline" onClick={() => gerarPdf(p)} title="Exportar PDF">
-                        <FileText className="h-3.5 w-3.5" />
-                      </Button>
-                      {/* Excluir */}
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setExcluirTarget(p)}
-                        title="Excluir pedido"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                  )}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+          <p className="text-sm text-muted-foreground mt-2">
+            {ABAS_LOGISTICA.find((a) => a.key === abaAtiva)?.descricao}
+            {" · "}
+            <span className="font-medium">{pedidosFiltrados.length} pedido(s)</span>
+          </p>
+          {ABAS_LOGISTICA.map((aba) => (
+            <TabsContent key={aba.key} value={aba.key} className="mt-4">
+              {pedidosFiltrados.length === 0 ? (
+                <div className="flex h-32 items-center justify-center">
+                  <p className="text-muted-foreground">Nenhum pedido nesta aba</p>
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-28"># / Data</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Vendedor</TableHead>
+                        <TableHead>Produtos</TableHead>
+                        <TableHead className="text-right">Peso Total</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pedidosFiltrados.map((p) => (
+                        <TableRow key={p.id} className="hover:bg-muted/40">
+                          <TableCell className="font-mono font-semibold text-sm">
+                            <div>#{p.numero_pedido}</div>
+                            <div className="text-xs font-normal text-muted-foreground">{formatDate(p.data_pedido)}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="font-medium text-sm flex items-center gap-1.5 flex-wrap">
+                              {p.razao_social}
+                              {p.negativado && <BadgeNegativado />}
+                            </div>
+                            {p.cnpj && <div className="text-xs font-mono text-muted-foreground">{formatCNPJ(p.cnpj)}</div>}
+                            {(p.cidade || p.uf) && (
+                              <div className="text-xs text-muted-foreground">{[p.cidade, p.uf].filter(Boolean).join(" / ")}</div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm">{profiles[p.vendedor_id] ?? "—"}</TableCell>
+                          <TableCell>
+                            <div className="text-xs text-muted-foreground space-y-0.5">
+                              {p.itens.slice(0, 3).map((i) => (
+                                <div key={i.id} className="truncate max-w-[180px]">{i.nome}</div>
+                              ))}
+                              {p.itens.length > 3 && (
+                                <div className="text-muted-foreground">+{p.itens.length - 3} produtos</div>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right text-sm">
+                            {p.peso_total > 0 ? `${p.peso_total.toFixed(1)} kg` : "—"}
+                          </TableCell>
+                          <TableCell className="text-right font-bold text-sm text-green-700">
+                            {formatBRL(p.total)}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[p.status] ?? "bg-gray-100 text-gray-700 border-gray-300"}`}>
+                              {STATUS_LABEL[p.status] ?? p.status}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1.5">
+                              <Button size="sm" onClick={() => abrirDialog(p)}>
+                                <Eye className="h-3.5 w-3.5 mr-1" />
+                                Ver detalhes
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => gerarPdf(p)} title="Exportar PDF">
+                                <FileText className="h-3.5 w-3.5" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => setExcluirTarget(p)}
+                                title="Excluir pedido"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </TabsContent>
+          ))}
+        </Tabs>
       )}
 
       {/* ─── Dialog de detalhes + confirmar faturamento ─── */}
@@ -609,7 +705,51 @@ export default function FilaLogistica() {
                   </div>
                 )}
 
+                {/* Ações de entrega — faturado */}
+                {selecionado.status === "faturado" && (
+                  <div className="rounded-md border p-4 space-y-3">
+                    <div className="font-semibold text-sm">Atualizar status de entrega</div>
+                    <div className="flex gap-2 flex-wrap">
+                      <Button
+                        variant="outline"
+                        onClick={() => atualizarStatusEntrega("despachado")}
+                        disabled={confirmando}
+                      >
+                        <Truck className="h-4 w-4 mr-1" />
+                        Marcar como Despachado
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ações de entrega — em trânsito */}
+                {(selecionado.status === "despachado" || selecionado.status === "em_rota") && (
+                  <div className="rounded-md border p-4 space-y-3">
+                    <div className="font-semibold text-sm">Atualizar status de entrega</div>
+                    <div className="flex gap-2 flex-wrap">
+                      {selecionado.status === "despachado" && (
+                        <Button
+                          variant="outline"
+                          onClick={() => atualizarStatusEntrega("em_rota")}
+                          disabled={confirmando}
+                        >
+                          <Truck className="h-4 w-4 mr-1" />
+                          Marcar Em Rota
+                        </Button>
+                      )}
+                      <Button
+                        onClick={() => atualizarStatusEntrega("entregue")}
+                        disabled={confirmando}
+                      >
+                        <PackageCheck className="h-4 w-4 mr-1" />
+                        Confirmar Entrega
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 {/* Campos de confirmação */}
+                {(selecionado.status === "no_sankhya" || selecionado.status === "parcialmente_faturado") && (
                 <div className="rounded-md border p-4 space-y-4">
                   <div className="font-semibold text-sm">Registrar faturamento</div>
 
@@ -656,6 +796,8 @@ export default function FilaLogistica() {
                     />
                   </div>
                 </div>
+                )}
+
               </div>
 
               <DialogFooter className="gap-2 flex-wrap">
@@ -671,13 +813,15 @@ export default function FilaLogistica() {
                   <XCircle className="h-4 w-4 mr-1" />
                   Fechar
                 </Button>
-                <Button onClick={confirmarFaturamento} disabled={confirmando}>
-                  {confirmando
-                    ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    : <CheckCircle2 className="h-4 w-4 mr-2" />
-                  }
-                  Confirmar faturamento
-                </Button>
+                {(selecionado.status === "no_sankhya" || selecionado.status === "parcialmente_faturado") && (
+                  <Button onClick={confirmarFaturamento} disabled={confirmando}>
+                    {confirmando
+                      ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      : <CheckCircle2 className="h-4 w-4 mr-2" />
+                    }
+                    Confirmar faturamento
+                  </Button>
+                )}
               </DialogFooter>
             </>
           )}

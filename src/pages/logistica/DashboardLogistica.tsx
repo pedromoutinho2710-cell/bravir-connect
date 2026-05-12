@@ -5,7 +5,7 @@ import { formatBRL, formatDate } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Clock, CheckCircle2, Weight } from "lucide-react";
+import { Loader2, Clock, CheckCircle2, Weight, Truck } from "lucide-react";
 import { toast } from "sonner";
 
 type PedidoRecente = {
@@ -21,6 +21,7 @@ export default function DashboardLogistica() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [aguardando, setAguardando] = useState(0);
+  const [emTransito, setEmTransito] = useState(0);
   const [faturadosHoje, setFaturadosHoje] = useState(0);
   const [pesoHoje, setPesoHoje] = useState(0);
   const [recentes, setRecentes] = useState<PedidoRecente[]>([]);
@@ -31,12 +32,17 @@ export default function DashboardLogistica() {
       const hoje = new Date();
       const hojeStr = hoje.toISOString().slice(0, 10);
 
-      const [agRes, fatHojeRes, recentesRes] = await Promise.all([
+      const [agRes, transitoRes, fatHojeRes, recentesRes] = await Promise.all([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
           .from("pedidos")
           .select("id", { count: "exact", head: true })
-          .in("status", ["aguardando_faturamento", "parcialmente_faturado"]),
+          .in("status", ["no_sankhya", "parcialmente_faturado"]),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("pedidos")
+          .select("id", { count: "exact", head: true })
+          .in("status", ["despachado", "em_rota"]),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
           .from("pedidos")
@@ -59,6 +65,7 @@ export default function DashboardLogistica() {
       if (agRes.error) toast.error("Erro ao carregar KPIs");
 
       setAguardando(agRes.count ?? 0);
+      setEmTransito(transitoRes.count ?? 0);
       setFaturadosHoje(fatHojeRes.count ?? 0);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -123,18 +130,29 @@ export default function DashboardLogistica() {
       </div>
 
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-4">
         <Card
           className="cursor-pointer hover:shadow-md transition-shadow"
           onClick={() => navigate("/logistica/fila")}
         >
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pré-faturamento</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Aguardando Logística</CardTitle>
             <Clock className="h-4 w-4 text-yellow-500" />
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-yellow-700">{aguardando}</div>
             <div className="text-xs text-muted-foreground mt-1">Clique para ver a fila</div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Em Trânsito</CardTitle>
+            <Truck className="h-4 w-4 text-indigo-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-3xl font-bold text-indigo-700">{emTransito}</div>
+            <div className="text-xs text-muted-foreground mt-1">despachados ou em rota</div>
           </CardContent>
         </Card>
 
