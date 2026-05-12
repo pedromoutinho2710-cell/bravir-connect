@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Copy } from "lucide-react";
 import { CLUSTERS } from "@/lib/constants";
 import { formatCNPJ, onlyDigits } from "@/lib/format";
 
@@ -194,12 +195,29 @@ export default function CadastrarClienteFaturamento() {
               </div>
               <div className="space-y-1.5">
                 <Label>CNPJ</Label>
-                <Input
-                  value={form.cnpj}
-                  onChange={(e) => set("cnpj", formatCNPJ(e.target.value))}
-                  placeholder="00.000.000/0000-00"
-                  maxLength={18}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    value={form.cnpj}
+                    onChange={(e) => set("cnpj", formatCNPJ(e.target.value))}
+                    placeholder="00.000.000/0000-00"
+                    maxLength={18}
+                    className="flex-1"
+                  />
+                  {form.cnpj && (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="shrink-0"
+                      onClick={() => {
+                        navigator.clipboard.writeText(form.cnpj);
+                        toast.success("CNPJ copiado!");
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">

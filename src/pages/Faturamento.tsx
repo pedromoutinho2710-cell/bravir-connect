@@ -1659,51 +1659,6 @@ export default function Faturamento() {
                   label="Código do cliente"
                   valor={detalhePedido?.codigo_cliente ?? null}
                 />
-                <CopiarCampo
-                  label="Condição de pagamento"
-                  valor={detalhePedido?.cond_pagamento ?? null}
-                />
-                <CopiarCampo
-                  label="Comprador"
-                  valor={detalhePedido?.comprador ?? null}
-                />
-                <CopiarCampo
-                  label="Email XML/Boleto"
-                  valor={detalhePedido?.email_xml ?? null}
-                />
-                <CopiarCampo
-                  label="Cidade/UF"
-                  valor={detalhePedido
-                    ? [detalhePedido.cidade, detalhePedido.uf].filter(Boolean).join("/")
-                    : null}
-                />
-                <CopiarCampo
-                  label="CEP"
-                  valor={detalhePedido?.cep ?? null}
-                />
-                <CopiarCampo
-                  label="Endereço"
-                  valor={detalhePedido
-                    ? [detalhePedido.rua, detalhePedido.numero_endereco, detalhePedido.bairro]
-                        .filter(Boolean).join(", ") || null
-                    : null}
-                />
-                <CopiarCampo
-                  label="Telefone"
-                  valor={detalhePedido?.telefone ?? null}
-                />
-                <CopiarCampo
-                  label="Cluster"
-                  valor={detalhePedido?.cluster ?? null}
-                />
-                <CopiarCampo
-                  label="Tabela de preço"
-                  valor={detalhePedido?.tabela_preco ?? null}
-                />
-                <CopiarCampo
-                  label="Total do pedido"
-                  valor={detalhePedido ? formatBRL(detalhePedido.total) : null}
-                />
               </div>
             </div>
             <Button variant="outline" onClick={() => setDetalhePedido(null)}>
