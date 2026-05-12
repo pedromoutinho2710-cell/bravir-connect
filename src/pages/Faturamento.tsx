@@ -285,6 +285,10 @@ export default function Faturamento() {
   const [excluirTarget, setExcluirTarget] = useState<PedidoFat | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
+  // Dialog trocar responsável
+  const [trocarDialog, setTrocarDialog] = useState<PedidoFat | null>(null);
+  const [novoResponsavelId, setNovoResponsavelId] = useState("");
+
   // Dialog faturamento por produto
   const [prodFatDialog, setProdFatDialog] = useState<PedidoFat | null>(null);
   const [prodFatQtds, setProdFatQtds] = useState<Record<string, number>>({});
@@ -553,6 +557,38 @@ export default function Faturamento() {
       if (pedido) {
         await insertHistorico(id, pedido.status, pedido.status, "assumiu", "Pedido assumido");
       }
+    }
+  };
+
+  const liberarPedido = async (id: string) => {
+    const ok = await atualizar(id, { responsavel_id: null });
+    if (ok) {
+      await insertHistorico(
+        id,
+        pedidos.find((p) => p.id === id)?.status ?? "",
+        pedidos.find((p) => p.id === id)?.status ?? "",
+        "assumiu",
+        "Pedido liberado de volta para a fila"
+      );
+      toast.success("Pedido liberado — voltou para Pedidos Recebidos");
+    }
+  };
+
+  const confirmarTroca = async () => {
+    if (!trocarDialog || !novoResponsavelId) return;
+    const ok = await atualizar(trocarDialog.id, { responsavel_id: novoResponsavelId });
+    if (ok) {
+      const novoNome = vendedores.find((v) => v.id === novoResponsavelId)?.label ?? "—";
+      await insertHistorico(
+        trocarDialog.id,
+        trocarDialog.status,
+        trocarDialog.status,
+        "assumiu",
+        `Responsável trocado para ${novoNome}`
+      );
+      toast.success(`Pedido transferido para ${novoNome}`);
+      setTrocarDialog(null);
+      setNovoResponsavelId("");
     }
   };
 
@@ -994,13 +1030,34 @@ export default function Faturamento() {
         {p.status === "aguardando_faturamento" && !p.responsavel_id && (
           <Button size="sm" variant="outline" disabled={atualizando === p.id}
             onClick={wrap(() => assumir(p.id))}>
-            {atualizando === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Assumir"}
+            {atualizando === p.id
+              ? <Loader2 className="h-3 w-3 animate-spin" />
+              : "Assumir"}
           </Button>
         )}
-        {p.responsavel_id && p.status === "aguardando_faturamento" && (
-          <div className="text-xs text-muted-foreground">
-            Assumido: <span className="font-medium">{p.responsavel_nome ?? "—"}</span>
-          </div>
+        {p.responsavel_id && !STATUS_TERMINAL.has(p.status) && (
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-yellow-700 border-yellow-300 hover:bg-yellow-50"
+              onClick={wrap(() => {
+                setTrocarDialog(p);
+                setNovoResponsavelId("");
+              })}
+            >
+              Trocar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-red-600 border-red-300 hover:bg-red-50"
+              disabled={atualizando === p.id}
+              onClick={wrap(() => liberarPedido(p.id))}
+            >
+              Liberar
+            </Button>
+          </>
         )}
 
         {/* Registrar faturamento com NF */}
@@ -1548,6 +1605,53 @@ export default function Faturamento() {
             <Button variant="destructive" onClick={excluirPedido} disabled={excluindo}>
               {excluindo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Excluir permanentemente
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: trocar responsável */}
+      <Dialog open={!!trocarDialog} onOpenChange={(o) => !o && setTrocarDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Trocar responsável — Pedido #{trocarDialog?.numero_pedido}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Atualmente assumido por:{" "}
+              <span className="font-medium text-foreground">
+                {trocarDialog?.responsavel_id
+                  ? (profiles[trocarDialog.responsavel_id] ?? "—")
+                  : "—"}
+              </span>
+            </p>
+            <Label>Transferir para</Label>
+            <Select value={novoResponsavelId} onValueChange={setNovoResponsavelId}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione uma colaboradora..." />
+              </SelectTrigger>
+              <SelectContent>
+                {vendedores
+                  .filter((v) => v.id !== trocarDialog?.responsavel_id)
+                  .map((v) => (
+                    <SelectItem key={v.id} value={v.id}>
+                      {v.label}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTrocarDialog(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmarTroca}
+              disabled={!novoResponsavelId || atualizando === trocarDialog?.id}
+            >
+              Confirmar troca
             </Button>
           </DialogFooter>
         </DialogContent>
