@@ -12,7 +12,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Plus, X } from "lucide-react";
+import { Plus, X, Loader2 } from "lucide-react";
 import { CLUSTERS } from "@/lib/constants";
 import { formatCNPJ, onlyDigits } from "@/lib/format";
 
@@ -110,6 +110,12 @@ type Form = {
   cluster_sugerido: string;
   observacoes: string;
   declaracao: boolean;
+  cep: string;
+  rua: string;
+  numero: string;
+  bairro: string;
+  cidade: string;
+  uf: string;
 };
 
 const EMPTY: Form = {
@@ -137,6 +143,12 @@ const EMPTY: Form = {
   cluster_sugerido: "",
   observacoes: "",
   declaracao: false,
+  cep: "",
+  rua: "",
+  numero: "",
+  bairro: "",
+  cidade: "",
+  uf: "",
 };
 
 function toggleArr(arr: string[], val: string): string[] {
@@ -177,11 +189,37 @@ export default function CadastrarCliente() {
   const { user, fullName } = useAuth();
   const [form, setForm] = useState<Form>(EMPTY);
   const [loading, setLoading] = useState(false);
+  const [buscarCEPLoading, setBuscarCEPLoading] = useState(false);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) =>
     setForm((prev) => ({ ...prev, [k]: v }));
 
   const isAtacadoDist = form.classificacao === "Atacado" || form.classificacao === "Distribuidor";
+
+  const buscarCEP = async (valor: string) => {
+    const cep = valor.replace(/\D/g, "");
+    if (cep.length !== 8) return;
+    setBuscarCEPLoading(true);
+    try {
+      const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const data = await response.json();
+      if (data.erro === true) {
+        toast.error("CEP não encontrado.");
+        return;
+      }
+      setForm((prev) => ({
+        ...prev,
+        rua: data.logradouro ?? prev.rua,
+        bairro: data.bairro ?? prev.bairro,
+        cidade: data.localidade ?? prev.cidade,
+        uf: data.uf ?? prev.uf,
+      }));
+    } catch {
+      toast.error("Erro ao buscar CEP.");
+    } finally {
+      setBuscarCEPLoading(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -191,6 +229,10 @@ export default function CadastrarCliente() {
     }
     if (!form.classificacao) {
       toast.error("Selecione a classificação do cliente.");
+      return;
+    }
+    if (!form.cep || !form.rua || !form.numero || !form.bairro || !form.cidade || !form.uf) {
+      toast.error("Preencha o endereço completo.");
       return;
     }
     setLoading(true);
@@ -227,6 +269,12 @@ export default function CadastrarCliente() {
         percentual_b2b: form.percentual_b2b ? Number(form.percentual_b2b) : null,
         cluster_sugerido: form.cluster_sugerido || null,
         observacoes: form.observacoes || null,
+        cep: onlyDigits(form.cep) || null,
+        rua: form.rua || null,
+        numero: form.numero || null,
+        bairro: form.bairro || null,
+        cidade: form.cidade || null,
+        uf: form.uf.toUpperCase() || null,
         status: "aguardando_faturamento",
         origem: "vendedor",
         vendedor_id: user?.id ?? null,
@@ -313,9 +361,89 @@ export default function CadastrarCliente() {
           </CardContent>
         </Card>
 
-        {/* Seção 2: Classificação */}
+        {/* Seção 2: Endereço */}
         <Card>
-          <CardHeader><CardTitle>2. Classificação *</CardTitle></CardHeader>
+          <CardHeader><CardTitle>2. Endereço</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3 items-end">
+              <div className="space-y-1.5">
+                <Label>CEP *</Label>
+                <div className="relative">
+                  <Input
+                    value={form.cep}
+                    placeholder="00000-000"
+                    maxLength={9}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, "").slice(0, 8);
+                      const masked = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+                      set("cep", masked);
+                      if (masked.length === 9) buscarCEP(masked);
+                    }}
+                  />
+                  {buscarCEPLoading && (
+                    <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Rua *</Label>
+              <Input
+                required
+                value={form.rua}
+                onChange={(e) => set("rua", e.target.value)}
+                placeholder="Logradouro"
+              />
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Número *</Label>
+                <Input
+                  required
+                  value={form.numero}
+                  onChange={(e) => set("numero", e.target.value)}
+                  placeholder="Ex: 123"
+                  className="w-40"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Bairro *</Label>
+                <Input
+                  required
+                  value={form.bairro}
+                  onChange={(e) => set("bairro", e.target.value)}
+                  placeholder="Bairro"
+                />
+              </div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Cidade *</Label>
+                <Input
+                  required
+                  value={form.cidade}
+                  onChange={(e) => set("cidade", e.target.value)}
+                  placeholder="Cidade"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>UF *</Label>
+                <Input
+                  required
+                  value={form.uf}
+                  onChange={(e) => set("uf", e.target.value.toUpperCase())}
+                  placeholder="SP"
+                  maxLength={2}
+                  className="w-20"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Seção 3: Classificação */}
+        <Card>
+          <CardHeader><CardTitle>3. Classificação *</CardTitle></CardHeader>
           <CardContent className="space-y-5">
             <RadioGroup
               value={form.classificacao}
@@ -422,9 +550,9 @@ export default function CadastrarCliente() {
           </CardContent>
         </Card>
 
-        {/* Seção 3: Canais digitais */}
+        {/* Seção 4: Canais digitais */}
         <Card>
-          <CardHeader><CardTitle>3. Canais digitais</CardTitle></CardHeader>
+          <CardHeader><CardTitle>4. Canais digitais</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-3">
               <Switch
@@ -551,9 +679,9 @@ export default function CadastrarCliente() {
           </CardContent>
         </Card>
 
-        {/* Seção 4: Info comercial */}
+        {/* Seção 5: Info comercial */}
         <Card>
-          <CardHeader><CardTitle>4. Informações comerciais</CardTitle></CardHeader>
+          <CardHeader><CardTitle>5. Informações comerciais</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-1.5">
               <Label>Cluster sugerido</Label>
@@ -578,9 +706,9 @@ export default function CadastrarCliente() {
           </CardContent>
         </Card>
 
-        {/* Seção 5: Declaração */}
+        {/* Seção 6: Declaração */}
         <Card>
-          <CardHeader><CardTitle>5. Declaração</CardTitle></CardHeader>
+          <CardHeader><CardTitle>6. Declaração</CardTitle></CardHeader>
           <CardContent>
             <label className="flex items-start gap-3 cursor-pointer">
               <Checkbox
