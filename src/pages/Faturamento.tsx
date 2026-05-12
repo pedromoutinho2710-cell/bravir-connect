@@ -356,6 +356,8 @@ export default function Faturamento() {
   }, [refreshKey]);
 
   // Pedidos
+  // TODO: `profiles` é lido no mapeamento mas não está nas deps. Adicionar causaria re-fetch
+  // a cada carregamento de perfil. Refatorar mapeando vendedor_nome/responsavel_nome via useMemo.
   useEffect(() => {
     setLoading(true);
     (async () => {

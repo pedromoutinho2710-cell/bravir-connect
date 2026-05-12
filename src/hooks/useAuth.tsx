@@ -38,43 +38,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [roleLoaded, setRoleLoaded] = useState(false);
 
-  const fetchRole = async (currentUser: User) => {
-    const fallbackRole = getRoleFromUser(currentUser);
-    for (let attempt = 1; attempt <= MAX_ROLE_ATTEMPTS; attempt += 1) {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", currentUser.id)
-        .limit(1)
+  useEffect(() => {
+    const fetchRole = async (currentUser: User) => {
+      const fallbackRole = getRoleFromUser(currentUser);
+      for (let attempt = 1; attempt <= MAX_ROLE_ATTEMPTS; attempt += 1) {
+        const { data, error } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", currentUser.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (!error) {
+          setRole((data?.role as AppRole) ?? null);
+          return;
+        }
+
+        if (!isTransientRoleError(error) || attempt === MAX_ROLE_ATTEMPTS) {
+          setRole(fallbackRole);
+          return;
+        }
+
+        await wait(750 * attempt);
+      }
+    };
+
+    const fetchFullName = async (currentUser: User) => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", currentUser.id)
         .maybeSingle();
 
-      if (!error) {
-        setRole((data?.role as AppRole) ?? null);
-        return;
+      if (data) {
+        setFullName(data.full_name);
       }
+    };
 
-      if (!isTransientRoleError(error) || attempt === MAX_ROLE_ATTEMPTS) {
-        setRole(fallbackRole);
-        return;
-      }
-
-      await wait(750 * attempt);
-    }
-  };
-
-  const fetchFullName = async (currentUser: User) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("full_name")
-      .eq("id", currentUser.id)
-      .maybeSingle();
-    
-    if (data) {
-      setFullName(data.full_name);
-    }
-  };
-
-  useEffect(() => {
     const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);

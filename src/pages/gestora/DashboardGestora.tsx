@@ -118,8 +118,10 @@ export default function DashboardGestora() {
   const [analises, setAnalises] = useState<Analise[]>([]);
   const [vendedoresSemPedido, setVendedoresSemPedido] = useState<string[]>([]);
 
+  // load usa apenas setters estáveis (useState) e constantes de módulo — seguro executar só na montagem
   useEffect(() => {
     load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const load = async () => {
