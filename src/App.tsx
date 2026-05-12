@@ -105,6 +105,7 @@ const App = () => (
             {/* Gestora */}
             <Route element={<ProtectedRoute allow={["gestora", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/gestora" element={<DashboardGestora />} />
+              <Route path="/gestora/dashboard" element={<DashboardGestora />} />
               <Route path="/gestora/time" element={<GestaoTime />} />
               <Route path="/gestora/clientes" element={<ClientesGestora />} />
               <Route path="/gestora/cadastrar-cliente" element={<CadastrarClienteGestora />} />
