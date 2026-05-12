@@ -204,6 +204,31 @@ function SaldoPendente({ itens }: { itens: ExcelItemRaw[] }) {
   );
 }
 
+// ── Filtros de status por aba ─────────────────────────────────────
+const FILTROS_STATUS_ABA: Record<string, { value: string; label: string }[]> = {
+  recebidos: [
+    { value: "todos", label: "Todos" },
+    { value: "sem_responsavel", label: "Pendentes para lançar" },
+  ],
+  a_lancar: [],
+  lancados: [
+    { value: "todos", label: "Todos" },
+    { value: "no_sankhya", label: "No Sankhya" },
+    { value: "parcialmente_faturado", label: "Parc. faturado" },
+  ],
+  pendencias: [
+    { value: "todos", label: "Todos" },
+    { value: "parcialmente_faturado", label: "Com saldo" },
+    { value: "com_problema", label: "Com problema" },
+  ],
+  faturado: [
+    { value: "todos", label: "Todos" },
+    { value: "faturado", label: "Faturado" },
+    { value: "devolvido", label: "Devolvido" },
+    { value: "cancelado", label: "Cancelado" },
+  ],
+};
+
 // ── Abas ──────────────────────────────────────────────────────────
 const ABAS = [
   {
@@ -251,6 +276,7 @@ export default function Faturamento() {
   const [atualizando, setAtualizando] = useState<string | null>(null);
   // Abas e filtros globais
   const [abaAtiva, setAbaAtiva] = useState("recebidos");
+  const [filtroStatusAba, setFiltroStatusAba] = useState("todos");
   const [filtroNumeroGlobal, setFiltroNumeroGlobal] = useState("");
   const [filtroVendedorGlobal, setFiltroVendedorGlobal] = useState("todos");
   const iniciMes = useMemo(() => {
@@ -504,10 +530,18 @@ export default function Faturamento() {
     if (filtroDataInicio) lista = lista.filter((p) => p.data_pedido >= filtroDataInicio);
     if (filtroDataFim) lista = lista.filter((p) => p.data_pedido <= filtroDataFim);
 
+    if (filtroStatusAba !== "todos") {
+      if (filtroStatusAba === "sem_responsavel") {
+        lista = lista.filter((p) => !p.responsavel_id);
+      } else {
+        lista = lista.filter((p) => p.status === filtroStatusAba);
+      }
+    }
+
     return lista.sort((a, b) =>
       new Date(b.data_pedido).getTime() - new Date(a.data_pedido).getTime()
     );
-  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim]);
+  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim, filtroStatusAba]);
 
   // ── Ações ─────────────────────────────────────────────────────────
   const atualizar = async (id: string, updates: Record<string, unknown>): Promise<boolean> => {
@@ -1218,7 +1252,7 @@ export default function Faturamento() {
         </Card>
       </div>
 
-      <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
+      <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); setFiltroStatusAba("todos"); }}>
         <TabsList className="w-full grid grid-cols-5">
           {ABAS.map((aba) => {
             const count = pedidos.filter((p) => {
@@ -1263,11 +1297,26 @@ export default function Faturamento() {
           </Select>
           <Input type="date" value={filtroDataInicio} onChange={(e) => setFiltroDataInicio(e.target.value)} className="w-40" title="De" />
           <Input type="date" value={filtroDataFim} onChange={(e) => setFiltroDataFim(e.target.value)} className="w-40" title="Até" />
+          {(FILTROS_STATUS_ABA[abaAtiva]?.length ?? 0) > 0 && (
+            <div className="flex gap-1 flex-wrap">
+              {FILTROS_STATUS_ABA[abaAtiva].map((op) => (
+                <Button
+                  key={op.value}
+                  size="sm"
+                  variant={filtroStatusAba === op.value ? "default" : "outline"}
+                  onClick={() => setFiltroStatusAba(op.value)}
+                >
+                  {op.label}
+                </Button>
+              ))}
+            </div>
+          )}
           <Button variant="ghost" size="sm" onClick={() => {
             setFiltroDataInicio(iniciMes);
             setFiltroDataFim("");
             setFiltroNumeroGlobal("");
             setFiltroVendedorGlobal("todos");
+            setFiltroStatusAba("todos");
           }}>
             Limpar filtros
           </Button>
