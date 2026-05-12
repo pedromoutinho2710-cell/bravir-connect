@@ -95,7 +95,6 @@ export default function FilaCadastros() {
   const [aprovarDialog, setAprovarDialog] = useState<Cadastro | null>(null);
   const [aprovarForm, setAprovarForm] = useState({
     codigo_cliente: "",
-    codigo_parceiro: "",
     cluster: "",
     tabela_preco: "",
   });
@@ -155,7 +154,7 @@ export default function FilaCadastros() {
     setMotivoReprovacao("");
   };
 
-  const handleAprovar = async (form: { codigo_cliente: string; codigo_parceiro: string; cluster: string; tabela_preco: string }) => {
+  const handleAprovar = async (form: { codigo_cliente: string; cluster: string; tabela_preco: string }) => {
     const cadastro = aprovarDialog;
     if (!cadastro) return;
     if (!vendedorSelecionado) {
@@ -206,7 +205,6 @@ export default function FilaCadastros() {
         negativado: negativadoEdit,
         codigo_cliente: form.codigo_cliente || null,
         tabela_preco: form.tabela_preco ? Number(form.tabela_preco) : null,
-        codigo_parceiro: form.codigo_parceiro || null,
       });
       if (insErr) toast.error("Cadastro aprovado, mas erro ao criar cliente: " + insErr.message);
       else {
@@ -530,7 +528,7 @@ export default function FilaCadastros() {
                 <Button
                   onClick={() => {
                     setAprovarDialog(selected);
-                    setAprovarForm({ codigo_cliente: "", codigo_parceiro: "", cluster: selected!.cluster_sugerido ?? "", tabela_preco: "" });
+                    setAprovarForm({ codigo_cliente: "", cluster: selected!.cluster_sugerido ?? "", tabela_preco: "" });
                     setSelected(null);
                   }}
                   disabled={saving || !vendedorSelecionado}
@@ -619,21 +617,18 @@ export default function FilaCadastros() {
 
                   <div className="space-y-1.5">
                     <Label>Tabela de preço *</Label>
-                    <Input
-                      type="number"
+                    <Select
                       value={aprovarForm.tabela_preco}
-                      onChange={(e) => setAprovarForm((f) => ({ ...f, tabela_preco: e.target.value }))}
-                      placeholder="Ex: 1"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label>Código parceiro</Label>
-                    <Input
-                      value={aprovarForm.codigo_parceiro}
-                      onChange={(e) => setAprovarForm((f) => ({ ...f, codigo_parceiro: e.target.value }))}
-                      placeholder="Opcional"
-                    />
+                      onValueChange={(v) => setAprovarForm((f) => ({ ...f, tabela_preco: v }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">7</SelectItem>
+                        <SelectItem value="12">12</SelectItem>
+                        <SelectItem value="18">18</SelectItem>
+                        <SelectItem value="suframa">Suframa</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
               </div>
