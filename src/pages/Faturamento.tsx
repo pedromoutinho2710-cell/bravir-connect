@@ -222,7 +222,7 @@ const ABAS = [
   {
     key: "recebidos",
     label: "Pedidos Recebidos",
-    status: ["pendente_sankhya"],
+    status: ["pendente_sankhya", "com_problema"],
     descricao: "Pedidos na fila aguardando assumir",
   },
   {
@@ -529,8 +529,17 @@ export default function Faturamento() {
 
     let lista = pedidos.filter((p) => aba.status.includes(p.status));
 
-    if (abaAtiva === "recebidos") lista = lista.filter((p) => !p.responsavel_id);
-    if (abaAtiva === "a_lancar") lista = lista.filter((p) => !!p.responsavel_id);
+    if (abaAtiva === "recebidos") {
+      lista = lista.filter((p) =>
+        p.status === "pendente_sankhya" ||
+        p.status === "com_problema"
+      );
+    }
+    if (abaAtiva === "a_lancar") {
+      lista = lista.filter((p) =>
+        p.status === "pendente_sankhya" && !!p.responsavel_id
+      );
+    }
     if (abaAtiva === "pendencias") {
       lista = lista.filter((p) =>
         p.status === "parcialmente_faturado" ||
@@ -1317,7 +1326,7 @@ export default function Faturamento() {
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <div className="rounded-lg border p-4 bg-yellow-50 border-yellow-300">
-          <div className="text-sm font-medium text-yellow-800">Pré Faturado</div>
+          <div className="text-sm font-medium text-yellow-800">Pedidos Recebidos</div>
           <div className="text-3xl font-bold mt-1 text-yellow-900">{kpis.preFaturado}</div>
           <div className="text-xs text-yellow-700 mt-1">Pedidos recebidos no mês</div>
         </div>
@@ -1354,8 +1363,8 @@ export default function Faturamento() {
           {ABAS.map((aba) => {
             const count = pedidos.filter((p) => {
               if (!aba.status.includes(p.status)) return false;
-              if (aba.key === "recebidos") return !p.responsavel_id;
-              if (aba.key === "a_lancar") return !!p.responsavel_id;
+              if (aba.key === "recebidos") return p.status === "pendente_sankhya" || p.status === "com_problema";
+              if (aba.key === "a_lancar") return p.status === "pendente_sankhya" && !!p.responsavel_id;
               return true;
             }).length;
             return (
