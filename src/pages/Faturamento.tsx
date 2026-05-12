@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload } from "lucide-react";
+import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy } from "lucide-react";
 import ImportarPedidoDialog from "@/components/faturamento/ImportarPedidoDialog";
 import { MARCAS } from "@/lib/constants";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -150,6 +150,29 @@ const PRIO_COLOR: Record<PrioLevel, string> = {
   medio: "bg-yellow-100 text-yellow-800 border-yellow-300",
   normal: "bg-gray-100 text-gray-700 border-gray-300",
 };
+
+function CopiarCampo({ label, valor }: { label: string; valor: string | null }) {
+  if (!valor) return null;
+  return (
+    <div className="flex items-center justify-between gap-2 py-1.5 border-b last:border-0">
+      <div>
+        <div className="text-xs text-muted-foreground">{label}</div>
+        <div className="text-sm font-medium">{valor}</div>
+      </div>
+      <Button
+        size="sm"
+        variant="ghost"
+        className="h-7 px-2 shrink-0"
+        onClick={() => {
+          navigator.clipboard.writeText(valor);
+          toast.success(`${label} copiado!`);
+        }}
+      >
+        <Copy className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
 
 // ── Componente ────────────────────────────────────────────────────
 export default function Faturamento() {
@@ -1401,33 +1424,74 @@ export default function Faturamento() {
               </div>
             </div>
           )}
-          <DialogFooter className="flex-col sm:flex-row gap-2">
-            <Button variant="outline" onClick={() => {
-              if (!detalhePedido) return;
-              const endereco = [detalhePedido.rua, detalhePedido.numero_endereco, detalhePedido.bairro].filter(Boolean).join(", ");
-              const linhas = [
-                `Pedido #${detalhePedido.numero_pedido}`,
-                `Razão Social: ${detalhePedido.razao_social}`,
-                `CNPJ: ${formatCNPJ(detalhePedido.cnpj)}`,
-                detalhePedido.codigo_cliente ? `Código Sankhya: ${detalhePedido.codigo_cliente}` : null,
-                detalhePedido.codigo_parceiro ? `Código Parceiro: ${detalhePedido.codigo_parceiro}` : null,
-                `Cidade/UF: ${detalhePedido.cidade ?? "—"}/${detalhePedido.uf ?? "—"}`,
-                detalhePedido.cep ? `CEP: ${detalhePedido.cep}` : null,
-                endereco ? `Endereço: ${endereco}` : null,
-                detalhePedido.telefone ? `Telefone: ${detalhePedido.telefone}` : null,
-                detalhePedido.email_xml ? `Email XML: ${detalhePedido.email_xml}` : null,
-                `Cond. Pagamento: ${detalhePedido.cond_pagamento ?? "—"}`,
-                `Tabela Preço: ${detalhePedido.tabela_preco ?? "—"}`,
-                `Cluster: ${detalhePedido.cluster ?? "—"}`,
-                detalhePedido.comprador ? `Comprador: ${detalhePedido.comprador}` : null,
-                `Agendamento: ${detalhePedido.agendamento ? "Sim" : "Não"}`,
-                detalhePedido.observacoes ? `Obs: ${detalhePedido.observacoes}` : null,
-              ].filter(Boolean).join("\n");
-              navigator.clipboard.writeText(linhas).then(() => toast.success("Dados copiados!"));
-            }}>
-              Copiar dados para Sankhya
+          <DialogFooter className="flex-col gap-3 sm:flex-row">
+            <div className="w-full sm:w-auto sm:mr-auto">
+              <div className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">
+                Copiar para Sankhya
+              </div>
+              <div className="rounded-md border bg-muted/20 px-3 py-1 min-w-[280px]">
+                <CopiarCampo
+                  label="Razão Social"
+                  valor={detalhePedido?.razao_social ?? null}
+                />
+                <CopiarCampo
+                  label="CNPJ"
+                  valor={detalhePedido?.cnpj ? formatCNPJ(detalhePedido.cnpj) : null}
+                />
+                <CopiarCampo
+                  label="Código do cliente"
+                  valor={detalhePedido?.codigo_cliente ?? null}
+                />
+                <CopiarCampo
+                  label="Condição de pagamento"
+                  valor={detalhePedido?.cond_pagamento ?? null}
+                />
+                <CopiarCampo
+                  label="Comprador"
+                  valor={detalhePedido?.comprador ?? null}
+                />
+                <CopiarCampo
+                  label="Email XML/Boleto"
+                  valor={detalhePedido?.email_xml ?? null}
+                />
+                <CopiarCampo
+                  label="Cidade/UF"
+                  valor={detalhePedido
+                    ? [detalhePedido.cidade, detalhePedido.uf].filter(Boolean).join("/")
+                    : null}
+                />
+                <CopiarCampo
+                  label="CEP"
+                  valor={detalhePedido?.cep ?? null}
+                />
+                <CopiarCampo
+                  label="Endereço"
+                  valor={detalhePedido
+                    ? [detalhePedido.rua, detalhePedido.numero_endereco, detalhePedido.bairro]
+                        .filter(Boolean).join(", ") || null
+                    : null}
+                />
+                <CopiarCampo
+                  label="Telefone"
+                  valor={detalhePedido?.telefone ?? null}
+                />
+                <CopiarCampo
+                  label="Cluster"
+                  valor={detalhePedido?.cluster ?? null}
+                />
+                <CopiarCampo
+                  label="Tabela de preço"
+                  valor={detalhePedido?.tabela_preco ?? null}
+                />
+                <CopiarCampo
+                  label="Total do pedido"
+                  valor={detalhePedido ? formatBRL(detalhePedido.total) : null}
+                />
+              </div>
+            </div>
+            <Button variant="outline" onClick={() => setDetalhePedido(null)}>
+              Fechar
             </Button>
-            <Button variant="outline" onClick={() => setDetalhePedido(null)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
