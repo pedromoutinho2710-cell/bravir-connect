@@ -10,7 +10,7 @@ import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/format";
 import { Loader2, PlusCircle } from "lucide-react";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
-import { STATUS_LABEL, STATUS_COLOR } from "@/pages/vendedor/MeusPedidos";
+import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 
 type Pedido = {
   id: string;

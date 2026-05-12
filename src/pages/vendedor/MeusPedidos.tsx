@@ -42,39 +42,8 @@ type MeuPedido = {
   responsavel_nome: string | null;
 };
 
-export const STATUS_LABEL: Record<string, string> = {
-  rascunho: "Rascunho",
-  pendente_sankhya: "Pendente Sankhya",
-  no_sankhya: "Aguardando faturamento",
-  faturado: "Faturado",
-  parcialmente_faturado: "Parc. faturado",
-  com_problema: "Com problema",
-  devolvido: "Devolvido",
-  cancelado: "Cancelado",
-  em_faturamento: "Em faturamento",
-  em_cadastro: "Em cadastro",
-  pendente: "Pendente",
-  em_rota: "Em rota",
-  entregue: "Entregue",
-  revisao_necessaria: "Revisão necessária",
-};
-
-export const STATUS_COLOR: Record<string, string> = {
-  rascunho: "bg-gray-100 text-gray-600 border-gray-300",
-  pendente_sankhya: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
-  faturado: "bg-green-100 text-green-800 border-green-300",
-  parcialmente_faturado: "bg-emerald-100 text-emerald-800 border-emerald-300",
-  com_problema: "bg-red-100 text-red-800 border-red-300",
-  devolvido: "bg-orange-100 text-orange-800 border-orange-300",
-  cancelado: "bg-gray-800 text-gray-100 border-gray-700",
-  em_faturamento: "bg-blue-100 text-blue-800 border-blue-300",
-  em_cadastro: "bg-blue-100 text-blue-800 border-blue-300",
-  pendente: "bg-orange-100 text-orange-800 border-orange-300",
-  em_rota: "bg-gray-700 text-gray-100 border-gray-800",
-  entregue: "bg-lime-100 text-lime-800 border-lime-300",
-  revisao_necessaria: "bg-red-100 text-red-800 border-red-300",
-};
+import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
+export { STATUS_LABEL, STATUS_COLOR };
 
 const NOTIF: Record<string, (num: number, motivo?: string) => string> = {
   faturado:                (n) => `Pedido #${n} foi faturado!`,

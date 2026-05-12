@@ -22,6 +22,8 @@ import { MARCAS } from "@/lib/constants";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
+export { STATUS_LABEL, STATUS_COLOR };
 
 // ── Tipos ─────────────────────────────────────────────────────────
 type PedidoFat = {
@@ -82,31 +84,6 @@ type ExcelItemRaw = {
   preco_apos_comercial: number;
   preco_final: number;
   total: number;
-};
-
-// ── Status ────────────────────────────────────────────────────────
-export const STATUS_LABEL: Record<string, string> = {
-  rascunho: "Rascunho",
-  pendente_sankhya: "Pendente Sankhya",
-  no_sankhya: "Aguardando faturamento",
-  faturado: "Pré-faturado",
-  parcialmente_faturado: "Parc. Faturado",
-  com_problema: "Com problema",
-  devolvido: "Devolvido",
-  cancelado: "Cancelado",
-  em_faturamento: "Em faturamento", // legado
-};
-
-export const STATUS_COLOR: Record<string, string> = {
-  rascunho: "bg-gray-100 text-gray-700 border-gray-300",
-  pendente_sankhya: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
-  faturado: "bg-green-100 text-green-800 border-green-300",
-  parcialmente_faturado: "bg-teal-100 text-teal-800 border-teal-300",
-  com_problema: "bg-red-100 text-red-800 border-red-300",
-  devolvido: "bg-orange-100 text-orange-800 border-orange-300",
-  cancelado: "bg-gray-800 text-gray-100 border-gray-700",
-  em_faturamento: "bg-blue-100 text-blue-800 border-blue-300",
 };
 
 const STATUS_TERMINAL = new Set(["faturado", "devolvido", "cancelado"]);
