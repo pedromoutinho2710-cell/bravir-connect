@@ -9,6 +9,8 @@ type Props = {
   itens: ItemPedido[];
   uf: string;
   isPDF?: boolean;
+  suframa?: boolean;
+  tabela_preco?: string;
 };
 
 function icmsPct(uf: string): number {
@@ -17,7 +19,18 @@ function icmsPct(uf: string): number {
   return 0.07;
 }
 
-export function ResumoFinanceiro({ itens, uf, isPDF = false }: Props) {
+function resolveIcms(uf: string, suframa?: boolean, tabela_preco?: string): number {
+  if (suframa) return 0;
+  if (tabela_preco !== undefined) {
+    if (tabela_preco === "7") return 0.07;
+    if (tabela_preco === "12") return 0.12;
+    if (tabela_preco === "18") return 0.18;
+    return 0.12;
+  }
+  return icmsPct(uf);
+}
+
+export function ResumoFinanceiro({ itens, uf, isPDF = false, suframa, tabela_preco }: Props) {
   const [bolsaoPct, setBolsaoPct] = useState(1.0);
 
   useEffect(() => {
@@ -39,7 +52,7 @@ export function ResumoFinanceiro({ itens, uf, isPDF = false }: Props) {
   const totalLiquido = itens.reduce((s, i) => s + i.total, 0);
   const descTotal = totalBruto - totalLiquido;
 
-  const pct = icmsPct(uf);
+  const pct = resolveIcms(uf, suframa, tabela_preco);
   const icmsValue = totalLiquido * pct;
   const totalComIcms = totalLiquido + icmsValue;
 
@@ -71,8 +84,8 @@ export function ResumoFinanceiro({ itens, uf, isPDF = false }: Props) {
           <TabsContent value="com" className="space-y-2 pt-4">
             <Linha label="Subtotal s/ imposto" value={formatBRL(totalLiquido)} />
             <Linha
-              label={`ICMS ${uf || "—"} (${(pct * 100).toFixed(0)}%)`}
-              value={`+ ${formatBRL(icmsValue)}`}
+              label={suframa ? `ICMS — Suframa (isento)` : `ICMS ${uf || "—"} (${(pct * 100).toFixed(0)}%)`}
+              value={suframa ? formatBRL(0) : `+ ${formatBRL(icmsValue)}`}
               muted
             />
             <div className="my-2 border-t" />

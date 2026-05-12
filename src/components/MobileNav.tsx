@@ -1,124 +1,17 @@
 ﻿import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import {
-  LayoutDashboard,
-  Users,
-  Target,
-  ClipboardList,
-  PlusCircle,
-  ListChecks,
-  Truck,
-  LogOut,
-  FileStack,
-  UserCog,
-  UserPlus,
-  Megaphone,
-  Store,
-  Upload,
-  Tag,
-  Settings,
-  ClipboardCheck,
-} from "lucide-react";
+import { LogOut } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-
-type Item = { title: string; url: string; icon: typeof LayoutDashboard; badge?: number };
-type Section = { label: string; items: Item[] };
-
-const ADMIN_SECTIONS: Section[] = [
-  {
-    label: "Visão Geral",
-    items: [
-      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-    ],
-  },
-  {
-    label: "Vendas",
-    items: [
-      { title: "Pedidos", url: "/admin/pedidos", icon: ClipboardList },
-      { title: "Clientes", url: "/admin/clientes", icon: Users },
-    ],
-  },
-  {
-    label: "Pré-faturamento",
-    items: [
-      { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
-      { title: "Clientes", url: "/faturamento/clientes", icon: Users },
-      { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
-      { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
-    ],
-  },
-  {
-    label: "Logística",
-    items: [
-      { title: "Dashboard", url: "/logistica", icon: LayoutDashboard },
-      { title: "Fila de Pedidos", url: "/logistica/fila", icon: Truck },
-    ],
-  },
-  {
-    label: "Trade",
-    items: [
-      { title: "Clientes aguardando", url: "/trade", icon: Store },
-      { title: "Campanhas", url: "/trade/campanhas", icon: Megaphone },
-    ],
-  },
-  {
-    label: "Gestora",
-    items: [
-      { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
-      { title: "Meu Time", url: "/gestora/time", icon: Users },
-      { title: "Clientes", url: "/gestora/clientes", icon: Users },
-      { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
-      { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
-      { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
-    ],
-  },
-  {
-    label: "Administração",
-    items: [
-      { title: "Equipe", url: "/admin/equipe", icon: UserCog },
-      { title: "Metas", url: "/admin/metas", icon: Target },
-      { title: "Formulários", url: "/admin/formularios", icon: FileStack },
-      { title: "Importar Clientes", url: "/admin/importar-clientes", icon: Upload },
-      { title: "Tabelas de Preço", url: "/admin/tabelas-preco", icon: Tag },
-      { title: "Configurações", url: "/admin/configuracoes", icon: Settings },
-    ],
-  },
-];
-
-const BASE_FATURAMENTO_ITEMS: Item[] = [
-  { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
-  { title: "Clientes", url: "/faturamento/clientes", icon: Users },
-  { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
-];
-
-const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
-  vendedor: [
-    { title: "Meu Painel", url: "/meu-painel", icon: LayoutDashboard },
-    { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
-    { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
-    { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
-    { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
-  ],
-  logistica: [
-    { title: "Dashboard", url: "/logistica", icon: LayoutDashboard },
-    { title: "Fila de Pedidos", url: "/logistica/fila", icon: ListChecks },
-  ],
-  gestora: [
-    { title: "Dashboard", url: "/gestora/dashboard", icon: LayoutDashboard },
-    { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
-    { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
-    { title: "Clientes", url: "/gestora/clientes", icon: Users },
-    { title: "Cadastrar Cliente", url: "/gestora/cadastrar-cliente", icon: UserPlus },
-    { title: "Gestão do Time", url: "/gestora/time", icon: UserCog },
-  ],
-  trade: [
-    { title: "Clientes aguardando", url: "/trade", icon: Store },
-    { title: "Campanhas", url: "/trade/campanhas", icon: Megaphone },
-  ],
-};
+import {
+  ADMIN_SECTIONS,
+  BASE_FATURAMENTO_ITEMS,
+  FLAT_MENU_STATIC,
+  type Item,
+  type Section,
+} from "@/lib/menu";
 
 type Props = { onNavigate: () => void };
 

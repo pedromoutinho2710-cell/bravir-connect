@@ -274,7 +274,7 @@ export default function NovoPedidoGestora() {
         bloqueado={!camposObrigatoriosOk}
       />
 
-      <ResumoFinanceiro itens={itens} uf={cliente.uf} />
+      <ResumoFinanceiro itens={itens} uf={cliente.uf} tabela_preco={cliente.tabela_preco} />
 
       {/* Barra de pedido mínimo + ações — sticky no rodapé */}
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t z-10 -mx-4 px-4 py-3 space-y-3">
