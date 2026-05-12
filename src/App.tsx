@@ -93,12 +93,12 @@ const App = () => (
             </Route>
 
             {/* Edição de pedido — acessível por faturamento e admin */}
-            <Route element={<ProtectedRoute allow={["faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
+            <Route element={<ProtectedRoute allow={["faturamento", "admin", "gestora_faturamento"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/faturamento/pedidos/:id/editar" element={<EditarPedidoFaturamento />} />
             </Route>
 
             {/* Detalhe de cliente — acessível por vendedor, admin, faturamento, trade, gestora, logistica */}
-            <Route element={<ProtectedRoute allow={["vendedor", "admin", "faturamento", "trade", "gestora", "logistica"]}><AppLayout /></ProtectedRoute>}>
+            <Route element={<ProtectedRoute allow={["vendedor", "admin", "faturamento", "trade", "gestora", "logistica", "gestora_faturamento"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/clientes/:id" element={<ClienteDetalhe />} />
             </Route>
 
