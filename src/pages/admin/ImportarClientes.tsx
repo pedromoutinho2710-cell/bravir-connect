@@ -311,11 +311,36 @@ export default function ImportarClientes() {
 
   const limparClientes = async () => {
     setLimpando(true);
-    const { error } = await supabase.from("clientes").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+
+    const { count, error: errCount } = await supabase
+      .from("pedidos")
+      .select("id", { count: "exact", head: true });
+
+    if (errCount) {
+      setLimpando(false);
+      setLimparDialog2(false);
+      toast.error("Erro ao verificar pedidos vinculados: " + errCount.message);
+      return;
+    }
+
+    if ((count ?? 0) > 0) {
+      setLimpando(false);
+      setLimparDialog2(false);
+      toast.error(
+        `Não é possível inativar: existem ${count} pedido(s) vinculado(s) aos clientes.`
+      );
+      return;
+    }
+
+    const { error } = await supabase
+      .from("clientes")
+      .update({ status: "inativo" })
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+
     setLimpando(false);
     setLimparDialog2(false);
-    if (error) { toast.error("Erro ao limpar: " + error.message); return; }
-    toast.success("Todos os clientes foram removidos");
+    if (error) { toast.error("Erro ao inativar clientes: " + error.message); return; }
+    toast.success("Todos os clientes foram inativados");
   };
 
   const vendedoresUnicos = Array.from(new Set(linhas.map((l) => l.vendedor_nome).filter(Boolean)));
@@ -340,7 +365,7 @@ export default function ImportarClientes() {
           onClick={() => setLimparDialog1(true)}
         >
           <Trash2 className="h-4 w-4 mr-1" />
-          Limpar todos
+          Inativar todos
         </Button>
       </div>
 
@@ -591,9 +616,9 @@ export default function ImportarClientes() {
       <AlertDialog open={limparDialog1} onOpenChange={setLimparDialog1}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Limpar todos os clientes?</AlertDialogTitle>
+            <AlertDialogTitle>Inativar todos os clientes?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação removerá <strong>todos</strong> os clientes do banco de dados. Você precisará confirmar novamente.
+              Esta ação marcará <strong>todos</strong> os clientes como inativos. Clientes com pedidos vinculados não serão afetados. Você precisará confirmar novamente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -612,9 +637,9 @@ export default function ImportarClientes() {
       <AlertDialog open={limparDialog2} onOpenChange={setLimparDialog2}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusão total?</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar inativação total?</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem <strong>certeza absoluta</strong>? Todos os clientes serão apagados permanentemente. Esta ação não pode ser desfeita.
+              Tem <strong>certeza absoluta</strong>? Todos os clientes sem pedidos vinculados serão marcados como <strong>inativos</strong>. O histórico de dados permanece intacto.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -625,7 +650,7 @@ export default function ImportarClientes() {
               disabled={limpando}
             >
               {limpando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Sim, apagar tudo
+              Sim, inativar todos
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
