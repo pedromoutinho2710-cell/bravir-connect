@@ -174,6 +174,29 @@ function CopiarCampo({ label, valor }: { label: string; valor: string | null }) 
   );
 }
 
+function SaldoPendente({ itens }: { itens: ExcelItemRaw[] }) {
+  const itensSaldo = itens.filter((i) => i.qtd_faturada < i.quantidade);
+  if (itensSaldo.length === 0) return null;
+  return (
+    <div className="mt-2 rounded-md border border-orange-300 bg-orange-50 px-3 py-2 space-y-1">
+      <div className="text-xs font-semibold text-orange-800 uppercase tracking-wide">
+        Saldo pendente
+      </div>
+      {itensSaldo.map((i) => (
+        <div key={i.id} className="flex items-center justify-between text-xs">
+          <span className="text-orange-900 truncate max-w-[180px]" title={i.nome}>
+            {i.nome}
+          </span>
+          <span className="text-orange-700 font-mono shrink-0 ml-2">
+            Ped: {i.quantidade} · Fat: {i.qtd_faturada} ·{" "}
+            <span className="font-bold">Saldo: {i.quantidade - i.qtd_faturada}</span>
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Componente ────────────────────────────────────────────────────
 export default function Faturamento() {
   const { user } = useAuth();
@@ -1080,12 +1103,23 @@ export default function Faturamento() {
                   <div className="flex flex-wrap gap-1">
                     {p.marcas.map((m) => <Badge key={m} variant="outline" className="text-xs">{m}</Badge>)}
                   </div>
+                  <SaldoPendente itens={p.itens} />
                   {p.status_atualizado_em && (
                     <div className="flex items-center gap-1 text-xs text-muted-foreground">
                       <Timer className="h-3 w-3" />{tempoAguardando(p.status_atualizado_em)}
                     </div>
                   )}
-                  {p.motivo && <div className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">{p.motivo}</div>}
+                  {p.status === "com_problema" && p.motivo && (
+                    <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1">
+                      <span className="font-semibold">Problema:</span> {p.motivo}
+                    </div>
+                  )}
+                  {p.status === "com_problema" && (
+                    <SaldoPendente itens={p.itens} />
+                  )}
+                  {p.status !== "com_problema" && p.motivo && (
+                    <div className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">{p.motivo}</div>
+                  )}
                   <div onClick={(e) => e.stopPropagation()}>
                     <AcoesPedido p={p} stopProp={false} />
                   </div>
@@ -1182,7 +1216,16 @@ export default function Faturamento() {
                           Assumido: <span className="font-medium">{p.responsavel_nome ?? profiles[p.responsavel_id] ?? "—"}</span>
                         </div>
                       )}
-                      {p.motivo && (
+                      <SaldoPendente itens={p.itens} />
+                      {p.status === "com_problema" && p.motivo && (
+                        <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1">
+                          <span className="font-semibold">Problema:</span> {p.motivo}
+                        </div>
+                      )}
+                      {p.status === "com_problema" && (
+                        <SaldoPendente itens={p.itens} />
+                      )}
+                      {p.status !== "com_problema" && p.motivo && (
                         <div className="text-xs text-muted-foreground mt-1 max-w-[160px] truncate" title={p.motivo}>
                           {p.motivo}
                         </div>
@@ -1379,6 +1422,11 @@ export default function Faturamento() {
                 )}
                 {detalhePedido.motivo && (
                   <div className="col-span-2"><span className="text-muted-foreground">Motivo:</span> <span className="text-amber-700">{detalhePedido.motivo}</span></div>
+                )}
+                {detalhePedido && (
+                  <div className="col-span-2">
+                    <SaldoPendente itens={detalhePedido.itens} />
+                  </div>
                 )}
               </div>
 
