@@ -163,7 +163,8 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
   const camposObrigatoriosOk = !!(
     cliente.cond_pagamento.trim() &&
     cliente.codigo_cliente.trim() &&
-    cliente.comprador.trim()
+    cliente.comprador.trim() &&
+    cliente.email_xml.trim()
   );
 
   const podeSalvar = useMemo(() => {

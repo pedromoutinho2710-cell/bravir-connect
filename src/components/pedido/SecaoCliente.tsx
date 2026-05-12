@@ -470,11 +470,15 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-base font-semibold">Comprador</Label>
+            <Label className="text-base font-semibold">Comprador *</Label>
             <Input
               value={value.comprador}
               onChange={(e) => set("comprador", e.target.value)}
-              className="h-11 text-base"
+              className={`h-11 text-base ${
+                cnpjStatus === "encontrado" && !value.comprador.trim()
+                  ? "border-red-400 focus-visible:ring-red-400"
+                  : ""
+              }`}
             />
           </div>
         </div>
@@ -491,12 +495,16 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
             />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-base font-semibold">Email de XML/Boleto</Label>
+            <Label className="text-base font-semibold">Email de XML/Boleto *</Label>
             <Input
               value={value.email_xml}
               onChange={(e) => set("email_xml", e.target.value)}
               placeholder="email@empresa.com"
-              className="h-11 text-base"
+              className={`h-11 text-base ${
+                cnpjStatus === "encontrado" && !value.email_xml.trim()
+                  ? "border-red-400 focus-visible:ring-red-400"
+                  : ""
+              }`}
             />
           </div>
         </div>
@@ -514,14 +522,18 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-base font-semibold">Condição de pagamento</Label>
+            <Label className="text-base font-semibold">Condição de pagamento *</Label>
             <Input
               value={value.cond_pagamento}
               onChange={(e) => !negativado && set("cond_pagamento", e.target.value)}
               readOnly={negativado}
               disabled={negativado}
               placeholder="Ex: 28/35/42 DDL, 30/60 dias..."
-              className="h-11 text-base"
+              className={`h-11 text-base ${
+                cnpjStatus === "encontrado" && !value.cond_pagamento.trim()
+                  ? "border-red-400 focus-visible:ring-red-400"
+                  : ""
+              }`}
             />
           </div>
         </div>
@@ -529,12 +541,16 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
         {/* Código do cliente + Aceita saldo */}
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-1.5">
-            <Label className="text-base font-semibold">Código do cliente</Label>
+            <Label className="text-base font-semibold">Código do cliente *</Label>
             <Input
               value={value.codigo_cliente}
               onChange={(e) => set("codigo_cliente", e.target.value)}
               placeholder="Ex: 00123"
-              className="h-11 text-base"
+              className={`h-11 text-base ${
+                cnpjStatus === "encontrado" && !value.codigo_cliente.trim()
+                  ? "border-red-400 focus-visible:ring-red-400"
+                  : ""
+              }`}
             />
           </div>
           <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-3">
