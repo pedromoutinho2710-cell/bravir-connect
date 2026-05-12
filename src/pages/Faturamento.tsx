@@ -176,8 +176,14 @@ function CopiarCampo({ label, valor }: { label: string; valor: string | null }) 
 }
 
 function SaldoPendente({ itens }: { itens: ExcelItemRaw[] }) {
-  const itensSaldo = itens.filter((i) => i.qtd_faturada < i.quantidade);
+  const temAlgumFaturado = itens.some((i) => i.qtd_faturada > 0);
+  if (!temAlgumFaturado) return null;
+
+  const itensSaldo = itens.filter(
+    (i) => i.qtd_faturada < i.quantidade
+  );
   if (itensSaldo.length === 0) return null;
+
   return (
     <div className="mt-2 rounded-md border border-orange-300 bg-orange-50 px-3 py-2 space-y-1">
       <div className="text-xs font-semibold text-orange-800 uppercase tracking-wide">
@@ -189,8 +195,8 @@ function SaldoPendente({ itens }: { itens: ExcelItemRaw[] }) {
             {i.nome}
           </span>
           <span className="text-orange-700 font-mono shrink-0 ml-2">
-            Ped: {i.quantidade} · Fat: {i.qtd_faturada} ·{" "}
-            <span className="font-bold">Saldo: {i.quantidade - i.qtd_faturada}</span>
+            Ped: {i.quantidade} · Fat: {i.qtd_faturada} ·
+            <span className="font-bold"> Saldo: {i.quantidade - i.qtd_faturada}</span>
           </span>
         </div>
       ))}

@@ -211,22 +211,6 @@ export default function MeusPedidos() {
     return () => { supabase.removeChannel(channel); };
   }, [user]);
 
-  useEffect(() => {
-    if (!user) return;
-    const channel = supabase
-      .channel("meus-pedidos-realtime")
-      .on(
-        "postgres_changes",
-        { event: "UPDATE", schema: "public", table: "pedidos",
-          filter: `vendedor_id=eq.${user.id}` },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-        () => { carregarPedidos(); }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
-
   const limparFiltros = () => {
     setFiltroStatus("todos");
     setFiltroCliente("");
