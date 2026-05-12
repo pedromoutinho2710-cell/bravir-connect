@@ -252,8 +252,8 @@ const ABAS = [
   {
     key: "pendencias",
     label: "Pendências",
-    status: ["parcialmente_faturado", "com_problema"],
-    descricao: "Pedidos com saldo parado ou com problema",
+    status: ["parcialmente_faturado", "com_problema", "no_sankhya"],
+    descricao: "Pedidos com saldo parado, sem estoque ou com problema",
   },
   {
     key: "faturado",
@@ -517,6 +517,14 @@ export default function Faturamento() {
 
     if (abaAtiva === "recebidos") lista = lista.filter((p) => !p.responsavel_id);
     if (abaAtiva === "a_lancar") lista = lista.filter((p) => !!p.responsavel_id);
+    if (abaAtiva === "pendencias") {
+      lista = lista.filter((p) =>
+        p.status === "parcialmente_faturado" ||
+        p.status === "com_problema" ||
+        (p.status === "no_sankhya" &&
+          p.itens.every((i) => i.qtd_faturada === 0))
+      );
+    }
 
     if (filtroNumeroGlobal.trim()) {
       const num = parseInt(filtroNumeroGlobal.trim(), 10);
@@ -1846,41 +1854,151 @@ export default function Faturamento() {
                 )}
               </div>
 
-              <div className="rounded-md border overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b bg-muted/50">
-                      <th className="text-left px-3 py-2">Produto</th>
-                      <th className="text-center px-2 py-2">Cx</th>
-                      <th className="text-center px-2 py-2">Qtd</th>
-                      <th className="text-center px-2 py-2">Perf%</th>
-                      <th className="text-center px-2 py-2">Com%</th>
-                      <th className="text-center px-2 py-2">Trade%</th>
-                      <th className="text-right px-3 py-2">Bruto un.</th>
-                      <th className="text-right px-3 py-2">Final un.</th>
-                      <th className="text-right px-3 py-2">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {detalhePedido.itens.map((i) => (
-                      <tr key={i.id} className="border-b last:border-0">
-                        <td className="px-3 py-2">
-                          <div className="font-medium">{i.nome}</div>
-                          <div className="text-muted-foreground font-mono">{i.codigo}</div>
-                        </td>
-                        <td className="text-center px-2 py-2">{i.cx_embarque}</td>
-                        <td className="text-center px-2 py-2">{i.quantidade}</td>
-                        <td className="text-center px-2 py-2">{(i.preco_bruto > 0 ? (1 - i.preco_final / i.preco_bruto) * 100 : 0).toFixed(2)}%</td>
-                        <td className="text-center px-2 py-2">{i.desconto_comercial.toFixed(1)}%</td>
-                        <td className="text-center px-2 py-2">{i.desconto_trade.toFixed(1)}%</td>
-                        <td className="text-right px-3 py-2">{formatBRL(i.preco_bruto)}</td>
-                        <td className="text-right px-3 py-2">{formatBRL(i.preco_final)}</td>
-                        <td className="text-right px-3 py-2 font-medium">{formatBRL(i.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              {(() => {
+                const temAlgumFaturado = detalhePedido.itens.some(
+                  (i) => i.qtd_faturada > 0
+                );
+                const itensFaturados = detalhePedido.itens.filter(
+                  (i) => i.qtd_faturada > 0
+                );
+                const itensSaldo = detalhePedido.itens.filter(
+                  (i) => i.qtd_faturada < i.quantidade
+                );
+
+                if (!temAlgumFaturado) {
+                  return (
+                    <div className="rounded-md border overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="text-left px-3 py-2">Produto</th>
+                            <th className="text-center px-2 py-2">Cx</th>
+                            <th className="text-center px-2 py-2">Qtd</th>
+                            <th className="text-center px-2 py-2">Perf%</th>
+                            <th className="text-center px-2 py-2">Com%</th>
+                            <th className="text-center px-2 py-2">Trade%</th>
+                            <th className="text-right px-3 py-2">Bruto un.</th>
+                            <th className="text-right px-3 py-2">Final un.</th>
+                            <th className="text-right px-3 py-2">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detalhePedido.itens.map((i) => (
+                            <tr key={i.id} className="border-b last:border-0">
+                              <td className="px-3 py-2">
+                                <div className="font-medium">{i.nome}</div>
+                                <div className="text-muted-foreground font-mono">{i.codigo}</div>
+                              </td>
+                              <td className="text-center px-2 py-2">{i.cx_embarque}</td>
+                              <td className="text-center px-2 py-2">{i.quantidade}</td>
+                              <td className="text-center px-2 py-2">{(i.preco_bruto > 0 ? (1 - i.preco_final / i.preco_bruto) * 100 : 0).toFixed(2)}%</td>
+                              <td className="text-center px-2 py-2">{i.desconto_comercial.toFixed(1)}%</td>
+                              <td className="text-center px-2 py-2">{i.desconto_trade.toFixed(1)}%</td>
+                              <td className="text-right px-3 py-2">{formatBRL(i.preco_bruto)}</td>
+                              <td className="text-right px-3 py-2">{formatBRL(i.preco_final)}</td>
+                              <td className="text-right px-3 py-2 font-medium">{formatBRL(i.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3">
+                    {itensFaturados.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="h-2 w-2 rounded-full bg-green-500" />
+                          <span className="text-xs font-semibold text-green-700 uppercase tracking-wide">
+                            Cadastrado no Sankhya
+                          </span>
+                        </div>
+                        <div className="rounded-md border border-green-300 overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b bg-green-50">
+                                <th className="text-left px-3 py-2">Produto</th>
+                                <th className="text-center px-2 py-2">Qtd Pedida</th>
+                                <th className="text-center px-2 py-2">Qtd Lançada</th>
+                                <th className="text-right px-3 py-2">Preço Final</th>
+                                <th className="text-right px-3 py-2">Total Lançado</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {itensFaturados.map((i) => (
+                                <tr key={i.id} className="border-b last:border-0 bg-green-50/50">
+                                  <td className="px-3 py-2">
+                                    <div className="font-medium text-green-900">{i.nome}</div>
+                                    <div className="text-green-700 font-mono">{i.codigo}</div>
+                                  </td>
+                                  <td className="text-center px-2 py-2 text-green-800">{i.quantidade}</td>
+                                  <td className="text-center px-2 py-2 font-semibold text-green-800">
+                                    {i.qtd_faturada}
+                                  </td>
+                                  <td className="text-right px-3 py-2 text-green-800">
+                                    {formatBRL(i.preco_final)}
+                                  </td>
+                                  <td className="text-right px-3 py-2 font-semibold text-green-800">
+                                    {formatBRL(i.qtd_faturada * i.preco_final)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+
+                    {itensSaldo.length > 0 && (
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <div className="h-2 w-2 rounded-full bg-red-500" />
+                          <span className="text-xs font-semibold text-red-700 uppercase tracking-wide">
+                            Saldo pendente
+                          </span>
+                        </div>
+                        <div className="rounded-md border border-red-300 overflow-x-auto">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b bg-red-50">
+                                <th className="text-left px-3 py-2">Produto</th>
+                                <th className="text-center px-2 py-2">Qtd Pedida</th>
+                                <th className="text-center px-2 py-2">Qtd Lançada</th>
+                                <th className="text-center px-2 py-2">Saldo</th>
+                                <th className="text-right px-3 py-2">Preço Final</th>
+                                <th className="text-right px-3 py-2">Total Saldo</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {itensSaldo.map((i) => (
+                                <tr key={i.id} className="border-b last:border-0 bg-red-50/50">
+                                  <td className="px-3 py-2">
+                                    <div className="font-medium text-red-900">{i.nome}</div>
+                                    <div className="text-red-700 font-mono">{i.codigo}</div>
+                                  </td>
+                                  <td className="text-center px-2 py-2 text-red-800">{i.quantidade}</td>
+                                  <td className="text-center px-2 py-2 text-red-800">{i.qtd_faturada}</td>
+                                  <td className="text-center px-2 py-2 font-bold text-red-800">
+                                    {i.quantidade - i.qtd_faturada}
+                                  </td>
+                                  <td className="text-right px-3 py-2 text-red-800">
+                                    {formatBRL(i.preco_final)}
+                                  </td>
+                                  <td className="text-right px-3 py-2 font-semibold text-red-800">
+                                    {formatBRL((i.quantidade - i.qtd_faturada) * i.preco_final)}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="flex justify-end gap-4 text-sm">
                 <span className="text-muted-foreground">Peso total: {detalhePedido.peso_total.toFixed(2)} kg</span>
