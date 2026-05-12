@@ -37,6 +37,7 @@ import SiteCandidatura from "./pages/site/SiteCandidatura";
 import DashboardGestora from "./pages/gestora/DashboardGestora";
 import GestaoTime from "./pages/gestora/GestaoTime";
 import CadastrarClienteGestora from "./pages/gestora/CadastrarClienteGestora";
+import CadastrarClienteFaturamento from "@/pages/faturamento/CadastrarClienteFaturamento";
 import ClientesGestora from "./pages/gestora/ClientesGestora";
 import NovoPedidoGestora from "./pages/gestora/NovoPedidoGestora";
 import PedidosGestora from "./pages/gestora/PedidosGestora";
@@ -85,6 +86,7 @@ const App = () => (
               <Route path="/faturamento" element={<Faturamento />} />
               <Route path="/faturamento/clientes-pendentes" element={<FilaCadastros />} />
               <Route path="/faturamento/clientes" element={<FaturamentoClientes />} />
+              <Route path="/faturamento/cadastrar-cliente" element={<CadastrarClienteFaturamento />} />
               <Route path="/faturamento/cadastros" element={<FilaCadastros />} />
             </Route>
 

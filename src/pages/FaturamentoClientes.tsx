@@ -15,7 +15,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
 import { CLUSTERS, TABELAS_PRECO, UFS } from "@/lib/constants";
-import { Loader2, Search, Users, Pencil, Trash2, SlidersHorizontal, X } from "lucide-react";
+import { Loader2, Search, Users, Pencil, Trash2, SlidersHorizontal, X, UserPlus } from "lucide-react";
 
 type Cliente = {
   id: string;
@@ -332,16 +332,22 @@ export default function FaturamentoClientes() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Clientes</h1>
-        <p className="text-sm text-muted-foreground">
-          Gerencie perfis, tabelas e vendedores de todos os clientes
-          {semPerfilCount > 0 && (
-            <span className="ml-2 inline-flex items-center rounded-full bg-red-100 text-red-800 border border-red-300 px-2 py-0.5 text-xs font-semibold">
-              {semPerfilCount} sem perfil
-            </span>
-          )}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Clientes</h1>
+          <p className="text-sm text-muted-foreground">
+            Gerencie perfis, tabelas e vendedores de todos os clientes
+            {semPerfilCount > 0 && (
+              <span className="ml-2 inline-flex items-center rounded-full bg-red-100 text-red-800 border border-red-300 px-2 py-0.5 text-xs font-semibold">
+                {semPerfilCount} sem perfil
+              </span>
+            )}
+          </p>
+        </div>
+        <Button onClick={() => navigate("/faturamento/cadastrar-cliente")}>
+          <UserPlus className="h-4 w-4 mr-2" />
+          Cadastrar cliente
+        </Button>
       </div>
 
       {/* Filtros básicos */}
