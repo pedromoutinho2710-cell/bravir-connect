@@ -90,7 +90,7 @@ export const STATUS_LABEL: Record<string, string> = {
   pendente_sankhya: "Pendente Sankhya",
   no_sankhya: "Aguardando faturamento",
   faturado: "Pré-faturado",
-  parcialmente_faturado: "Parc. pré-faturado",
+  parcialmente_faturado: "Parc. Faturado",
   com_problema: "Com problema",
   devolvido: "Devolvido",
   cancelado: "Cancelado",
@@ -206,7 +206,11 @@ function SaldoPendente({ itens }: { itens: ExcelItemRaw[] }) {
 
 // ── Filtros de status por aba ─────────────────────────────────────
 const FILTROS_STATUS_ABA: Record<string, { value: string; label: string }[]> = {
-  recebidos: [],
+  recebidos: [
+    { value: "todos", label: "Todos" },
+    { value: "pendente_sankhya", label: "Na fila" },
+    { value: "com_problema", label: "Com problema" },
+  ],
   a_lancar: [],
   lancados: [
     { value: "todos", label: "Todos" },
@@ -343,7 +347,7 @@ export default function Faturamento() {
       const [preFatRes, lancadosRes, aguardRes, fatRes, probRes] =
         await Promise.all([
           supabase.from("pedidos").select("id", { count: "exact", head: true })
-            .eq("status", "pendente_sankhya")
+            .not("status", "in", '("rascunho","cancelado")')
             .gte("data_pedido", inicioMes)
             .lte("data_pedido", fimMes),
           supabase.from("pedidos").select("id", { count: "exact", head: true })
@@ -564,6 +568,11 @@ export default function Faturamento() {
     if (filtroStatusAba !== "todos") {
       if (filtroStatusAba === "sem_responsavel") {
         lista = lista.filter((p) => !p.responsavel_id);
+      } else if (filtroStatusAba === "pendente_sankhya" &&
+        abaAtiva === "recebidos") {
+        lista = lista.filter((p) =>
+          p.status === "pendente_sankhya" && !p.responsavel_id
+        );
       } else {
         lista = lista.filter((p) => p.status === filtroStatusAba);
       }
