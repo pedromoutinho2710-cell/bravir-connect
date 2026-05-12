@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -38,6 +38,8 @@ type MeuPedido = {
   razao_social: string;
   marcas: string[];
   total: number;
+  responsavel_id: string | null;
+  responsavel_nome: string | null;
 };
 
 export const STATUS_LABEL: Record<string, string> = {
@@ -119,18 +121,19 @@ export default function MeusPedidos() {
   const carregar = () => setRefreshKey((k) => k + 1);
   usePullToRefresh(carregar);
 
-  useEffect(() => {
+  const carregarPedidos = useCallback(async () => {
     if (!user) return;
     setLoading(true);
-    (async () => {
+    try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let query: any = supabase
         .from("pedidos")
         .select(`
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
-          cond_pagamento, motivo,
+          cond_pagamento, motivo, responsavel_id,
           clientes(razao_social),
-          itens_pedido(total_item, produtos(marca))
+          itens_pedido(total_item, produtos(marca)),
+          profiles!responsavel_id(full_name, email)
         `)
         .eq("vendedor_id", user.id)
         .order("created_at", { ascending: false });
@@ -147,6 +150,8 @@ export default function MeusPedidos() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const itensList = (p.itens_pedido ?? []) as any[];
         const marcas = [...new Set(itensList.map((i) => i.produtos?.marca).filter(Boolean))] as string[];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const prof = p.profiles as any;
         return {
           id: p.id,
           numero_pedido: p.numero_pedido,
@@ -159,6 +164,8 @@ export default function MeusPedidos() {
           razao_social: p.clientes?.razao_social ?? "—",
           marcas,
           total: itensList.reduce((s: number, i) => s + Number(i.total_item), 0),
+          responsavel_id: p.responsavel_id ?? null,
+          responsavel_nome: prof?.full_name || prof?.email || null,
         };
       });
 
@@ -172,8 +179,14 @@ export default function MeusPedidos() {
       }
 
       setPedidos(lista);
-    })().finally(() => setLoading(false));
-  }, [user, filtroStatus, filtroDataInicio, filtroDataFim, filtroCliente, filtroMarca, refreshKey]);
+    } finally {
+      setLoading(false);
+    }
+  }, [user, filtroStatus, filtroDataInicio, filtroDataFim, filtroCliente, filtroMarca]);
+
+  useEffect(() => {
+    carregarPedidos();
+  }, [carregarPedidos, refreshKey]);
 
   useEffect(() => {
     if (!user) return;
@@ -196,6 +209,22 @@ export default function MeusPedidos() {
       )
       .subscribe();
     return () => { supabase.removeChannel(channel); };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel("meus-pedidos-realtime")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "pedidos",
+          filter: `vendedor_id=eq.${user.id}` },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        () => { carregarPedidos(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const limparFiltros = () => {
@@ -246,6 +275,29 @@ export default function MeusPedidos() {
       <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_COLOR[status] ?? "bg-gray-100 text-gray-800 border-gray-300"}`}>
         {STATUS_LABEL[status] ?? status}
       </span>
+    );
+  }
+
+  const ETAPAS = [
+    { key: "aguardando_faturamento", label: "Aguardando" },
+    { key: "no_sankhya", label: "No Sankhya" },
+    { key: "faturado", label: "Faturado" },
+    { key: "parcialmente_faturado", label: "Parc. Faturado" },
+  ];
+
+  function ProgressoEtapas({ status }: { status: string }) {
+    const idx = ETAPAS.findIndex((e) => e.key === status);
+    if (idx === -1) return null;
+    return (
+      <div className="flex items-center gap-0.5 mt-1.5 flex-wrap">
+        {ETAPAS.map((e, i) => (
+          <div key={e.key} className="flex items-center gap-0.5">
+            <div className={`h-2 w-2 rounded-full flex-shrink-0 ${i < idx ? "bg-green-500" : i === idx ? "bg-primary" : "bg-muted-foreground/30"}`} />
+            <span className={`text-[10px] whitespace-nowrap ${i === idx ? "font-medium text-foreground" : "text-muted-foreground"}`}>{e.label}</span>
+            {i < ETAPAS.length - 1 && <div className="h-px w-2 bg-muted-foreground/30 mx-0.5" />}
+          </div>
+        ))}
+      </div>
     );
   }
 
@@ -339,7 +391,15 @@ export default function MeusPedidos() {
                       <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <StatusBadge status={p.status} />
+                      <div>
+                        <StatusBadge status={p.status} />
+                        {p.responsavel_nome && (
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Assumido por: <span className="font-medium">{p.responsavel_nome}</span>
+                          </div>
+                        )}
+                        <ProgressoEtapas status={p.status} />
+                      </div>
                       {p.status === "rascunho" && (
                         <button
                           type="button"
@@ -403,6 +463,12 @@ export default function MeusPedidos() {
                     <TableCell className="text-right font-semibold text-sm">{formatBRL(p.total)}</TableCell>
                     <TableCell>
                       <StatusBadge status={p.status} />
+                      {p.responsavel_nome && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Assumido por: <span className="font-medium">{p.responsavel_nome}</span>
+                        </div>
+                      )}
+                      <ProgressoEtapas status={p.status} />
                       {p.motivo && (
                         <div className="text-xs text-muted-foreground mt-1 max-w-[200px] truncate" title={p.motivo}>
                           {p.motivo}
@@ -451,10 +517,13 @@ export default function MeusPedidos() {
           setExcluirDevolvido(detalhesId);
           setDetalhesOpen(false);
         } : undefined}
-        onEditar={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "aguardando_faturamento" ? () => {
+        onEditar={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "aguardando_faturamento" && pedidos.find(p => p.id === detalhesId)?.responsavel_id === null ? () => {
           setDetalhesOpen(false);
           navigate("/novo-pedido", { state: { pedidoId: detalhesId, editando: true } });
         } : undefined}
+        editarBloqueadoPor={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "aguardando_faturamento" && (pedidos.find(p => p.id === detalhesId)?.responsavel_id ?? null) !== null
+          ? (pedidos.find(p => p.id === detalhesId)?.responsavel_nome ?? "faturamento")
+          : undefined}
       />
 
       <AlertDialog open={!!excluirDevolvido} onOpenChange={(o) => { if (!o) setExcluirDevolvido(null); }}>

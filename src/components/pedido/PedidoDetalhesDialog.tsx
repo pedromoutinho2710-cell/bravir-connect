@@ -114,6 +114,7 @@ type Props = {
   onCorrigir?: () => void;
   onExcluir?: () => void;
   onEditar?: () => void;
+  editarBloqueadoPor?: string | null;
 };
 
 function tempoNaEtapa(dt: string | null): { texto: string; urgente: boolean } | null {
@@ -130,7 +131,7 @@ function tempoNaEtapa(dt: string | null): { texto: string; urgente: boolean } | 
   }
 }
 
-export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir, onExcluir, onEditar }: Props) {
+export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir, onExcluir, onEditar, editarBloqueadoPor }: Props) {
   const [pedido, setPedido] = useState<PedidoDetalhe | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -315,6 +316,17 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
                 <Button size="sm" variant="outline" onClick={onEditar}>
                   Editar pedido
                 </Button>
+              )}
+              {pedido.status === "aguardando_faturamento" && editarBloqueadoPor != null && (
+                <div>
+                  <Button size="sm" variant="outline" disabled>
+                    Editar pedido
+                  </Button>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    Pedido já assumido por {editarBloqueadoPor ?? "faturamento"}.
+                    Para alterações, entre em contato com a equipe de faturamento.
+                  </div>
+                </div>
               )}
             </div>
 
