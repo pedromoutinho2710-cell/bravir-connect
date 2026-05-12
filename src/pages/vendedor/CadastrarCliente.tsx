@@ -306,7 +306,7 @@ export default function CadastrarCliente() {
         bairro: form.bairro || null,
         cidade: form.cidade || null,
         uf: form.uf.toUpperCase() || null,
-        status: "aguardando_faturamento",
+        status: "pendente_sankhya",
         origem: "vendedor",
         vendedor_id: user?.id ?? null,
         vendedor_nome: fullName ?? null,

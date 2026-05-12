@@ -127,9 +127,9 @@ export default function Dashboard() {
           supabase
             .from("pedidos")
             .select("id, itens_pedido(total_item)")
-            .in("status", ["aguardando_faturamento", "em_faturamento"]),
-          // Pré Faturado — aguardando_faturamento no período
-          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "aguardando_faturamento").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
+            .in("status", ["pendente_sankhya", "em_faturamento"]),
+          // Pendente Sankhya — pendente_sankhya no período
+          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "pendente_sankhya").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
           // Pedidos Lançados — no_sankhya no período
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "no_sankhya").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
           // Aguardando Faturamento — parcialmente_faturado no período

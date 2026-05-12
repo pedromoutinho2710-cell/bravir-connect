@@ -13,7 +13,7 @@ import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 
 const STATUS_LABEL: Record<string, string> = {
-  aguardando_faturamento: "Pré-fat.",
+  pendente_sankhya: "Pendente Sankhya",
   em_faturamento: "Em faturamento",
   faturado: "Faturado",
   parcialmente_faturado: "Parc. faturado",
@@ -23,7 +23,7 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  aguardando_faturamento: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  pendente_sankhya: "bg-yellow-100 text-yellow-800 border-yellow-300",
   em_faturamento: "bg-blue-100 text-blue-800 border-blue-300",
   faturado: "bg-green-100 text-green-800 border-green-300",
   parcialmente_faturado: "bg-teal-100 text-teal-800 border-teal-300",

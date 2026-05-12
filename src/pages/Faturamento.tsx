@@ -87,7 +87,7 @@ type ExcelItemRaw = {
 // ── Status ────────────────────────────────────────────────────────
 export const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
-  aguardando_faturamento: "Pré-faturamento",
+  pendente_sankhya: "Pendente Sankhya",
   no_sankhya: "Aguardando faturamento",
   faturado: "Pré-faturado",
   parcialmente_faturado: "Parc. pré-faturado",
@@ -99,7 +99,7 @@ export const STATUS_LABEL: Record<string, string> = {
 
 export const STATUS_COLOR: Record<string, string> = {
   rascunho: "bg-gray-100 text-gray-700 border-gray-300",
-  aguardando_faturamento: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  pendente_sankhya: "bg-yellow-100 text-yellow-800 border-yellow-300",
   no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
   faturado: "bg-green-100 text-green-800 border-green-300",
   parcialmente_faturado: "bg-teal-100 text-teal-800 border-teal-300",
@@ -110,7 +110,7 @@ export const STATUS_COLOR: Record<string, string> = {
 };
 
 const STATUS_TERMINAL = new Set(["faturado", "devolvido", "cancelado"]);
-const STATUS_ACTIVE = new Set(["aguardando_faturamento", "no_sankhya", "parcialmente_faturado", "com_problema", "em_faturamento"]);
+const STATUS_ACTIVE = new Set(["pendente_sankhya", "no_sankhya", "parcialmente_faturado", "com_problema", "em_faturamento"]);
 
 function tempoAguardando(dt: string | null): string | null {
   if (!dt) return null;
@@ -222,13 +222,13 @@ const ABAS = [
   {
     key: "recebidos",
     label: "Pedidos Recebidos",
-    status: ["aguardando_faturamento"],
+    status: ["pendente_sankhya"],
     descricao: "Pedidos na fila aguardando assumir",
   },
   {
     key: "a_lancar",
     label: "A Lançar",
-    status: ["aguardando_faturamento"],
+    status: ["pendente_sankhya"],
     descricao: "Pedidos assumidos ainda não cadastrados no Sankhya",
   },
   {
@@ -343,7 +343,7 @@ export default function Faturamento() {
       const [preFatRes, lancadosRes, aguardRes, fatRes, probRes] =
         await Promise.all([
           supabase.from("pedidos").select("id", { count: "exact", head: true })
-            .eq("status", "aguardando_faturamento")
+            .eq("status", "pendente_sankhya")
             .gte("data_pedido", inicioMes)
             .lte("data_pedido", fimMes),
           supabase.from("pedidos").select("id", { count: "exact", head: true })
@@ -510,7 +510,7 @@ export default function Faturamento() {
       .channel("faturamento-realtime")
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "pedidos" }, (payload: any) => {
-        if (payload.new?.status === "aguardando_faturamento") {
+        if (payload.new?.status === "pendente_sankhya") {
           toast.info(`Novo pedido #${payload.new.numero_pedido} recebido!`, { duration: 8000 });
         }
         setRefreshKey((k) => k + 1);
@@ -1164,7 +1164,7 @@ export default function Faturamento() {
     return (
       <div className="flex flex-wrap gap-1.5">
         {/* Assumir */}
-        {p.status === "aguardando_faturamento" && !p.responsavel_id && (
+        {p.status === "pendente_sankhya" && !p.responsavel_id && (
           <Button size="sm" variant="outline" disabled={atualizando === p.id}
             onClick={wrap(() => assumir(p.id))}>
             {atualizando === p.id

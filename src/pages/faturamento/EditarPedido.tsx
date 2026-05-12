@@ -13,7 +13,7 @@ import { ResumoFinanceiro } from "@/components/pedido/ResumoFinanceiro";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
-  aguardando_faturamento: "Pré-faturamento",
+  pendente_sankhya: "Pendente Sankhya",
   no_sankhya: "Aguardando faturamento",
   faturado: "Pré-faturado",
   parcialmente_faturado: "Parc. pré-faturado",
@@ -25,7 +25,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   rascunho: "bg-gray-100 text-gray-700 border-gray-300",
-  aguardando_faturamento: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  pendente_sankhya: "bg-yellow-100 text-yellow-800 border-yellow-300",
   no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
   faturado: "bg-green-100 text-green-800 border-green-300",
   parcialmente_faturado: "bg-teal-100 text-teal-800 border-teal-300",

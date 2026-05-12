@@ -250,7 +250,7 @@ export default function MeusClientes() {
         .from("cadastros_pendentes")
         .select("id, nome_cliente, razao_social, cnpj, status, motivo_reprovacao, created_at")
         .eq("vendedor_id", user.id)
-        .in("status", ["aguardando_faturamento", "devolvido"])
+        .in("status", ["pendente_sankhya", "devolvido"])
         .order("created_at", { ascending: false });
       setCadastrosPendentes((cadastrosRes.data ?? []) as CadastroPendente[]);
     })().finally(() => setLoading(false));

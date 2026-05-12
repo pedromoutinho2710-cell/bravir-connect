@@ -73,7 +73,7 @@ export default function FaturamentoClientesPendentes() {
     setLoading(true);
     const { data, error } = await (supabase.from("cadastros_pendentes") as any)
       .select("id, nome_cliente, razao_social, cnpj, contato_principal, email, telefone, classificacao, cluster_sugerido, vendedor_id, vendedor_nome, origem, status, negativado, created_at")
-      .eq("status", "aguardando_faturamento")
+      .eq("status", "pendente_sankhya")
       .order("created_at", { ascending: true });
     if (error) toast.error("Erro ao carregar cadastros");
     else setClientes((data ?? []) as ClientePendente[]);

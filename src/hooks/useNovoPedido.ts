@@ -225,7 +225,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
   };
 
   const salvarPedido = async (
-    status: "rascunho" | "aguardando_faturamento",
+    status: "rascunho" | "pendente_sankhya",
   ): Promise<string | null> => {
     if (!user || !podeSalvar) return null;
     const cliente_id = await garantirCliente();
@@ -347,7 +347,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
       await supabase.from("itens_pedido").delete().eq("pedido_id", pedidoId);
     }
 
-    const id = await salvarPedido("aguardando_faturamento");
+    const id = await salvarPedido("pendente_sankhya");
     if (id) {
       try {
         const { data: pedData } = await supabase

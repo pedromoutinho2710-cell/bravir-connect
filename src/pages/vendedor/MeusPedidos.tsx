@@ -44,7 +44,7 @@ type MeuPedido = {
 
 export const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
-  aguardando_faturamento: "Pré-faturamento",
+  pendente_sankhya: "Pendente Sankhya",
   no_sankhya: "Aguardando faturamento",
   faturado: "Faturado",
   parcialmente_faturado: "Parc. faturado",
@@ -61,7 +61,7 @@ export const STATUS_LABEL: Record<string, string> = {
 
 export const STATUS_COLOR: Record<string, string> = {
   rascunho: "bg-gray-100 text-gray-600 border-gray-300",
-  aguardando_faturamento: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  pendente_sankhya: "bg-yellow-100 text-yellow-800 border-yellow-300",
   no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
   faturado: "bg-green-100 text-green-800 border-green-300",
   parcialmente_faturado: "bg-emerald-100 text-emerald-800 border-emerald-300",
@@ -287,7 +287,7 @@ export default function MeusPedidos() {
   }
 
   const ETAPAS = [
-    { key: "aguardando_faturamento", label: "Aguardando" },
+    { key: "pendente_sankhya", label: "Pendente Sankhya" },
     { key: "no_sankhya", label: "No Sankhya" },
     { key: "faturado", label: "Faturado" },
     { key: "parcialmente_faturado", label: "Parc. Faturado" },
@@ -525,11 +525,11 @@ export default function MeusPedidos() {
           setExcluirDevolvido(detalhesId);
           setDetalhesOpen(false);
         } : undefined}
-        onEditar={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "aguardando_faturamento" && pedidos.find(p => p.id === detalhesId)?.responsavel_id === null ? () => {
+        onEditar={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "pendente_sankhya" && pedidos.find(p => p.id === detalhesId)?.responsavel_id === null ? () => {
           setDetalhesOpen(false);
           navigate("/novo-pedido", { state: { pedidoId: detalhesId, editando: true } });
         } : undefined}
-        editarBloqueadoPor={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "aguardando_faturamento" && (pedidos.find(p => p.id === detalhesId)?.responsavel_id ?? null) !== null
+        editarBloqueadoPor={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "pendente_sankhya" && (pedidos.find(p => p.id === detalhesId)?.responsavel_id ?? null) !== null
           ? (pedidos.find(p => p.id === detalhesId)?.responsavel_nome ?? "faturamento")
           : undefined}
       />

@@ -28,7 +28,7 @@ import { BadgeNegativado } from "@/components/BadgeNegativado";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
-  aguardando_faturamento: "Aguardando faturamento",
+  pendente_sankhya: "Pendente Sankhya",
   no_sankhya: "No Sankhya",
   faturado: "Pré-faturado",
   parcialmente_faturado: "Parc. pré-faturado",
@@ -45,7 +45,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   rascunho: "bg-gray-100 text-gray-600 border-gray-300",
-  aguardando_faturamento: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  pendente_sankhya: "bg-yellow-100 text-yellow-800 border-yellow-300",
   no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
   faturado: "bg-green-100 text-green-800 border-green-300",
   parcialmente_faturado: "bg-emerald-100 text-emerald-800 border-emerald-300",

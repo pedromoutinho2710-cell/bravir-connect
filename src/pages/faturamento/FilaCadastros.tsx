@@ -65,7 +65,7 @@ type Vendedor = { id: string; nome: string };
 
 const STATUS_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pendente: { label: "Pendente", variant: "secondary" },
-  aguardando_faturamento: { label: "Enviado p/ faturamento", variant: "default" },
+  pendente_sankhya: { label: "Enviado p/ faturamento", variant: "default" },
   reprovado: { label: "Reprovado", variant: "destructive" },
 };
 
@@ -104,7 +104,7 @@ export default function FilaCadastros() {
     setLoading(true);
     const { data } = await (supabase.from("cadastros_pendentes") as any)
       .select("*")
-      .in("status", ["pendente", "aguardando_faturamento"])
+      .in("status", ["pendente", "pendente_sankhya"])
       .order("created_at", { ascending: false });
     setCadastros((data ?? []) as Cadastro[]);
     setLoading(false);
@@ -166,7 +166,7 @@ export default function FilaCadastros() {
     try {
       const { error } = await (supabase.from("cadastros_pendentes") as any)
         .update({
-          status: "aguardando_faturamento",
+          status: "pendente_sankhya",
           cluster_sugerido: form.cluster || null,
           negativado: negativadoEdit,
           vendedor_id: vendedorSelecionado,

@@ -222,7 +222,7 @@ export default function ImportarPedidoDialog({
         .insert({
           cliente_id: cliente.id,
           vendedor_id: cliente.vendedor_id,
-          status: "aguardando_faturamento",
+          status: "pendente_sankhya",
           tipo: "Pedido",
           data_pedido: hoje,
           cond_pagamento: condPag || null,
