@@ -152,6 +152,15 @@ export default function CadastrarClienteGestora() {
       return;
     }
 
+    supabase.from("notificacoes").insert({
+      destinatario_role: "faturamento",
+      mensagem: `Gestora cadastrou novo cliente: ${form.nome_fantasia.trim() || form.razao_social.trim()}`,
+      tipo: "cliente_cadastrado_gestora",
+      lida: false,
+    }).then(({ error: notifErr }) => {
+      if (notifErr) console.error("Erro ao notificar faturamento:", notifErr);
+    });
+
     toast.success("Cliente cadastrado com sucesso!");
     navigate("/gestora");
   };
