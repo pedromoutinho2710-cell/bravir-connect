@@ -206,27 +206,15 @@ function SaldoPendente({ itens }: { itens: ExcelItemRaw[] }) {
 
 // ── Filtros de status por aba ─────────────────────────────────────
 const FILTROS_STATUS_ABA: Record<string, { value: string; label: string }[]> = {
-  recebidos: [
-    { value: "todos", label: "Todos" },
-    { value: "sem_responsavel", label: "Pendentes para lançar" },
-  ],
+  recebidos: [],
   a_lancar: [],
   lancados: [
     { value: "todos", label: "Todos" },
     { value: "no_sankhya", label: "No Sankhya" },
     { value: "parcialmente_faturado", label: "Parc. faturado" },
   ],
-  pendencias: [
-    { value: "todos", label: "Todos" },
-    { value: "parcialmente_faturado", label: "Com saldo" },
-    { value: "com_problema", label: "Com problema" },
-  ],
-  faturado: [
-    { value: "todos", label: "Todos" },
-    { value: "faturado", label: "Faturado" },
-    { value: "devolvido", label: "Devolvido" },
-    { value: "cancelado", label: "Cancelado" },
-  ],
+  pendencias: [],
+  faturado: [],
 };
 
 // ── Abas ──────────────────────────────────────────────────────────
@@ -289,7 +277,13 @@ export default function Faturamento() {
   });
   const [filtroDataFim, setFiltroDataFim] = useState("");
 
-  const [kpis, setKpis] = useState({ aguardando: 0, noSankhya: 0, faturadosHoje: 0, comProblema: 0 });
+  const [kpis, setKpis] = useState({
+    preFaturado: 0,
+    lancados: 0,
+    aguardandoFaturamento: 0,
+    faturado: 0,
+    problemas: 0,
+  });
 
   // Motivo dialog (devolver / cancelar / com_problema)
   const [motivoDialog, setMotivoDialog] = useState<{ type: "devolver" | "cancelar" | "com_problema"; id: string; numero: number } | null>(null);
@@ -342,20 +336,40 @@ export default function Faturamento() {
     (async () => {
       const hoje = new Date();
       const pad = (n: number) => String(n).padStart(2, "0");
-      const hojeStr = `${hoje.getFullYear()}-${pad(hoje.getMonth() + 1)}-${pad(hoje.getDate())}`;
+      const inicioMes = `${hoje.getFullYear()}-${pad(hoje.getMonth() + 1)}-01`;
+      const fimMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
+        .toISOString().slice(0, 10);
 
-      const [agRes, snRes, fatHojeRes, probRes] = await Promise.all([
-        supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "aguardando_faturamento"),
-        supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "no_sankhya"),
-        supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "faturado").gte("faturado_em", `${hojeStr}T00:00:00`),
-        supabase.from("pedidos").select("id", { count: "exact", head: true }).in("status", ["com_problema", "devolvido", "cancelado"]),
-      ]);
+      const [preFatRes, lancadosRes, aguardRes, fatRes, probRes] =
+        await Promise.all([
+          supabase.from("pedidos").select("id", { count: "exact", head: true })
+            .eq("status", "aguardando_faturamento")
+            .gte("data_pedido", inicioMes)
+            .lte("data_pedido", fimMes),
+          supabase.from("pedidos").select("id", { count: "exact", head: true })
+            .eq("status", "no_sankhya")
+            .gte("data_pedido", inicioMes)
+            .lte("data_pedido", fimMes),
+          supabase.from("pedidos").select("id", { count: "exact", head: true })
+            .eq("status", "parcialmente_faturado")
+            .gte("data_pedido", inicioMes)
+            .lte("data_pedido", fimMes),
+          supabase.from("pedidos").select("id", { count: "exact", head: true })
+            .eq("status", "faturado")
+            .gte("data_pedido", inicioMes)
+            .lte("data_pedido", fimMes),
+          supabase.from("pedidos").select("id", { count: "exact", head: true })
+            .eq("status", "com_problema")
+            .gte("data_pedido", inicioMes)
+            .lte("data_pedido", fimMes),
+        ]);
 
       setKpis({
-        aguardando: agRes.count ?? 0,
-        noSankhya: snRes.count ?? 0,
-        faturadosHoje: fatHojeRes.count ?? 0,
-        comProblema: probRes.count ?? 0,
+        preFaturado: preFatRes.count ?? 0,
+        lancados: lancadosRes.count ?? 0,
+        aguardandoFaturamento: aguardRes.count ?? 0,
+        faturado: fatRes.count ?? 0,
+        problemas: probRes.count ?? 0,
       });
     })();
   }, [refreshKey]);
@@ -1183,15 +1197,6 @@ export default function Faturamento() {
           </>
         )}
 
-        {/* Registrar faturamento com NF */}
-        {(p.status === "no_sankhya" || p.status === "parcialmente_faturado") && (
-          <Button size="sm" disabled={atualizando === p.id}
-            onClick={wrap(() => abrirFaturarDialog(p))}>
-            <FileCheck className="h-3 w-3 mr-1" />
-            Faturar NF
-          </Button>
-        )}
-
         {/* Faturamento por produto */}
         {!isTerminal && (
           <Button size="sm" variant="outline" disabled={atualizando === p.id}
@@ -1230,15 +1235,6 @@ export default function Faturamento() {
         {/* Editar */}
         {isAtivo && (
           <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); navigate(`/faturamento/pedidos/${p.id}/editar`); }}>Editar</Button>
-        )}
-
-        {/* Com problema */}
-        {isAtivo && (
-          <Button size="sm" variant="outline"
-            onClick={wrap(() => abrirMotivo("com_problema", p))}>
-            <AlertTriangle className="h-3 w-3 mr-1 text-red-500" />
-            Problema
-          </Button>
         )}
 
         {/* Devolver */}
@@ -1319,39 +1315,38 @@ export default function Faturamento() {
       />
 
       {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pré-faturamento</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-yellow-700">{kpis.aguardando}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Aguardando faturamento</CardTitle>
-            <Database className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-blue-700">{kpis.noSankhya}</div></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pré-faturados hoje</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-          </CardHeader>
-          <CardContent><div className="text-2xl font-bold text-green-700">{kpis.faturadosHoje}</div></CardContent>
-        </Card>
-        <Card className={kpis.comProblema > 0 ? "border-red-300 bg-red-50" : ""}>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className={`text-sm font-medium ${kpis.comProblema > 0 ? "text-red-800" : "text-muted-foreground"}`}>
-              Problemas
-            </CardTitle>
-            <AlertTriangle className={`h-4 w-4 ${kpis.comProblema > 0 ? "text-red-500" : "text-muted-foreground"}`} />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${kpis.comProblema > 0 ? "text-red-700" : ""}`}>{kpis.comProblema}</div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="rounded-lg border p-4 bg-yellow-50 border-yellow-300">
+          <div className="text-sm font-medium text-yellow-800">Pré Faturado</div>
+          <div className="text-3xl font-bold mt-1 text-yellow-900">{kpis.preFaturado}</div>
+          <div className="text-xs text-yellow-700 mt-1">Pedidos recebidos no mês</div>
+        </div>
+        <div className="rounded-lg border p-4 bg-purple-50 border-purple-300">
+          <div className="text-sm font-medium text-purple-800">Pedidos Lançados</div>
+          <div className="text-3xl font-bold mt-1 text-purple-900">{kpis.lancados}</div>
+          <div className="text-xs text-purple-700 mt-1">Cadastrados no Sankhya</div>
+        </div>
+        <div className="rounded-lg border p-4 bg-blue-50 border-blue-300">
+          <div className="text-sm font-medium text-blue-800">Aguardando Faturamento</div>
+          <div className="text-3xl font-bold mt-1 text-blue-900">{kpis.aguardandoFaturamento}</div>
+          <div className="text-xs text-blue-700 mt-1">Enviados à logística</div>
+        </div>
+        <div className="rounded-lg border p-4 bg-green-50 border-green-300">
+          <div className="text-sm font-medium text-green-800">Faturado</div>
+          <div className="text-3xl font-bold mt-1 text-green-900">{kpis.faturado}</div>
+          <div className="text-xs text-green-700 mt-1">Efetivamente faturados</div>
+        </div>
+        <div className={`rounded-lg border p-4 ${kpis.problemas > 0 ? "bg-red-50 border-red-300" : "bg-gray-50 border-gray-200"}`}>
+          <div className={`text-sm font-medium ${kpis.problemas > 0 ? "text-red-800" : "text-gray-600"}`}>
+            Problemas
+          </div>
+          <div className={`text-3xl font-bold mt-1 ${kpis.problemas > 0 ? "text-red-900" : "text-gray-700"}`}>
+            {kpis.problemas}
+          </div>
+          <div className={`text-xs mt-1 ${kpis.problemas > 0 ? "text-red-700" : "text-gray-500"}`}>
+            Com problema
+          </div>
+        </div>
       </div>
 
       <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); setFiltroStatusAba("todos"); }}>
@@ -1482,7 +1477,6 @@ export default function Faturamento() {
                         <div className="flex flex-wrap gap-1">
                           {p.marcas.map((m) => <Badge key={m} variant="outline" className="text-xs">{m}</Badge>)}
                         </div>
-                        <SaldoPendente itens={p.itens} />
                         {p.status_atualizado_em && (
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Timer className="h-3 w-3" />{tempoAguardando(p.status_atualizado_em)}
@@ -1492,9 +1486,6 @@ export default function Faturamento() {
                           <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1">
                             <span className="font-semibold">Problema:</span> {p.motivo}
                           </div>
-                        )}
-                        {p.status === "com_problema" && (
-                          <SaldoPendente itens={p.itens} />
                         )}
                         {p.status !== "com_problema" && p.motivo && (
                           <div className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">{p.motivo}</div>
@@ -1590,14 +1581,10 @@ export default function Faturamento() {
                                 Assumido: <span className="font-medium">{p.responsavel_nome ?? profiles[p.responsavel_id] ?? "—"}</span>
                               </div>
                             )}
-                            <SaldoPendente itens={p.itens} />
                             {p.status === "com_problema" && p.motivo && (
                               <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1">
                                 <span className="font-semibold">Problema:</span> {p.motivo}
                               </div>
-                            )}
-                            {p.status === "com_problema" && (
-                              <SaldoPendente itens={p.itens} />
                             )}
                             {p.status !== "com_problema" && p.motivo && (
                               <div className="text-xs text-muted-foreground mt-1 max-w-[160px] truncate" title={p.motivo}>
