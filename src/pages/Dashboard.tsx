@@ -4,27 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Receipt, ShoppingCart, Clock, TrendingUp, Trophy, Package, Calendar } from "lucide-react";
+import { Loader2, TrendingUp, Trophy, Package, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
 
 type Periodo = "hoje" | "semana" | "mes" | "ano";
 
-const STATUS_LABEL: Record<string, string> = {
-  aguardando_faturamento: "Aguardando",
-  em_faturamento: "Em faturamento",
-  faturado: "Faturado",
-  devolvido: "Devolvido",
-  cancelado: "Cancelado",
-};
-
-const STATUS_CARD_COLOR: Record<string, string> = {
-  aguardando_faturamento: "bg-yellow-50 border-yellow-300 text-yellow-800",
-  em_faturamento: "bg-blue-50 border-blue-300 text-blue-800",
-  faturado: "bg-green-50 border-green-300 text-green-800",
-  devolvido: "bg-orange-50 border-orange-300 text-orange-800",
-  cancelado: "bg-red-50 border-red-300 text-red-800",
-};
 
 function getDateRange(periodo: Periodo): { dataInicio: string; dataFim: string } {
   const today = new Date();
@@ -56,10 +41,11 @@ function getDateRange(periodo: Periodo): { dataInicio: string; dataFim: string }
 }
 
 type KPIs = {
-  faturamento: number;
-  totalPedidos: number;
-  pedidosAberto: number;
-  ticketMedio: number;
+  preFaturado: number;
+  lancados: number;
+  aguardandoFaturamento: number;
+  faturado: number;
+  problemas: number;
 };
 
 type RankingVendedor = {
@@ -77,8 +63,6 @@ type RankingSku = {
   quantidade: number;
 };
 
-type StatusCount = Record<string, number>;
-
 const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "hoje", label: "Hoje" },
   { key: "semana", label: "Semana" },
@@ -86,18 +70,23 @@ const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "ano", label: "Ano" },
 ];
 
-const STATUS_ORDER = ["aguardando_faturamento", "em_faturamento", "faturado", "devolvido", "cancelado"];
 
 export default function Dashboard() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
+  const [periodoKpi, setPeriodoKpi] = useState<Periodo>("mes");
   const [loading, setLoading] = useState(true);
-  const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, totalPedidos: 0, pedidosAberto: 0, ticketMedio: 0 });
+  const [kpis, setKpis] = useState<KPIs>({
+    preFaturado: 0,
+    lancados: 0,
+    aguardandoFaturamento: 0,
+    faturado: 0,
+    problemas: 0,
+  });
   const [metaTotal, setMetaTotal] = useState(0);
   const [fatMesAtual, setFatMesAtual] = useState(0);
   const [pipelineTotal, setPipelineTotal] = useState(0);
   const [ranking, setRanking] = useState<RankingVendedor[]>([]);
   const [topSkus, setTopSkus] = useState<RankingSku[]>([]);
-  const [statusCounts, setStatusCounts] = useState<StatusCount>({});
 
   useEffect(() => {
     setLoading(true);
@@ -111,8 +100,10 @@ export default function Dashboard() {
 
     (async () => {
       try {
-        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, agRes, emRes, fatRes, devRes, canRes] = await Promise.all([
-          // Pedidos do período — base para KPIs, ranking e top SKUs
+        const { dataInicio: kpiInicio, dataFim: kpiFim } = getDateRange(periodoKpi);
+
+        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes] = await Promise.all([
+          // Pedidos do período — base para ranking e top SKUs
           supabase
             .from("pedidos")
             .select("id, vendedor_id, status, itens_pedido(total_item, produto_id, quantidade)")
@@ -137,12 +128,16 @@ export default function Dashboard() {
             .from("pedidos")
             .select("id, itens_pedido(total_item)")
             .in("status", ["aguardando_faturamento", "em_faturamento"]),
-          // Contagens por status — histórico completo sem filtro de data
-          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "aguardando_faturamento"),
-          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "em_faturamento"),
-          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "faturado"),
-          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "devolvido"),
-          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "cancelado"),
+          // Pré Faturado — aguardando_faturamento no período
+          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "aguardando_faturamento").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
+          // Pedidos Lançados — no_sankhya no período
+          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "no_sankhya").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
+          // Aguardando Faturamento — parcialmente_faturado no período
+          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "parcialmente_faturado").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
+          // Faturado — faturado no período
+          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "faturado").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
+          // Problemas — com_problema no período
+          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "com_problema").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
         ]);
 
         // KPIs
@@ -150,18 +145,13 @@ export default function Dashboard() {
         const pedidos = (pedidosRes.data ?? []) as any[];
         const pedidosSemCancelado = pedidos.filter((p) => p.status !== "cancelado");
 
-        const faturamento = pedidosSemCancelado.reduce(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (s: number, p: any) => s + (p.itens_pedido ?? []).reduce((si: number, i: any) => si + Number(i.total_item), 0),
-          0,
-        );
-        const totalPedidos = pedidos.length;
-        const pedidosAberto = pedidos.filter((p) =>
-          p.status === "aguardando_faturamento" || p.status === "em_faturamento",
-        ).length;
-        const ticketMedio = totalPedidos > 0 ? faturamento / totalPedidos : 0;
-
-        setKpis({ faturamento, totalPedidos, pedidosAberto, ticketMedio });
+        setKpis({
+          preFaturado: preFatRes.count ?? 0,
+          lancados: lancadosRes.count ?? 0,
+          aguardandoFaturamento: aguardRes.count ?? 0,
+          faturado: fatKpiRes.count ?? 0,
+          problemas: probRes.count ?? 0,
+        });
 
         // Meta total do mês
         const metaSum = (metasRes.data ?? []).reduce((s, m) => s + Number(m.valor_meta_reais), 0);
@@ -184,15 +174,6 @@ export default function Dashboard() {
           0,
         );
         setPipelineTotal(pipeline);
-
-        // Contagens por status
-        setStatusCounts({
-          aguardando_faturamento: agRes.count ?? 0,
-          em_faturamento: emRes.count ?? 0,
-          faturado: fatRes.count ?? 0,
-          devolvido: devRes.count ?? 0,
-          cancelado: canRes.count ?? 0,
-        });
 
         // Ranking top 5 vendedores
         const vendedorAgg: Record<string, { faturamento: number; numPedidos: number }> = {};
@@ -271,7 +252,7 @@ export default function Dashboard() {
         toast.error("Erro ao carregar dashboard");
       }
     })().finally(() => setLoading(false));
-  }, [periodo]);
+  }, [periodo, periodoKpi]);
 
   const metaPct = metaTotal > 0 ? Math.min((fatMesAtual / metaTotal) * 100, 100) : 0;
   const previsaoMes = fatMesAtual + pipelineTotal;
@@ -306,49 +287,6 @@ export default function Dashboard() {
             {label}
           </Button>
         ))}
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Faturamento total</CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatBRL(kpis.faturamento)}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total de pedidos</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpis.totalPedidos}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Pedidos em aberto</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpis.pedidosAberto}</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Ticket médio</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatBRL(kpis.ticketMedio)}</div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Previsão do mês */}
@@ -498,17 +436,63 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Cards por status — histórico completo sem filtro de data */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {STATUS_ORDER.map((status) => (
-          <div
-            key={status}
-            className={`rounded-lg border p-4 ${STATUS_CARD_COLOR[status]}`}
-          >
-            <div className="text-sm font-medium">{STATUS_LABEL[status]}</div>
-            <div className="text-3xl font-bold mt-1">{statusCounts[status] ?? 0}</div>
+      {/* Painel de pedidos por status do fluxo */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Painel de pedidos
+          </h2>
+          <div className="flex gap-1">
+            {PERIODOS.map(({ key, label }) => (
+              <Button
+                key={key}
+                variant={periodoKpi === key ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPeriodoKpi(key)}
+                style={periodoKpi === key
+                  ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" }
+                  : undefined}
+              >
+                {label}
+              </Button>
+            ))}
           </div>
-        ))}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded-lg border p-4 bg-yellow-50 border-yellow-300">
+            <div className="text-sm font-medium text-yellow-800">Pré Faturado</div>
+            <div className="text-3xl font-bold mt-1 text-yellow-900">{kpis.preFaturado}</div>
+            <div className="text-xs text-yellow-700 mt-1">Pedidos recebidos</div>
+          </div>
+          <div className="rounded-lg border p-4 bg-purple-50 border-purple-300">
+            <div className="text-sm font-medium text-purple-800">Pedidos Lançados</div>
+            <div className="text-3xl font-bold mt-1 text-purple-900">{kpis.lancados}</div>
+            <div className="text-xs text-purple-700 mt-1">Cadastrados no Sankhya</div>
+          </div>
+          <div className="rounded-lg border p-4 bg-blue-50 border-blue-300">
+            <div className="text-sm font-medium text-blue-800">Aguardando Faturamento</div>
+            <div className="text-3xl font-bold mt-1 text-blue-900">{kpis.aguardandoFaturamento}</div>
+            <div className="text-xs text-blue-700 mt-1">Enviados à logística</div>
+          </div>
+          <div className="rounded-lg border p-4 bg-green-50 border-green-300">
+            <div className="text-sm font-medium text-green-800">Faturado</div>
+            <div className="text-3xl font-bold mt-1 text-green-900">{kpis.faturado}</div>
+            <div className="text-xs text-green-700 mt-1">Efetivamente faturados</div>
+          </div>
+          <div className={`rounded-lg border p-4 ${
+            kpis.problemas > 0 ? "bg-red-50 border-red-300" : "bg-gray-50 border-gray-200"
+          }`}>
+            <div className={`text-sm font-medium ${kpis.problemas > 0 ? "text-red-800" : "text-gray-600"}`}>
+              Problemas
+            </div>
+            <div className={`text-3xl font-bold mt-1 ${kpis.problemas > 0 ? "text-red-900" : "text-gray-700"}`}>
+              {kpis.problemas}
+            </div>
+            <div className={`text-xs mt-1 ${kpis.problemas > 0 ? "text-red-700" : "text-gray-500"}`}>
+              Com problema
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

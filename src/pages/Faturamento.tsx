@@ -943,6 +943,87 @@ export default function Faturamento() {
     doc.save(`formulario-pedido-${p.numero_pedido}.pdf`);
   };
 
+  const gerarPdfLancados = async (p: PedidoFat, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const { default: jsPDF } = await import("jspdf");
+    const { default: autoTable } = await import("jspdf-autotable");
+
+    const itensLancados = p.itens.filter((i) => i.qtd_faturada > 0);
+    if (itensLancados.length === 0) {
+      toast.error("Nenhum item lançado para exportar.");
+      return;
+    }
+
+    const doc = new jsPDF();
+    const vendedor = profiles[p.vendedor_id] ?? "—";
+    const hoje = new Date().toLocaleDateString("pt-BR");
+
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text(`Itens Lançados — Pedido #${p.numero_pedido}`, 14, 18);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(100);
+    doc.text(`Emitido em: ${hoje}`, 14, 25);
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0);
+    doc.text("Dados do cliente", 14, 35);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    const linhasCliente = [
+      ["Razão Social", p.razao_social],
+      ["CNPJ", formatCNPJ(p.cnpj)],
+      p.codigo_cliente ? ["Código Sankhya", p.codigo_cliente] : null,
+      p.comprador ? ["Comprador", p.comprador] : null,
+      ["Cidade/UF", [p.cidade, p.uf].filter(Boolean).join(" / ") || "—"],
+      p.cond_pagamento ? ["Cond. Pagamento", p.cond_pagamento] : null,
+      ["Vendedor", vendedor],
+    ].filter(Boolean) as [string, string][];
+
+    let y = 40;
+    linhasCliente.forEach(([label, valor]) => {
+      doc.setTextColor(120);
+      doc.text(`${label}:`, 14, y);
+      doc.setTextColor(0);
+      doc.text(valor, 60, y);
+      y += 6;
+    });
+
+    y += 4;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text("Itens lançados no Sankhya", 14, y);
+    y += 4;
+
+    autoTable(doc, {
+      startY: y,
+      head: [["Código", "Produto", "Qtd Pedida", "Qtd Lançada", "Preço Unit.", "Total"]],
+      body: itensLancados.map((i) => [
+        i.codigo,
+        i.nome,
+        i.quantidade,
+        i.qtd_faturada,
+        `R$ ${i.preco_final.toFixed(2)}`,
+        `R$ ${(i.qtd_faturada * i.preco_final).toFixed(2)}`,
+      ]),
+      styles: { fontSize: 8, cellPadding: 3 },
+      headStyles: { fillColor: [26, 107, 58], textColor: 255, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+    });
+
+    const totalLancado = itensLancados.reduce((s, i) => s + i.qtd_faturada * i.preco_final, 0);
+    const finalY = (doc as any).lastAutoTable.finalY + 6;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10);
+    doc.text(`Total lançado: R$ ${totalLancado.toFixed(2)}`, 14, finalY);
+
+    doc.save(`lancados-pedido-${p.numero_pedido}.pdf`);
+  };
+
   const gerarPdfSaldo = async (p: PedidoFat, e: React.MouseEvent) => {
     e.stopPropagation();
     const { default: jsPDF } = await import("jspdf");
@@ -1109,6 +1190,19 @@ export default function Faturamento() {
             onClick={(e) => abrirProdFat(p, e)} title="Faturamento por produto">
             <FileText className="h-3 w-3 mr-1" />
             Produtos
+          </Button>
+        )}
+
+        {/* Lançados PDF */}
+        {p.status === "parcialmente_faturado" && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={(e) => gerarPdfLancados(p, e)}
+            title="Exportar PDF dos itens lançados no Sankhya"
+          >
+            <FileDown className="h-3 w-3 mr-1" />
+            Lançados PDF
           </Button>
         )}
 
