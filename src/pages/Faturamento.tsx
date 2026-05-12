@@ -227,7 +227,7 @@ const ABAS = [
   {
     key: "faturado",
     label: "Faturado",
-    status: ["faturado", "devolvido", "cancelado"],
+    status: ["faturado"],
     descricao: "Pedidos concluídos",
   },
 ];
@@ -494,7 +494,9 @@ export default function Faturamento() {
     if (filtroDataInicio) lista = lista.filter((p) => p.data_pedido >= filtroDataInicio);
     if (filtroDataFim) lista = lista.filter((p) => p.data_pedido <= filtroDataFim);
 
-    return lista.sort((a, b) => calcScore(b) - calcScore(a));
+    return lista.sort((a, b) =>
+      new Date(b.data_pedido).getTime() - new Date(a.data_pedido).getTime()
+    );
   }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim]);
 
   // ── Ações ─────────────────────────────────────────────────────────

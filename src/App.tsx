@@ -84,7 +84,7 @@ const App = () => (
             </Route>
 
             {/* Rotas de faturamento — acessíveis por faturamento e admin */}
-            <Route element={<ProtectedRoute allow={["faturamento", "admin", "gestora"]}><AppLayout /></ProtectedRoute>}>
+            <Route element={<ProtectedRoute allow={["faturamento", "admin", "gestora", "gestora_faturamento"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/faturamento" element={<Faturamento />} />
               <Route path="/faturamento/clientes-pendentes" element={<FilaCadastros />} />
               <Route path="/faturamento/clientes" element={<FaturamentoClientes />} />

@@ -54,7 +54,7 @@ export default function HistoricoFaturamento() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [filtroAcao, setFiltroAcao] = useState("todas");
-  const [filtroData, setFiltroData] = useState(() => toLocalDate(new Date()));
+  const [filtroData, setFiltroData] = useState("");
 
   const carregar = async () => {
     setLoading(true);
