@@ -52,28 +52,30 @@ const ICMS_UF: Record<string, number> = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  no_sankhya: "Aguardando faturamento",
-  parcialmente_faturado: "Parc. pré-faturado",
-  despachado: "Despachado",
-  em_rota: "Em rota",
-  entregue: "Entregue",
+  no_sankhya: "No Sankhya",
+  aguardando_faturamento: "Aguardando Faturamento",
+  parcialmente_faturado: "Parc. Faturado",
   faturado: "Faturado",
+  despachado: "Despachado",
+  em_rota: "Em Rota",
+  entregue: "Entregue",
 };
 const STATUS_COLOR: Record<string, string> = {
   no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
-  parcialmente_faturado: "bg-teal-100 text-teal-800 border-teal-300",
+  aguardando_faturamento: "bg-purple-100 text-purple-800 border-purple-300",
+  parcialmente_faturado: "bg-orange-100 text-orange-800 border-orange-300",
+  faturado: "bg-green-100 text-green-800 border-green-300",
   despachado: "bg-indigo-100 text-indigo-800 border-indigo-300",
   em_rota: "bg-violet-100 text-violet-800 border-violet-300",
-  entregue: "bg-green-100 text-green-800 border-green-300",
-  faturado: "bg-green-100 text-green-800 border-green-300",
+  entregue: "bg-emerald-100 text-emerald-800 border-emerald-300",
 };
 
 const ABAS_LOGISTICA = [
   {
     key: "a_faturar",
     label: "A Faturar",
-    status: ["no_sankhya", "parcialmente_faturado"],
-    descricao: "Pedidos cadastrados no Sankhya aguardando confirmação",
+    status: ["no_sankhya", "aguardando_faturamento", "parcialmente_faturado"],
+    descricao: "Pedidos aguardando confirmação de faturamento",
   },
   {
     key: "faturado",
@@ -167,7 +169,7 @@ export default function FilaLogistica() {
           produtos(nome, codigo_jiva, cx_embarque, peso_unitario)
         )
       `)
-      .in("status", ["no_sankhya", "parcialmente_faturado", "faturado", "despachado", "em_rota", "entregue"])
+      .in("status", ["no_sankhya", "aguardando_faturamento", "parcialmente_faturado", "faturado", "despachado", "em_rota", "entregue"])
       .order("data_pedido", { ascending: true });
 
     if (error) { toast.error("Erro ao carregar pedidos"); setLoading(false); return; }
@@ -749,7 +751,7 @@ export default function FilaLogistica() {
                 )}
 
                 {/* Campos de confirmação */}
-                {(selecionado.status === "no_sankhya" || selecionado.status === "parcialmente_faturado") && (
+                {(selecionado.status === "no_sankhya" || selecionado.status === "aguardando_faturamento" || selecionado.status === "parcialmente_faturado") && (
                 <div className="rounded-md border p-4 space-y-4">
                   <div className="font-semibold text-sm">Registrar faturamento</div>
 
@@ -813,7 +815,7 @@ export default function FilaLogistica() {
                   <XCircle className="h-4 w-4 mr-1" />
                   Fechar
                 </Button>
-                {(selecionado.status === "no_sankhya" || selecionado.status === "parcialmente_faturado") && (
+                {(selecionado.status === "no_sankhya" || selecionado.status === "aguardando_faturamento" || selecionado.status === "parcialmente_faturado") && (
                   <Button onClick={confirmarFaturamento} disabled={confirmando}>
                     {confirmando
                       ? <Loader2 className="h-4 w-4 animate-spin mr-2" />

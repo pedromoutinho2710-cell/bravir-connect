@@ -37,7 +37,7 @@ export default function DashboardLogistica() {
         (supabase as any)
           .from("pedidos")
           .select("id", { count: "exact", head: true })
-          .in("status", ["no_sankhya", "parcialmente_faturado"]),
+          .in("status", ["no_sankhya", "aguardando_faturamento", "parcialmente_faturado"]),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
           .from("pedidos")
