@@ -415,11 +415,50 @@ export default function Faturamento() {
     return true;
   };
 
-  const assumir = (id: string) => atualizar(id, { responsavel_id: user?.id });
+  const insertHistorico = async (
+    pedido_id: string,
+    status_anterior: string,
+    status_novo: string,
+    acao: string,
+    observacao?: string
+  ) => {
+    try {
+      const { data: perfil } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", user?.id ?? "")
+        .single();
+      await supabase.from("historico_status").insert({
+        pedido_id,
+        status_anterior,
+        status_novo,
+        usuario_id: user?.id ?? null,
+        usuario_nome: perfil?.full_name || perfil?.email || "—",
+        usuario_email: perfil?.email || null,
+        acao,
+        observacao: observacao ?? null,
+      });
+    } catch {
+      console.error("Erro ao registrar histórico");
+    }
+  };
+
+  const assumir = async (id: string) => {
+    const ok = await atualizar(id, { responsavel_id: user?.id });
+    if (ok) {
+      const pedido = pedidos.find((p) => p.id === id);
+      if (pedido) {
+        await insertHistorico(id, pedido.status, pedido.status, "assumiu", "Pedido assumido");
+      }
+    }
+  };
 
   const cadastrarNoSankhya = async (p: PedidoFat) => {
     const ok = await atualizar(p.id, { status: "no_sankhya", responsavel_id: user?.id });
-    if (ok) toast.success(`Pedido #${p.numero_pedido} cadastrado no Sankhya`);
+    if (ok) {
+      toast.success(`Pedido #${p.numero_pedido} cadastrado no Sankhya`);
+      await insertHistorico(p.id, p.status, "no_sankhya", "cadastrou_sankhya", "Pedido cadastrado no Sankhya");
+    }
   };
 
   const abrirFaturarDialog = async (p: PedidoFat) => {
@@ -522,6 +561,13 @@ export default function Faturamento() {
     toast.success(novoStatus === "faturado"
       ? `Pedido #${faturarDialog.numero_pedido} faturado completamente`
       : `Pedido #${faturarDialog.numero_pedido} parcialmente faturado`);
+    await insertHistorico(
+      faturarDialog.id,
+      faturarDialog.status,
+      novoStatus,
+      "faturou",
+      `NF: ${nfData.numero.trim() || "sem número"}`
+    );
     setFaturarDialog(null);
     setRefreshKey((k) => k + 1);
   };
@@ -549,6 +595,16 @@ export default function Faturamento() {
           });
         }
       }
+      const pedido = pedidos.find((p) => p.id === motivoDialog.id);
+      await insertHistorico(
+        motivoDialog.id,
+        pedido?.status ?? "",
+        status,
+        motivoDialog.type === "devolver" ? "devolveu"
+          : motivoDialog.type === "cancelar" ? "cancelou"
+          : "marcou_problema",
+        motivo.trim()
+      );
       setMotivoDialog(null);
       toast.success(
         motivoDialog.type === "devolver" ? "Pedido devolvido ao vendedor"
