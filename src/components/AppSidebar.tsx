@@ -120,12 +120,12 @@ const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Fila de Pedidos", url: "/logistica/fila", icon: ListChecks },
   ],
   gestora: [
-    { title: "Dashboard", url: "/gestora", icon: LayoutDashboard },
-    { title: "Meu Time", url: "/gestora/time", icon: Users },
-    { title: "Clientes", url: "/gestora/clientes", icon: Users },
+    { title: "Dashboard", url: "/gestora/dashboard", icon: LayoutDashboard },
     { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
     { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
-    { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
+    { title: "Clientes", url: "/gestora/clientes", icon: Users },
+    { title: "Cadastrar Cliente", url: "/gestora/cadastrar-cliente", icon: UserPlus },
+    { title: "Gestão do Time", url: "/gestora/time", icon: UserCog },
   ],
   gestora_faturamento: [
     { title: "Histórico Faturamento", url: "/gestora/historico-faturamento", icon: History },
