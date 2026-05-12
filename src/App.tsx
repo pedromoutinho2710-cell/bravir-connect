@@ -110,6 +110,10 @@ const App = () => (
               <Route path="/gestora/cadastrar-cliente" element={<CadastrarClienteGestora />} />
               <Route path="/gestora/novo-pedido" element={<NovoPedidoGestora />} />
               <Route path="/gestora/pedidos" element={<PedidosGestora />} />
+            </Route>
+
+            {/* Gestora Faturamento */}
+            <Route element={<ProtectedRoute allow={["gestora_faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/gestora/historico-faturamento" element={<HistoricoFaturamento />} />
             </Route>
 
