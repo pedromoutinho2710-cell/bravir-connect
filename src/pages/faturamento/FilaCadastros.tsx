@@ -209,7 +209,19 @@ export default function FilaCadastros() {
         codigo_parceiro: form.codigo_parceiro || null,
       });
       if (insErr) toast.error("Cadastro aprovado, mas erro ao criar cliente: " + insErr.message);
-      else toast.success("Cadastro aprovado e cliente criado!");
+      else {
+        toast.success("Cadastro aprovado e cliente criado!");
+        supabase.from("notificacoes").insert({
+          destinatario_id: vendedorSelecionado,
+          destinatario_role: "vendedor",
+          titulo: "Cadastro aprovado",
+          mensagem: `O cliente ${cadastro.nome_cliente ?? cadastro.razao_social ?? "sem nome"} foi aprovado e cadastrado no sistema.`,
+          tipo: "cadastro_aprovado",
+          lida: false,
+        }).then(({ error: notifErr }) => {
+          if (notifErr) console.error("Erro ao enviar notificação de aprovação:", notifErr);
+        });
+      }
 
       setAprovarDialog(null);
       load();
@@ -236,6 +248,18 @@ export default function FilaCadastros() {
         .eq("id", selected.id);
       if (error) throw error;
       toast.success("Cadastro devolvido ao vendedor.");
+      if (selected.vendedor_id) {
+        supabase.from("notificacoes").insert({
+          destinatario_id: selected.vendedor_id,
+          destinatario_role: "vendedor",
+          titulo: "Cadastro devolvido para correção",
+          mensagem: `O cadastro de ${selected.nome_cliente ?? selected.razao_social ?? "sem nome"} foi devolvido. Motivo: ${motivoDevolvido}`,
+          tipo: "cadastro_devolvido",
+          lida: false,
+        }).then(({ error: notifErr }) => {
+          if (notifErr) console.error("Erro ao enviar notificação de devolução:", notifErr);
+        });
+      }
       setShowDevolver(false);
       setSelected(null);
       load();
