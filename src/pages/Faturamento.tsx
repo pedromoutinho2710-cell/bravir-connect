@@ -208,7 +208,7 @@ function SaldoPendente({ itens }: { itens: ExcelItemRaw[] }) {
 const FILTROS_STATUS_ABA: Record<string, { value: string; label: string }[]> = {
   recebidos: [
     { value: "todos", label: "Todos" },
-    { value: "pendente_sankhya", label: "Na fila" },
+    { value: "na_fila", label: "Na fila" },
     { value: "com_problema", label: "Com problema" },
   ],
   a_lancar: [],
@@ -226,8 +226,8 @@ const ABAS = [
   {
     key: "recebidos",
     label: "Pedidos Recebidos",
-    status: ["pendente_sankhya", "com_problema"],
-    descricao: "Pedidos na fila aguardando assumir",
+    status: ["pendente_sankhya", "devolvido", "cancelado"],
+    descricao: "Pedidos na fila e pedidos com problema",
   },
   {
     key: "a_lancar",
@@ -251,7 +251,7 @@ const ABAS = [
     key: "faturado",
     label: "Faturado",
     status: ["faturado"],
-    descricao: "Pedidos concluídos",
+    descricao: "Pedidos efetivamente faturados",
   },
 ];
 
@@ -363,7 +363,7 @@ export default function Faturamento() {
             .gte("data_pedido", inicioMes)
             .lte("data_pedido", fimMes),
           supabase.from("pedidos").select("id", { count: "exact", head: true })
-            .eq("status", "com_problema")
+            .in("status", ["devolvido", "cancelado"])
             .gte("data_pedido", inicioMes)
             .lte("data_pedido", fimMes),
         ]);
@@ -535,8 +535,9 @@ export default function Faturamento() {
 
     if (abaAtiva === "recebidos") {
       lista = lista.filter((p) =>
-        p.status === "pendente_sankhya" ||
-        p.status === "com_problema"
+        (p.status === "pendente_sankhya" && !p.responsavel_id) ||
+        p.status === "devolvido" ||
+        p.status === "cancelado"
       );
     }
     if (abaAtiva === "a_lancar") {
@@ -566,12 +567,13 @@ export default function Faturamento() {
     if (filtroDataFim) lista = lista.filter((p) => p.data_pedido <= filtroDataFim);
 
     if (filtroStatusAba !== "todos") {
-      if (filtroStatusAba === "sem_responsavel") {
-        lista = lista.filter((p) => !p.responsavel_id);
-      } else if (filtroStatusAba === "pendente_sankhya" &&
-        abaAtiva === "recebidos") {
+      if (filtroStatusAba === "na_fila") {
         lista = lista.filter((p) =>
           p.status === "pendente_sankhya" && !p.responsavel_id
+        );
+      } else if (filtroStatusAba === "com_problema") {
+        lista = lista.filter((p) =>
+          p.status === "devolvido" || p.status === "cancelado"
         );
       } else {
         lista = lista.filter((p) => p.status === filtroStatusAba);
@@ -1372,7 +1374,7 @@ export default function Faturamento() {
           {ABAS.map((aba) => {
             const count = pedidos.filter((p) => {
               if (!aba.status.includes(p.status)) return false;
-              if (aba.key === "recebidos") return p.status === "pendente_sankhya" || p.status === "com_problema";
+              if (aba.key === "recebidos") return (p.status === "pendente_sankhya" && !p.responsavel_id) || p.status === "devolvido" || p.status === "cancelado";
               if (aba.key === "a_lancar") return p.status === "pendente_sankhya" && !!p.responsavel_id;
               return true;
             }).length;
