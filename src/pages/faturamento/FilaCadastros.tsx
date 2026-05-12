@@ -53,6 +53,12 @@ type Cadastro = {
   negativado: boolean | null;
   motivo_reprovacao: string | null;
   created_at: string;
+  cep: string | null;
+  rua: string | null;
+  numero: string | null;
+  bairro: string | null;
+  cidade: string | null;
+  uf: string | null;
 };
 
 type Vendedor = { id: string; nome: string };
@@ -185,12 +191,12 @@ export default function FilaCadastros() {
         cnpj: cadastro.cnpj ?? null,
         email: cadastro.email ?? null,
         telefone: cadastro.telefone ?? null,
-        cidade: null,
-        uf: null,
-        cep: null,
-        rua: null,
-        numero: null,
-        bairro: null,
+        cidade: cadastro.cidade ?? null,
+        uf: cadastro.uf ?? null,
+        cep: cadastro.cep ?? null,
+        rua: cadastro.rua ?? null,
+        numero: cadastro.numero ?? null,
+        bairro: cadastro.bairro ?? null,
         comprador: cadastro.contato_principal ?? null,
         cluster: form.cluster || null,
         vendedor_id: vendedorSelecionado,
@@ -319,6 +325,13 @@ export default function FilaCadastros() {
                     <InfoRow label="Contato" value={selected.contato_principal} />
                     <InfoRow label="E-mail" value={selected.email} />
                     <InfoRow label="Telefone" value={selected.telefone} />
+                    <InfoRow label="CEP" value={selected.cep ?? null} />
+                    <InfoRow label="Endereço" value={
+                      selected.rua
+                        ? [selected.rua, selected.numero, selected.bairro, selected.cidade, selected.uf]
+                            .filter(Boolean).join(", ")
+                        : null
+                    } />
                   </div>
                 </div>
 
@@ -486,6 +499,17 @@ export default function FilaCadastros() {
                   <div><span className="font-medium">CNPJ:</span> {aprovarDialog.cnpj ? formatCNPJ(aprovarDialog.cnpj) : "—"}</div>
                   <div><span className="font-medium">Classificação:</span> {aprovarDialog.classificacao ?? "—"}</div>
                   <div><span className="font-medium">Cluster sugerido:</span> {aprovarDialog.cluster_sugerido ?? "—"}</div>
+                  {aprovarDialog.rua && (
+                    <div>
+                      <span className="font-medium">Endereço:</span>{" "}
+                      {[aprovarDialog.rua, aprovarDialog.numero, aprovarDialog.bairro,
+                        aprovarDialog.cidade, aprovarDialog.uf]
+                        .filter(Boolean).join(", ")}
+                    </div>
+                  )}
+                  {aprovarDialog.cep && (
+                    <div><span className="font-medium">CEP:</span> {aprovarDialog.cep}</div>
+                  )}
                 </div>
 
                 {/* Respostas do vendedor */}
