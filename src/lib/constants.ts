@@ -25,7 +25,7 @@ export const TABELAS_PRECO = [
   { value: "suframa", label: "Suframa" },
 ] as const;
 
-export const MARCAS = ["Bendita Cânfora", "Bravir", "Laby"] as const;
+export const MARCAS = ["Alivik", "Bendita Cânfora", "Bravir", "Laby"] as const;
 
 export const UFS = [
   "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG",

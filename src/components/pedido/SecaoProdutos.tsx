@@ -279,8 +279,8 @@ export function SecaoProdutos({
             <span className="shrink-0 mt-0.5">⚠️</span>
             <span>
               Preencha todos os campos obrigatórios do cliente antes de adicionar produtos:{" "}
-              <strong>Comprador</strong>, <strong>Condição de pagamento</strong>,{" "}
-              <strong>Código do cliente</strong> e <strong>Email de XML/Boleto</strong>.
+              <strong>Comprador</strong>, <strong>Condição de pagamento</strong>{" "}
+              e <strong>Código do cliente</strong>.
             </span>
           </div>
         )}
