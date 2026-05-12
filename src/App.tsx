@@ -42,6 +42,7 @@ import CadastrarClienteFaturamento from "@/pages/faturamento/CadastrarClienteFat
 import ClientesGestora from "./pages/gestora/ClientesGestora";
 import NovoPedidoGestora from "./pages/gestora/NovoPedidoGestora";
 import PedidosGestora from "./pages/gestora/PedidosGestora";
+import HistoricoFaturamento from "@/pages/gestora/HistoricoFaturamento";
 
 const queryClient = new QueryClient();
 
@@ -109,6 +110,7 @@ const App = () => (
               <Route path="/gestora/cadastrar-cliente" element={<CadastrarClienteGestora />} />
               <Route path="/gestora/novo-pedido" element={<NovoPedidoGestora />} />
               <Route path="/gestora/pedidos" element={<PedidosGestora />} />
+              <Route path="/gestora/historico-faturamento" element={<HistoricoFaturamento />} />
             </Route>
 
             {/* Logística */}

@@ -18,6 +18,7 @@ import {
   Tag,
   Settings,
   ClipboardCheck,
+  History,
 } from "lucide-react";
 import {
   Sidebar,
@@ -84,6 +85,7 @@ const ADMIN_SECTIONS: Section[] = [
       { title: "Clientes", url: "/gestora/clientes", icon: Users },
       { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
       { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
+      { title: "Histórico Faturamento", url: "/gestora/historico-faturamento", icon: History },
       { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
     ],
   },
@@ -124,6 +126,7 @@ const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Clientes", url: "/gestora/clientes", icon: Users },
     { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
     { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
+    { title: "Histórico Faturamento", url: "/gestora/historico-faturamento", icon: History },
     { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
   ],
   trade: [
