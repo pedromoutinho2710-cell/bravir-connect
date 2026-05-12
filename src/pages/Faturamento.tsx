@@ -1,4 +1,4 @@
-﻿import { useEffect, useState, useCallback } from "react";
+﻿import { useEffect, useState, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
@@ -197,6 +198,40 @@ function SaldoPendente({ itens }: { itens: ExcelItemRaw[] }) {
   );
 }
 
+// ── Abas ──────────────────────────────────────────────────────────
+const ABAS = [
+  {
+    key: "recebidos",
+    label: "Pedidos Recebidos",
+    status: ["aguardando_faturamento"],
+    descricao: "Pedidos na fila aguardando assumir",
+  },
+  {
+    key: "a_lancar",
+    label: "A Lançar",
+    status: ["aguardando_faturamento"],
+    descricao: "Pedidos assumidos ainda não cadastrados no Sankhya",
+  },
+  {
+    key: "lancados",
+    label: "Pedidos Lançados",
+    status: ["no_sankhya", "parcialmente_faturado"],
+    descricao: "Pedidos cadastrados no Sankhya",
+  },
+  {
+    key: "pendencias",
+    label: "Pendências",
+    status: ["parcialmente_faturado", "com_problema"],
+    descricao: "Pedidos com saldo parado ou com problema",
+  },
+  {
+    key: "faturado",
+    label: "Faturado",
+    status: ["faturado", "devolvido", "cancelado"],
+    descricao: "Pedidos concluídos",
+  },
+];
+
 // ── Componente ────────────────────────────────────────────────────
 export default function Faturamento() {
   const { user } = useAuth();
@@ -208,13 +243,19 @@ export default function Faturamento() {
   const [vendedores, setVendedores] = useState<{ id: string; label: string }[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
   const [atualizando, setAtualizando] = useState<string | null>(null);
-  // Filtros
-  const [filtroVendedor, setFiltroVendedor] = useState("todos");
-  const [filtroStatus, setFiltroStatus] = useState("todos");
-  const [filtroDataInicio, setFiltroDataInicio] = useState("");
+  // Abas e filtros globais
+  const [abaAtiva, setAbaAtiva] = useState("recebidos");
+  const [filtroNumeroGlobal, setFiltroNumeroGlobal] = useState("");
+  const [filtroVendedorGlobal, setFiltroVendedorGlobal] = useState("todos");
+  const iniciMes = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  }, []);
+  const [filtroDataInicio, setFiltroDataInicio] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
   const [filtroDataFim, setFiltroDataFim] = useState("");
-  const [filtroMarca, setFiltroMarca] = useState("todas");
-  const [filtroValorMin, setFiltroValorMin] = useState("");
 
   const [kpis, setKpis] = useState({ aguardando: 0, noSankhya: 0, faturadosHoje: 0, comProblema: 0 });
 
@@ -237,10 +278,6 @@ export default function Faturamento() {
   // Dialog excluir
   const [excluirTarget, setExcluirTarget] = useState<PedidoFat | null>(null);
   const [excluindo, setExcluindo] = useState(false);
-
-  // Filtros extras
-  const [filtroNumero, setFiltroNumero] = useState("");
-  const [filtroSaldoPendente, setFiltroSaldoPendente] = useState(false);
 
   // Dialog faturamento por produto
   const [prodFatDialog, setProdFatDialog] = useState<PedidoFat | null>(null);
@@ -308,11 +345,6 @@ export default function Faturamento() {
         `)
         .neq("status", "rascunho")
         .order("created_at", { ascending: false });
-
-      if (filtroVendedor !== "todos") query = query.eq("vendedor_id", filtroVendedor);
-      if (filtroStatus !== "todos") query = query.eq("status", filtroStatus);
-      if (filtroDataInicio) query = query.gte("data_pedido", filtroDataInicio);
-      if (filtroDataFim) query = query.lte("data_pedido", filtroDataFim);
 
       const { data, error } = await query;
       if (error) { toast.error("Erro ao carregar pedidos"); return; }
@@ -387,19 +419,7 @@ export default function Faturamento() {
         };
       });
 
-      // Filtro marca + valor mínimo + número + saldo pendente (client-side)
-      if (filtroMarca !== "todas") mapped = mapped.filter((p) => p.marcas.includes(filtroMarca));
-      const valorMin = parseFloat(filtroValorMin);
-      if (!isNaN(valorMin) && valorMin > 0) mapped = mapped.filter((p) => p.total >= valorMin);
-      if (filtroNumero.trim()) {
-        const num = parseInt(filtroNumero.trim(), 10);
-        if (!isNaN(num)) mapped = mapped.filter((p) => p.numero_pedido === num);
-      }
-      if (filtroSaldoPendente) {
-        mapped = mapped.filter((p) => p.itens.some((i) => i.qtd_faturada < i.quantidade));
-      }
-
-      // Ordenar por score de prioridade decrescente
+      // Ordenação inicial por score de prioridade decrescente
       mapped.sort((a, b) => calcScore(b) - calcScore(a));
 
       // Historico em batch
@@ -432,7 +452,7 @@ export default function Faturamento() {
 
       setPedidos(mapped);
     })().finally(() => setLoading(false));
-  }, [filtroVendedor, filtroStatus, filtroDataInicio, filtroDataFim, filtroMarca, filtroValorMin, refreshKey]);
+  }, [refreshKey]);
 
   // Realtime
   useEffect(() => {
@@ -451,6 +471,31 @@ export default function Faturamento() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // ── Filtro por aba ────────────────────────────────────────────────
+  const pedidosFiltrados = useMemo(() => {
+    const aba = ABAS.find((a) => a.key === abaAtiva);
+    if (!aba) return [];
+
+    let lista = pedidos.filter((p) => aba.status.includes(p.status));
+
+    if (abaAtiva === "recebidos") lista = lista.filter((p) => !p.responsavel_id);
+    if (abaAtiva === "a_lancar") lista = lista.filter((p) => !!p.responsavel_id);
+
+    if (filtroNumeroGlobal.trim()) {
+      const num = parseInt(filtroNumeroGlobal.trim(), 10);
+      if (!isNaN(num)) lista = lista.filter((p) => p.numero_pedido === num);
+    }
+
+    if (filtroVendedorGlobal !== "todos") {
+      lista = lista.filter((p) => p.vendedor_id === filtroVendedorGlobal);
+    }
+
+    if (filtroDataInicio) lista = lista.filter((p) => p.data_pedido >= filtroDataInicio);
+    if (filtroDataFim) lista = lista.filter((p) => p.data_pedido <= filtroDataFim);
+
+    return lista.sort((a, b) => calcScore(b) - calcScore(a));
+  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim]);
 
   // ── Ações ─────────────────────────────────────────────────────────
   const atualizar = async (id: string, updates: Record<string, unknown>): Promise<boolean> => {
@@ -1108,250 +1153,255 @@ export default function Faturamento() {
         </Card>
       </div>
 
-      {/* Filtros */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Select value={filtroVendedor} onValueChange={setFiltroVendedor}>
-          <SelectTrigger><SelectValue placeholder="Vendedor" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os vendedores</SelectItem>
-            {vendedores.map((v) => <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-          <SelectTrigger><SelectValue placeholder="Status" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os status</SelectItem>
-            {Object.entries(STATUS_LABEL).filter(([k]) => k !== "rascunho" && k !== "em_faturamento").map(([v, l]) => (
-              <SelectItem key={v} value={v}>{l}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Input type="date" value={filtroDataInicio} onChange={(e) => setFiltroDataInicio(e.target.value)} title="De" />
-        <Input type="date" value={filtroDataFim} onChange={(e) => setFiltroDataFim(e.target.value)} title="Até" />
-        <Select value={filtroMarca} onValueChange={setFiltroMarca}>
-          <SelectTrigger><SelectValue placeholder="Marca" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Todas as marcas</SelectItem>
-            {MARCAS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Input
-          type="number"
-          min={0}
-          step={100}
-          value={filtroValorMin}
-          onChange={(e) => setFiltroValorMin(e.target.value)}
-          placeholder="Valor mínimo (R$)"
-          title="Filtrar por valor mínimo"
-        />
-        <Input
-          type="number"
-          min={1}
-          value={filtroNumero}
-          onChange={(e) => setFiltroNumero(e.target.value)}
-          placeholder="Nº do pedido"
-          title="Filtrar por número de pedido"
-        />
-        <div className="flex items-center gap-2 self-center">
-          <Checkbox
-            id="saldo-pendente"
-            checked={filtroSaldoPendente}
-            onCheckedChange={(c) => setFiltroSaldoPendente(!!c)}
-          />
-          <Label htmlFor="saldo-pendente" className="text-sm cursor-pointer">Apenas com saldo pendente</Label>
-        </div>
-      </div>
-
-      {/* Legenda urgência */}
-      <div className="flex gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-yellow-50 border border-yellow-200 inline-block" /> 2-3 dias aguardando</span>
-        <span className="flex items-center gap-1.5"><span className="h-3 w-3 rounded bg-red-100 border border-red-300 inline-block" /> 4+ dias aguardando</span>
-      </div>
-
-      {loading ? (
-        <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        </div>
-      ) : (
-        <>
-          {/* Mobile: cards */}
-          <div className="grid gap-3 md:hidden">
-            {pedidos.length === 0 && <p className="text-center text-muted-foreground py-12">Nenhum pedido encontrado</p>}
-            {pedidos.map((p) => (
-              <Card key={p.id} className={`cursor-pointer active:opacity-70 ${urgencyClass(p)}`}
-                onClick={() => setDetalhePedido(p)}>
-                <CardContent className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
-                        <StatusBadge status={p.status} />
-                      </div>
-                      {p.responsavel_id && (
-                        <div className="text-xs text-muted-foreground">
-                          Assumido por: <span className="font-medium">{p.responsavel_nome ?? "—"}</span>
-                        </div>
-                      )}
-                      <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
-                      {p.codigo_parceiro && (
-                        <div className="text-xs text-muted-foreground font-mono">Cód: {p.codigo_parceiro}</div>
-                      )}
-                      <div className="text-xs text-muted-foreground">Vendedor: {profiles[p.vendedor_id] ?? p.vendedor_nome}</div>
-                      {p.email_xml && (
-                        <div className="text-xs text-muted-foreground truncate">Email: {p.email_xml}</div>
-                      )}
-                      {p.rua && (
-                        <div className="text-xs text-muted-foreground">
-                          {[p.rua, p.numero_endereco, p.bairro].filter(Boolean).join(", ")}
-                        </div>
-                      )}
-                      {p.telefone && (
-                        <div className="text-xs text-muted-foreground">Tel: {p.telefone}</div>
-                      )}
-                    </div>
-                    <div className="text-right text-sm font-semibold text-green-700">{formatBRL(p.total)}</div>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {p.marcas.map((m) => <Badge key={m} variant="outline" className="text-xs">{m}</Badge>)}
-                  </div>
-                  <SaldoPendente itens={p.itens} />
-                  {p.status_atualizado_em && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Timer className="h-3 w-3" />{tempoAguardando(p.status_atualizado_em)}
-                    </div>
-                  )}
-                  {p.status === "com_problema" && p.motivo && (
-                    <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1">
-                      <span className="font-semibold">Problema:</span> {p.motivo}
-                    </div>
-                  )}
-                  {p.status === "com_problema" && (
-                    <SaldoPendente itens={p.itens} />
-                  )}
-                  {p.status !== "com_problema" && p.motivo && (
-                    <div className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">{p.motivo}</div>
-                  )}
-                  <div onClick={(e) => e.stopPropagation()}>
-                    <AcoesPedido p={p} stopProp={false} />
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Desktop: tabela */}
-          <div className="hidden md:block rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-28"># / Data</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Vendedor</TableHead>
-                  <TableHead>Marcas</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Peso</TableHead>
-                  <TableHead>Aguardando</TableHead>
-                  <TableHead>Prioridade</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="min-w-[320px]">Ações</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pedidos.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={11} className="text-center text-muted-foreground py-12">Nenhum pedido encontrado</TableCell>
-                  </TableRow>
+      <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
+        <TabsList className="w-full grid grid-cols-5">
+          {ABAS.map((aba) => {
+            const count = pedidos.filter((p) => {
+              if (!aba.status.includes(p.status)) return false;
+              if (aba.key === "recebidos") return !p.responsavel_id;
+              if (aba.key === "a_lancar") return !!p.responsavel_id;
+              return true;
+            }).length;
+            return (
+              <TabsTrigger key={aba.key} value={aba.key} className="relative">
+                {aba.label}
+                {count > 0 && (
+                  <span className="ml-1.5 inline-flex items-center rounded-full bg-primary text-primary-foreground px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                    {count}
+                  </span>
                 )}
-                {pedidos.map((p) => (
-                  <TableRow key={p.id}
-                    className={`cursor-pointer hover:bg-muted/50 ${urgencyClass(p)}`}
-                    onClick={() => setDetalhePedido(p)}>
-                    <TableCell className="font-mono font-semibold text-sm">
-                      <div>#{p.numero_pedido}</div>
-                      <div className="text-xs font-normal text-muted-foreground">{formatDate(p.data_pedido)}</div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <button
-                          type="button"
-                          className="font-medium text-sm hover:underline text-left"
-                          onClick={(e) => { e.stopPropagation(); if (p.cliente_id) navigate(`/clientes/${p.cliente_id}`); }}
-                        >
-                          {p.razao_social}
-                        </button>
-                        {p.negativado_cliente && (
-                          <span className="inline-flex items-center rounded-full border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700">⚠ Neg.</span>
-                        )}
-                      </div>
-                      {p.codigo_parceiro && (
-                        <div className="text-xs font-mono text-muted-foreground">Cód: {p.codigo_parceiro}</div>
-                      )}
-                      {p.email_xml && (
-                        <div className="text-xs text-muted-foreground truncate max-w-[160px]" title={p.email_xml}>{p.email_xml}</div>
-                      )}
-                      {p.rua && (
-                        <div className="text-xs text-muted-foreground truncate max-w-[160px]">
-                          {[p.rua, p.numero_endereco, p.bairro].filter(Boolean).join(", ")}
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+
+        {/* Filtros globais */}
+        <div className="flex flex-wrap gap-3 mt-4">
+          <Input
+            type="number"
+            min={1}
+            value={filtroNumeroGlobal}
+            onChange={(e) => setFiltroNumeroGlobal(e.target.value)}
+            placeholder="Nº do pedido"
+            className="w-36"
+          />
+          <Select value={filtroVendedorGlobal} onValueChange={setFiltroVendedorGlobal}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Vendedor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os vendedores</SelectItem>
+              {vendedores.map((v) => (
+                <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Input type="date" value={filtroDataInicio} onChange={(e) => setFiltroDataInicio(e.target.value)} className="w-40" title="De" />
+          <Input type="date" value={filtroDataFim} onChange={(e) => setFiltroDataFim(e.target.value)} className="w-40" title="Até" />
+          <Button variant="ghost" size="sm" onClick={() => {
+            setFiltroDataInicio(iniciMes);
+            setFiltroDataFim("");
+            setFiltroNumeroGlobal("");
+            setFiltroVendedorGlobal("todos");
+          }}>
+            Limpar filtros
+          </Button>
+        </div>
+
+        {/* Descrição da aba */}
+        <p className="text-sm text-muted-foreground mt-2">
+          {ABAS.find((a) => a.key === abaAtiva)?.descricao}
+          {" · "}
+          <span className="font-medium">{pedidosFiltrados.length} pedido(s)</span>
+        </p>
+
+        {ABAS.map((aba) => (
+          <TabsContent key={aba.key} value={aba.key} className="mt-4">
+            {loading ? (
+              <div className="flex h-48 items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : pedidosFiltrados.length === 0 ? (
+              <div className="flex h-48 items-center justify-center text-muted-foreground">
+                Nenhum pedido nesta aba
+              </div>
+            ) : (
+              <>
+                {/* Mobile: cards */}
+                <div className="grid gap-3 md:hidden">
+                  {pedidosFiltrados.map((p) => (
+                    <Card key={p.id} className={`cursor-pointer active:opacity-70 ${urgencyClass(p)}`}
+                      onClick={() => setDetalhePedido(p)}>
+                      <CardContent className="p-4 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
+                              <StatusBadge status={p.status} />
+                            </div>
+                            {p.responsavel_id && (
+                              <div className="text-xs text-muted-foreground">
+                                Assumido por: <span className="font-medium">{p.responsavel_nome ?? "—"}</span>
+                              </div>
+                            )}
+                            <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
+                            {p.codigo_parceiro && (
+                              <div className="text-xs text-muted-foreground font-mono">Cód: {p.codigo_parceiro}</div>
+                            )}
+                            <div className="text-xs text-muted-foreground">Vendedor: {profiles[p.vendedor_id] ?? p.vendedor_nome}</div>
+                            {p.email_xml && (
+                              <div className="text-xs text-muted-foreground truncate">Email: {p.email_xml}</div>
+                            )}
+                            {p.rua && (
+                              <div className="text-xs text-muted-foreground">
+                                {[p.rua, p.numero_endereco, p.bairro].filter(Boolean).join(", ")}
+                              </div>
+                            )}
+                            {p.telefone && (
+                              <div className="text-xs text-muted-foreground">Tel: {p.telefone}</div>
+                            )}
+                          </div>
+                          <div className="text-right text-sm font-semibold text-green-700">{formatBRL(p.total)}</div>
                         </div>
-                      )}
-                      {p.telefone && (
-                        <div className="text-xs text-muted-foreground">{p.telefone}</div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm">{profiles[p.vendedor_id] ?? p.vendedor_nome}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {p.marcas.map((m) => <Badge key={m} variant="outline" className="text-xs">{m}</Badge>)}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-bold text-sm text-green-700">{formatBRL(p.total)}</TableCell>
-                    <TableCell className="text-right text-xs text-muted-foreground">{p.peso_total > 0 ? `${p.peso_total.toFixed(1)} kg` : "—"}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {STATUS_ACTIVE.has(p.status) ? (tempoAguardando(p.status_atualizado_em) ?? "—") : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {(() => {
-                        const score = calcScore(p);
-                        const prio = prioLevel(score);
-                        return (
-                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${PRIO_COLOR[prio]}`}>
-                            {PRIO_LABEL[prio]}
-                          </span>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={p.status} />
-                      {p.responsavel_id && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Assumido: <span className="font-medium">{p.responsavel_nome ?? profiles[p.responsavel_id] ?? "—"}</span>
+                        <div className="flex flex-wrap gap-1">
+                          {p.marcas.map((m) => <Badge key={m} variant="outline" className="text-xs">{m}</Badge>)}
                         </div>
-                      )}
-                      <SaldoPendente itens={p.itens} />
-                      {p.status === "com_problema" && p.motivo && (
-                        <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1">
-                          <span className="font-semibold">Problema:</span> {p.motivo}
-                        </div>
-                      )}
-                      {p.status === "com_problema" && (
                         <SaldoPendente itens={p.itens} />
-                      )}
-                      {p.status !== "com_problema" && p.motivo && (
-                        <div className="text-xs text-muted-foreground mt-1 max-w-[160px] truncate" title={p.motivo}>
-                          {p.motivo}
+                        {p.status_atualizado_em && (
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                            <Timer className="h-3 w-3" />{tempoAguardando(p.status_atualizado_em)}
+                          </div>
+                        )}
+                        {p.status === "com_problema" && p.motivo && (
+                          <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1">
+                            <span className="font-semibold">Problema:</span> {p.motivo}
+                          </div>
+                        )}
+                        {p.status === "com_problema" && (
+                          <SaldoPendente itens={p.itens} />
+                        )}
+                        {p.status !== "com_problema" && p.motivo && (
+                          <div className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">{p.motivo}</div>
+                        )}
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <AcoesPedido p={p} stopProp={false} />
                         </div>
-                      )}
-                    </TableCell>
-                    <TableCell onClick={(e) => e.stopPropagation()}>
-                      <AcoesPedido p={p} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </>
-      )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Desktop: tabela */}
+                <div className="hidden md:block rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-28"># / Data</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Vendedor</TableHead>
+                        <TableHead>Marcas</TableHead>
+                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">Peso</TableHead>
+                        <TableHead>Aguardando</TableHead>
+                        <TableHead>Prioridade</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="min-w-[320px]">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pedidosFiltrados.map((p) => (
+                        <TableRow key={p.id}
+                          className={`cursor-pointer hover:bg-muted/50 ${urgencyClass(p)}`}
+                          onClick={() => setDetalhePedido(p)}>
+                          <TableCell className="font-mono font-semibold text-sm">
+                            <div>#{p.numero_pedido}</div>
+                            <div className="text-xs font-normal text-muted-foreground">{formatDate(p.data_pedido)}</div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                className="font-medium text-sm hover:underline text-left"
+                                onClick={(e) => { e.stopPropagation(); if (p.cliente_id) navigate(`/clientes/${p.cliente_id}`); }}
+                              >
+                                {p.razao_social}
+                              </button>
+                              {p.negativado_cliente && (
+                                <span className="inline-flex items-center rounded-full border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700">⚠ Neg.</span>
+                              )}
+                            </div>
+                            {p.codigo_parceiro && (
+                              <div className="text-xs font-mono text-muted-foreground">Cód: {p.codigo_parceiro}</div>
+                            )}
+                            {p.email_xml && (
+                              <div className="text-xs text-muted-foreground truncate max-w-[160px]" title={p.email_xml}>{p.email_xml}</div>
+                            )}
+                            {p.rua && (
+                              <div className="text-xs text-muted-foreground truncate max-w-[160px]">
+                                {[p.rua, p.numero_endereco, p.bairro].filter(Boolean).join(", ")}
+                              </div>
+                            )}
+                            {p.telefone && (
+                              <div className="text-xs text-muted-foreground">{p.telefone}</div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-sm">{profiles[p.vendedor_id] ?? p.vendedor_nome}</TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {p.marcas.map((m) => <Badge key={m} variant="outline" className="text-xs">{m}</Badge>)}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right font-bold text-sm text-green-700">{formatBRL(p.total)}</TableCell>
+                          <TableCell className="text-right text-xs text-muted-foreground">{p.peso_total > 0 ? `${p.peso_total.toFixed(1)} kg` : "—"}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {STATUS_ACTIVE.has(p.status) ? (tempoAguardando(p.status_atualizado_em) ?? "—") : "—"}
+                          </TableCell>
+                          <TableCell>
+                            {(() => {
+                              const score = calcScore(p);
+                              const prio = prioLevel(score);
+                              return (
+                                <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${PRIO_COLOR[prio]}`}>
+                                  {PRIO_LABEL[prio]}
+                                </span>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell>
+                            <StatusBadge status={p.status} />
+                            {p.responsavel_id && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Assumido: <span className="font-medium">{p.responsavel_nome ?? profiles[p.responsavel_id] ?? "—"}</span>
+                              </div>
+                            )}
+                            <SaldoPendente itens={p.itens} />
+                            {p.status === "com_problema" && p.motivo && (
+                              <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1">
+                                <span className="font-semibold">Problema:</span> {p.motivo}
+                              </div>
+                            )}
+                            {p.status === "com_problema" && (
+                              <SaldoPendente itens={p.itens} />
+                            )}
+                            {p.status !== "com_problema" && p.motivo && (
+                              <div className="text-xs text-muted-foreground mt-1 max-w-[160px] truncate" title={p.motivo}>
+                                {p.motivo}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <AcoesPedido p={p} />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </TabsContent>
+        ))}
+      </Tabs>
 
       {/* Dialog: motivo (devolver / cancelar / com_problema) */}
       <Dialog open={!!motivoDialog} onOpenChange={(o) => !o && setMotivoDialog(null)}>
