@@ -61,6 +61,7 @@ type PedidoFat = {
   aberto_por: string | null;
   ultima_acao: { nome: string; data: string } | null;
   itens: ExcelItemRaw[];
+  responsavel_nome: string | null;
 };
 
 type ExcelItemRaw = {
@@ -289,6 +290,9 @@ export default function Faturamento() {
           cond_pagamento: p.cond_pagamento,
           observacoes: p.observacoes,
           responsavel_id: p.responsavel_id,
+          responsavel_nome: p.responsavel_id
+            ? (profiles[p.responsavel_id] ?? "Carregando...")
+            : null,
           motivo: p.motivo,
           vendedor_id: p.vendedor_id,
           cliente_id: p.cliente_id ?? null,
@@ -796,6 +800,11 @@ export default function Faturamento() {
             {atualizando === p.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Assumir"}
           </Button>
         )}
+        {p.responsavel_id && p.status === "aguardando_faturamento" && (
+          <div className="text-xs text-muted-foreground">
+            Assumido: <span className="font-medium">{p.responsavel_nome ?? "—"}</span>
+          </div>
+        )}
 
         {/* Registrar faturamento com NF */}
         {(p.status === "no_sankhya" || p.status === "parcialmente_faturado") && (
@@ -1021,6 +1030,11 @@ export default function Faturamento() {
                         <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
                         <StatusBadge status={p.status} />
                       </div>
+                      {p.responsavel_id && (
+                        <div className="text-xs text-muted-foreground">
+                          Assumido por: <span className="font-medium">{p.responsavel_nome ?? "—"}</span>
+                        </div>
+                      )}
                       <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
                       {p.codigo_parceiro && (
                         <div className="text-xs text-muted-foreground font-mono">Cód: {p.codigo_parceiro}</div>
@@ -1142,7 +1156,7 @@ export default function Faturamento() {
                       <StatusBadge status={p.status} />
                       {p.responsavel_id && (
                         <div className="text-xs text-muted-foreground mt-1">
-                          {profiles[p.responsavel_id] ?? "—"}
+                          Assumido: <span className="font-medium">{p.responsavel_nome ?? profiles[p.responsavel_id] ?? "—"}</span>
                         </div>
                       )}
                       {p.motivo && (
@@ -1321,6 +1335,12 @@ export default function Faturamento() {
                 <div><span className="text-muted-foreground">Tabela Preço:</span> {detalhePedido.tabela_preco ?? "—"}</div>
                 <div><span className="text-muted-foreground">Agendamento:</span> {detalhePedido.agendamento ? "Sim" : "Não"}</div>
                 <div><span className="text-muted-foreground">Vendedor:</span> {profiles[detalhePedido.vendedor_id] ?? detalhePedido.vendedor_nome}</div>
+                {detalhePedido.responsavel_id && (
+                  <div>
+                    <span className="text-muted-foreground">Assumido por:</span>{" "}
+                    <span className="font-medium">{profiles[detalhePedido.responsavel_id] ?? "—"}</span>
+                  </div>
+                )}
                 {detalhePedido.comprador && <div><span className="text-muted-foreground">Comprador:</span> {detalhePedido.comprador}</div>}
                 {detalhePedido.codigo_cliente && <div><span className="text-muted-foreground">Cód. Sankhya:</span> {detalhePedido.codigo_cliente}</div>}
                 {detalhePedido.codigo_parceiro && <div><span className="text-muted-foreground">Cód. Parceiro:</span> {detalhePedido.codigo_parceiro}</div>}
