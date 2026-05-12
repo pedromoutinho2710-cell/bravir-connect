@@ -132,8 +132,7 @@ export default function MeusPedidos() {
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, motivo, responsavel_id,
           clientes(razao_social),
-          itens_pedido(total_item, produtos(marca)),
-          profiles!responsavel_id(full_name, email)
+          itens_pedido(total_item, produtos(marca))
         `)
         .eq("vendedor_id", user.id)
         .order("created_at", { ascending: false });
@@ -150,8 +149,6 @@ export default function MeusPedidos() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const itensList = (p.itens_pedido ?? []) as any[];
         const marcas = [...new Set(itensList.map((i) => i.produtos?.marca).filter(Boolean))] as string[];
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const prof = p.profiles as any;
         return {
           id: p.id,
           numero_pedido: p.numero_pedido,
@@ -165,7 +162,7 @@ export default function MeusPedidos() {
           marcas,
           total: itensList.reduce((s: number, i) => s + Number(i.total_item), 0),
           responsavel_id: p.responsavel_id ?? null,
-          responsavel_nome: prof?.full_name || prof?.email || null,
+          responsavel_nome: null,
         };
       });
 
@@ -176,6 +173,33 @@ export default function MeusPedidos() {
       }
       if (filtroMarca !== "todas") {
         lista = lista.filter((p) => p.marcas.includes(filtroMarca));
+      }
+
+      // Buscar nomes dos responsáveis
+      const responsavelIds = [...new Set(
+        lista
+          .map((p) => p.responsavel_id)
+          .filter(Boolean) as string[]
+      )];
+
+      if (responsavelIds.length > 0) {
+        const { data: perfis } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", responsavelIds);
+
+        if (perfis) {
+          const mapaResponsaveis: Record<string, string> = {};
+          perfis.forEach((pf) => {
+            mapaResponsaveis[pf.id] = pf.full_name || pf.email || "—";
+          });
+          lista = lista.map((p) => ({
+            ...p,
+            responsavel_nome: p.responsavel_id
+              ? (mapaResponsaveis[p.responsavel_id] ?? null)
+              : null,
+          }));
+        }
       }
 
       setPedidos(lista);
