@@ -89,6 +89,8 @@ export default function FilaCadastros() {
   const [vendedorSelecionado, setVendedorSelecionado] = useState("");
   const [showReprovar, setShowReprovar] = useState(false);
   const [motivoReprovacao, setMotivoReprovacao] = useState("");
+  const [showDevolver, setShowDevolver] = useState(false);
+  const [motivoDevolvido, setMotivoDevolvido] = useState("");
   const [saving, setSaving] = useState(false);
   const [aprovarDialog, setAprovarDialog] = useState<Cadastro | null>(null);
   const [aprovarForm, setAprovarForm] = useState({
@@ -213,6 +215,32 @@ export default function FilaCadastros() {
       load();
     } catch (err: any) {
       toast.error(err.message ?? "Erro ao aprovar.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDevolver = async () => {
+    if (!selected) return;
+    if (!motivoDevolvido.trim()) {
+      toast.error("Informe o motivo para devolver ao vendedor.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const { error } = await (supabase.from("cadastros_pendentes") as any)
+        .update({
+          status: "devolvido",
+          motivo_reprovacao: motivoDevolvido,
+        })
+        .eq("id", selected.id);
+      if (error) throw error;
+      toast.success("Cadastro devolvido ao vendedor.");
+      setShowDevolver(false);
+      setSelected(null);
+      load();
+    } catch (err: any) {
+      toast.error(err.message ?? "Erro ao devolver.");
     } finally {
       setSaving(false);
     }
@@ -461,6 +489,14 @@ export default function FilaCadastros() {
                   Copiar dados para Sankhya
                 </Button>
                 <Button
+                  variant="outline"
+                  className="border-yellow-400 text-yellow-700 hover:bg-yellow-50"
+                  onClick={() => { setMotivoDevolvido(""); setShowDevolver(true); }}
+                  disabled={saving}
+                >
+                  Devolver ao vendedor
+                </Button>
+                <Button
                   variant="destructive"
                   onClick={() => setShowReprovar(true)}
                   disabled={saving}
@@ -591,6 +627,33 @@ export default function FilaCadastros() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* AlertDialog de devolução */}
+      <AlertDialog open={showDevolver} onOpenChange={setShowDevolver}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Devolver ao vendedor</AlertDialogTitle>
+            <AlertDialogDescription>
+              Informe o motivo para o vendedor corrigir o cadastro.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <Textarea
+            rows={3}
+            value={motivoDevolvido}
+            onChange={(e) => setMotivoDevolvido(e.target.value)}
+            placeholder="Ex: endereço incompleto, CNPJ incorreto..."
+          />
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDevolver}
+              disabled={saving || motivoDevolvido.trim() === ""}
+            >
+              Confirmar devolução
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* AlertDialog de reprovação */}
       <AlertDialog open={showReprovar} onOpenChange={setShowReprovar}>

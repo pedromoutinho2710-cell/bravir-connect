@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
@@ -186,10 +186,41 @@ function CheckboxGroup({
 
 export default function CadastrarCliente() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const corrigirId = searchParams.get("corrigir");
   const { user, fullName } = useAuth();
   const [form, setForm] = useState<Form>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [buscarCEPLoading, setBuscarCEPLoading] = useState(false);
+
+  useEffect(() => {
+    if (!corrigirId) return;
+    (async () => {
+      const { data } = await (supabase.from("cadastros_pendentes") as any)
+        .select("*")
+        .eq("id", corrigirId)
+        .single();
+      if (!data) return;
+      setForm((prev) => ({
+        ...prev,
+        nome_cliente: data.nome_cliente ?? "",
+        cnpj: data.cnpj ? formatCNPJ(data.cnpj) : "",
+        razao_social: data.razao_social ?? "",
+        contato_principal: data.contato_principal ?? "",
+        email: data.email ?? "",
+        telefone: data.telefone ?? "",
+        cep: data.cep ?? "",
+        rua: data.rua ?? "",
+        numero: data.numero ?? "",
+        bairro: data.bairro ?? "",
+        cidade: data.cidade ?? "",
+        uf: data.uf ?? "",
+        cluster_sugerido: data.cluster_sugerido ?? "",
+        observacoes: data.observacoes ?? "",
+        classificacao: data.classificacao ?? "",
+      }));
+    })();
+  }, [corrigirId]);
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) =>
     setForm((prev) => ({ ...prev, [k]: v }));
@@ -237,7 +268,7 @@ export default function CadastrarCliente() {
     }
     setLoading(true);
     try {
-      const { error } = await (supabase.from("cadastros_pendentes") as any).insert({
+      const payload = {
         nome_cliente: form.nome_cliente || null,
         cnpj: onlyDigits(form.cnpj) || null,
         razao_social: form.razao_social || null,
@@ -279,7 +310,16 @@ export default function CadastrarCliente() {
         origem: "vendedor",
         vendedor_id: user?.id ?? null,
         vendedor_nome: fullName ?? null,
-      });
+      };
+
+      let error;
+      if (corrigirId) {
+        ({ error } = await (supabase.from("cadastros_pendentes") as any)
+          .update(payload)
+          .eq("id", corrigirId));
+      } else {
+        ({ error } = await (supabase.from("cadastros_pendentes") as any).insert(payload));
+      }
       if (error) throw error;
       toast.success("Cadastro enviado para o faturamento!");
       navigate("/meus-clientes");
@@ -292,7 +332,9 @@ export default function CadastrarCliente() {
 
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-10">
-      <h1 className="text-2xl font-bold">Cadastrar Novo Cliente</h1>
+      <h1 className="text-2xl font-bold">
+        {corrigirId ? "Corrigir cadastro" : "Cadastrar Novo Cliente"}
+      </h1>
 
       <form onSubmit={handleSubmit} className="space-y-6">
 

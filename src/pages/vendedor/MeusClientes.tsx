@@ -54,6 +54,16 @@ type ClienteAgregado = {
   nome_parceiro: string | null;
 };
 
+type CadastroPendente = {
+  id: string;
+  nome_cliente: string | null;
+  razao_social: string | null;
+  cnpj: string | null;
+  status: string;
+  motivo_reprovacao: string | null;
+  created_at: string;
+};
+
 type OrdemCampo = "ltv" | "ticket_medio" | "razao_social" | "num_pedidos";
 
 function calcCicloMedio(dates: Date[]): number | null {
@@ -101,6 +111,7 @@ export default function MeusClientes() {
   const [salvandoTarefa, setSalvandoTarefa] = useState(false);
   const [removerCliente, setRemoverCliente] = useState<ClienteAgregado | null>(null);
   const [removendo, setRemovendo] = useState(false);
+  const [cadastrosPendentes, setCadastrosPendentes] = useState<CadastroPendente[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -234,6 +245,14 @@ export default function MeusClientes() {
         .map((c, idx) => ({ ...c, rank: idx + 1 }));
 
       setClientes(agregados);
+
+      const cadastrosRes = await supabase
+        .from("cadastros_pendentes")
+        .select("id, nome_cliente, razao_social, cnpj, status, motivo_reprovacao, created_at")
+        .eq("vendedor_id", user.id)
+        .in("status", ["aguardando_faturamento", "devolvido"])
+        .order("created_at", { ascending: false });
+      setCadastrosPendentes((cadastrosRes.data ?? []) as CadastroPendente[]);
     })().finally(() => setLoading(false));
   }, [user]);
 
@@ -346,6 +365,61 @@ export default function MeusClientes() {
         <h1 className="text-2xl font-bold">Meus Clientes</h1>
         <p className="text-sm text-muted-foreground">Portfólio com curva ABC, frequência e cobertura de marcas</p>
       </div>
+
+      {cadastrosPendentes.length > 0 && (
+        <div className="space-y-2">
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+            Cadastros enviados
+          </h2>
+          {cadastrosPendentes.map((c) => (
+            <div
+              key={c.id}
+              className={`rounded-md border px-4 py-3 flex items-start justify-between gap-3 ${
+                c.status === "devolvido"
+                  ? "border-red-300 bg-red-50"
+                  : "border-yellow-300 bg-yellow-50"
+              }`}
+            >
+              <div className="space-y-1 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">
+                    {c.nome_cliente ?? c.razao_social ?? "Sem nome"}
+                  </span>
+                  {c.status === "devolvido" ? (
+                    <span className="inline-flex items-center rounded-full border border-red-300 bg-red-100 text-red-800 px-2 py-0.5 text-xs font-medium">
+                      Devolvido
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full border border-yellow-300 bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs font-medium">
+                      Aguardando faturamento
+                    </span>
+                  )}
+                </div>
+                {c.cnpj && (
+                  <div className="text-xs text-muted-foreground">
+                    {formatCNPJ(c.cnpj)}
+                  </div>
+                )}
+                {c.status === "devolvido" && c.motivo_reprovacao && (
+                  <div className="text-xs text-red-700 font-medium mt-1">
+                    Motivo: {c.motivo_reprovacao}
+                  </div>
+                )}
+              </div>
+              {c.status === "devolvido" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 border-red-300 text-red-700 hover:bg-red-100"
+                  onClick={() => navigate(`/cadastrar-cliente?corrigir=${c.id}`)}
+                >
+                  Corrigir cadastro
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
