@@ -9,6 +9,7 @@ interface AuthContextValue {
   role: AppRole | null;
   fullName: string | null;
   loading: boolean;
+  roleLoaded: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
@@ -35,6 +36,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<AppRole | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [roleLoaded, setRoleLoaded] = useState(false);
 
   const fetchRole = async (currentUser: User) => {
     const fallbackRole = getRoleFromUser(currentUser);
@@ -77,12 +79,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(newSession);
       setUser(newSession?.user ?? null);
       if (newSession?.user) {
+        setRoleLoaded(false);
         setRole(getRoleFromUser(newSession.user));
-        fetchRole(newSession.user);
+        fetchRole(newSession.user).finally(() => setRoleLoaded(true));
         fetchFullName(newSession.user);
       } else {
         setRole(null);
         setFullName(null);
+        setRoleLoaded(true);
       }
     });
 
@@ -95,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           fetchFullName(existing.user),
         ]);
       }
+      setRoleLoaded(true);
       setLoading(false);
     });
 
@@ -111,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, role, fullName, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, session, role, fullName, loading, roleLoaded, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
