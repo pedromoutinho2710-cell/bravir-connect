@@ -957,6 +957,7 @@ export default function Faturamento() {
         codigo_jiva: i.codigo,
         cx_embarque: i.cx_embarque,
         quantidade: i.quantidade,
+        qtd_faturada: i.qtd_faturada,
         nome: i.nome,
         preco_bruto: i.preco_bruto,
         desconto_perfil: i.desconto_perfil,
@@ -1464,6 +1465,14 @@ export default function Faturamento() {
                               </div>
                             )}
                             <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
+                            {aba.key === "lancados" && (() => {
+                              const lancados = p.itens.filter((i) => i.qtd_faturada > 0).length;
+                              return <div className="text-xs text-green-700 font-medium">{lancados} de {p.itens.length} itens lançados</div>;
+                            })()}
+                            {aba.key === "pendencias" && (() => {
+                              const saldo = p.itens.filter((i) => i.qtd_faturada < i.quantidade).length;
+                              return <div className="text-xs text-orange-600 font-medium">{saldo} {saldo === 1 ? "item" : "itens"} em saldo</div>;
+                            })()}
                             {p.codigo_parceiro && (
                               <div className="text-xs text-muted-foreground font-mono">Cód: {p.codigo_parceiro}</div>
                             )}
@@ -1480,7 +1489,13 @@ export default function Faturamento() {
                               <div className="text-xs text-muted-foreground">Tel: {p.telefone}</div>
                             )}
                           </div>
-                          <div className="text-right text-sm font-semibold text-green-700">{formatBRL(p.total)}</div>
+                          <div className="text-right text-sm font-semibold text-green-700">
+                            {aba.key === "lancados"
+                              ? formatBRL(p.itens.filter((i) => i.qtd_faturada > 0).reduce((s, i) => s + i.qtd_faturada * i.preco_final, 0))
+                              : aba.key === "pendencias"
+                              ? formatBRL(p.itens.filter((i) => i.qtd_faturada < i.quantidade).reduce((s, i) => s + (i.quantidade - i.qtd_faturada) * i.preco_final, 0))
+                              : formatBRL(p.total)}
+                          </div>
                         </div>
                         <div className="flex flex-wrap gap-1">
                           {p.marcas.map((m) => <Badge key={m} variant="outline" className="text-xs">{m}</Badge>)}
@@ -1545,6 +1560,14 @@ export default function Faturamento() {
                                 <span className="inline-flex items-center rounded-full border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700">⚠ Neg.</span>
                               )}
                             </div>
+                            {aba.key === "lancados" && (() => {
+                              const lancados = p.itens.filter((i) => i.qtd_faturada > 0).length;
+                              return <div className="text-xs text-green-700 font-medium">{lancados} de {p.itens.length} itens lançados</div>;
+                            })()}
+                            {aba.key === "pendencias" && (() => {
+                              const saldo = p.itens.filter((i) => i.qtd_faturada < i.quantidade).length;
+                              return <div className="text-xs text-orange-600 font-medium">{saldo} {saldo === 1 ? "item" : "itens"} em saldo</div>;
+                            })()}
                             {p.codigo_parceiro && (
                               <div className="text-xs font-mono text-muted-foreground">Cód: {p.codigo_parceiro}</div>
                             )}
@@ -1566,7 +1589,13 @@ export default function Faturamento() {
                               {p.marcas.map((m) => <Badge key={m} variant="outline" className="text-xs">{m}</Badge>)}
                             </div>
                           </TableCell>
-                          <TableCell className="text-right font-bold text-sm text-green-700">{formatBRL(p.total)}</TableCell>
+                          <TableCell className="text-right font-bold text-sm text-green-700">
+                            {aba.key === "lancados"
+                              ? formatBRL(p.itens.filter((i) => i.qtd_faturada > 0).reduce((s, i) => s + i.qtd_faturada * i.preco_final, 0))
+                              : aba.key === "pendencias"
+                              ? formatBRL(p.itens.filter((i) => i.qtd_faturada < i.quantidade).reduce((s, i) => s + (i.quantidade - i.qtd_faturada) * i.preco_final, 0))
+                              : formatBRL(p.total)}
+                          </TableCell>
                           <TableCell className="text-right text-xs text-muted-foreground">{p.peso_total > 0 ? `${p.peso_total.toFixed(1)} kg` : "—"}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">
                             {STATUS_ACTIVE.has(p.status) ? (tempoAguardando(p.status_atualizado_em) ?? "—") : "—"}

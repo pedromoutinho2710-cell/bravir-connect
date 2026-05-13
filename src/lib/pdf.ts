@@ -157,6 +157,7 @@ export type FormularioItem = {
   codigo_jiva: string;
   cx_embarque: number;
   quantidade: number;
+  qtd_faturada: number;
   nome: string;
   preco_bruto: number;
   desconto_perfil: number;
@@ -467,6 +468,93 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
   ].forEach((text, idx) => {
     doc.text(text, ml + idx * sumW + 1, sumY + sumH - 1.5);
   });
+
+  // ── Blocos lançados / saldo ───────────────────────────────────────────────
+  const itensLancados = d.itens.filter((i) => (i.qtd_faturada ?? 0) > 0);
+  if (itensLancados.length > 0) {
+    let blockY = sumY + sumH + 5;
+
+    doc.setFillColor(26, 107, 58);
+    doc.rect(ml, blockY, W, 6, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.text("CADASTRADO NO SANKHYA", ml + W / 2, blockY + 4.2, { align: "center" });
+    doc.setTextColor(0);
+    blockY += 7;
+
+    autoTable(doc, {
+      startY: blockY,
+      head: [["Código", "Produto", "Qtd Pedida", "Qtd Lançada", "Preço Final", "Total Lançado"]],
+      body: itensLancados.map((i) => [
+        i.codigo_jiva,
+        i.nome,
+        String(i.quantidade),
+        String(i.qtd_faturada),
+        fR(i.preco_final),
+        fR(i.qtd_faturada * i.preco_final),
+      ]),
+      foot: [["", "", "", "", "Total Lançado", fR(itensLancados.reduce((s, i) => s + i.qtd_faturada * i.preco_final, 0))]],
+      theme: "grid",
+      headStyles: { fillColor: [26, 107, 58], textColor: 255, fontStyle: "bold", fontSize: 7 },
+      footStyles: { fillColor: [240, 240, 235], textColor: 30, fontStyle: "bold", fontSize: 7 },
+      bodyStyles: { fontSize: 7, cellPadding: 1.5 },
+      styles: { overflow: "ellipsize", lineColor: [180, 180, 180], lineWidth: 0.2 },
+      columnStyles: {
+        0: { cellWidth: 20, halign: "center" },
+        1: { cellWidth: 95 },
+        2: { cellWidth: 22, halign: "right" },
+        3: { cellWidth: 22, halign: "right" },
+        4: { cellWidth: 25, halign: "right" },
+        5: { cellWidth: 28, halign: "right" },
+      },
+      margin: { left: ml, right: mr },
+    });
+    // @ts-expect-error lastAutoTable
+    blockY = doc.lastAutoTable.finalY + 5;
+
+    const itensSaldo = d.itens.filter((i) => (i.qtd_faturada ?? 0) < i.quantidade);
+    if (itensSaldo.length > 0) {
+      doc.setFillColor(30, 30, 30);
+      doc.rect(ml, blockY, W, 6, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(8);
+      doc.setTextColor(255, 255, 255);
+      doc.text("SALDO PENDENTE", ml + W / 2, blockY + 4.2, { align: "center" });
+      doc.setTextColor(0);
+      blockY += 7;
+
+      autoTable(doc, {
+        startY: blockY,
+        head: [["Código", "Produto", "Qtd Pedida", "Qtd Lançada", "Saldo", "Preço Final", "Total Saldo"]],
+        body: itensSaldo.map((i) => [
+          i.codigo_jiva,
+          i.nome,
+          String(i.quantidade),
+          String(i.qtd_faturada ?? 0),
+          String(i.quantidade - (i.qtd_faturada ?? 0)),
+          fR(i.preco_final),
+          fR((i.quantidade - (i.qtd_faturada ?? 0)) * i.preco_final),
+        ]),
+        foot: [["", "", "", "", "", "Total Saldo", fR(itensSaldo.reduce((s, i) => s + (i.quantidade - (i.qtd_faturada ?? 0)) * i.preco_final, 0))]],
+        theme: "grid",
+        headStyles: { fillColor: [30, 30, 30], textColor: 255, fontStyle: "bold", fontSize: 7 },
+        footStyles: { fillColor: [240, 240, 235], textColor: 30, fontStyle: "bold", fontSize: 7 },
+        bodyStyles: { fontSize: 7, cellPadding: 1.5 },
+        styles: { overflow: "ellipsize", lineColor: [180, 180, 180], lineWidth: 0.2 },
+        columnStyles: {
+          0: { cellWidth: 20, halign: "center" },
+          1: { cellWidth: 82 },
+          2: { cellWidth: 22, halign: "right" },
+          3: { cellWidth: 22, halign: "right" },
+          4: { cellWidth: 18, halign: "right" },
+          5: { cellWidth: 25, halign: "right" },
+          6: { cellWidth: 28, halign: "right" },
+        },
+        margin: { left: ml, right: mr },
+      });
+    }
+  }
 
   // ── Rodapé de páginas ─────────────────────────────────────────────────────
   const pages = doc.getNumberOfPages();
