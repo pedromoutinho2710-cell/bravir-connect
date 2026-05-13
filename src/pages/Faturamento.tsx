@@ -730,6 +730,15 @@ export default function Faturamento() {
       totalFaturadoMap[f.item_pedido_id] = (totalFaturadoMap[f.item_pedido_id] ?? 0) + f.quantidade_faturada;
     });
 
+    await Promise.all(
+      faturarDialog.itens.map((item) =>
+        supabase
+          .from("itens_pedido")
+          .update({ qtd_faturada: totalFaturadoMap[item.id] ?? 0 })
+          .eq("id", item.id)
+      )
+    );
+
     const todosCompletos = faturarDialog.itens.every((item) => (totalFaturadoMap[item.id] ?? 0) >= item.quantidade);
     const novoStatus = todosCompletos ? "faturado" : "parcialmente_faturado";
 
