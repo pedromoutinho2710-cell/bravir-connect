@@ -10,7 +10,6 @@ import { formatBRL } from "@/lib/format";
 
 type Periodo = "hoje" | "semana" | "mes" | "ano";
 
-
 function getDateRange(periodo: Periodo): { dataInicio: string; dataFim: string } {
   const today = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -63,6 +62,14 @@ type RankingSku = {
   quantidade: number;
 };
 
+type RankingSkuValor = {
+  produto_id: string;
+  codigo_jiva: string;
+  nome: string;
+  marca: string;
+  valor: number;
+};
+
 const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "hoje", label: "Hoje" },
   { key: "semana", label: "Semana" },
@@ -70,6 +77,12 @@ const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "ano", label: "Ano" },
 ];
 
+const MARCA_CORES: Record<string, string> = {
+  "Bendita Cânfora": "#7C3AED",
+  "Laby": "#2563EB",
+  "Tattoo do Bem": "#EA580C",
+  "InkPro": "#16A34A",
+};
 
 export default function Dashboard() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
@@ -87,6 +100,12 @@ export default function Dashboard() {
   const [pipelineTotal, setPipelineTotal] = useState(0);
   const [ranking, setRanking] = useState<RankingVendedor[]>([]);
   const [topSkus, setTopSkus] = useState<RankingSku[]>([]);
+  const [tabProdutos, setTabProdutos] = useState<"quantidade" | "valor">("quantidade");
+  const [topSkusValor, setTopSkusValor] = useState<RankingSkuValor[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [campanhaAtiva, setCampanhaAtiva] = useState<any>(null);
+  const [entradaCampanha, setEntradaCampanha] = useState(0);
+  const [entradaMarca, setEntradaMarca] = useState<Record<string, number>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -102,45 +121,47 @@ export default function Dashboard() {
       try {
         const { dataInicio: kpiInicio, dataFim: kpiFim } = getDateRange(periodoKpi);
 
-        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes] = await Promise.all([
+        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes] = await Promise.all([
           // Pedidos do período — base para ranking e top SKUs
           supabase
             .from("pedidos")
-            .select("id, vendedor_id, status, itens_pedido(total_item, produto_id, quantidade)")
+            .select("id, vendedor_id, status, data_pedido, itens_pedido(total_item, produto_id, quantidade)")
             .gte("data_pedido", dataInicio)
             .lte("data_pedido", dataFim)
             .not("status", "in", '("rascunho")'),
-          // Meta total da empresa do mês atual (independente do filtro de período)
+          // Meta total da empresa do mês atual
           supabase
             .from("metas")
             .select("valor_meta_reais")
             .eq("mes", mesAtual)
             .eq("ano", anoAtual),
-          // Faturamento do mês atual para cálculo de % da meta (sempre mês corrente)
+          // Faturamento do mês atual para cálculo de % da meta
           supabase
             .from("pedidos")
             .select("id, itens_pedido(total_item)")
             .gte("data_pedido", mesInicio)
             .lte("data_pedido", mesFim)
             .not("status", "in", '("rascunho","cancelado")'),
-          // Pedidos em pipeline (aguardando + em_faturamento) para previsão do mês
+          // Pedidos em pipeline para previsão do mês
           supabase
             .from("pedidos")
             .select("id, itens_pedido(total_item)")
             .in("status", ["pendente_sankhya", "em_faturamento"]),
-          // Pendente Sankhya — pendente_sankhya no período
+          // KPI: Pré Faturado
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "pendente_sankhya").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
-          // Pedidos Lançados — no_sankhya no período
+          // KPI: Pedidos Lançados
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "no_sankhya").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
-          // Aguardando Faturamento — parcialmente_faturado no período
+          // KPI: Aguardando Faturamento
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "parcialmente_faturado").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
-          // Faturado — faturado no período
+          // KPI: Faturado
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "faturado").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
-          // Problemas — com_problema no período
+          // KPI: Problemas
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "com_problema").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
+          // Campanha ativa
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any).from("campanhas").select("*, campanha_niveis(*)").eq("ativa", true).maybeSingle(),
         ]);
 
-        // KPIs
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const pedidos = (pedidosRes.data ?? []) as any[];
         const pedidosSemCancelado = pedidos.filter((p) => p.status !== "cancelado");
@@ -175,7 +196,31 @@ export default function Dashboard() {
         );
         setPipelineTotal(pipeline);
 
-        // Ranking top 5 vendedores
+        // Campanha ativa
+        const campanha = campanhaRes.data ?? null;
+        setCampanhaAtiva(campanha);
+
+        if (campanha) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: pedidosCampanha } = await (supabase as any)
+            .from("pedidos")
+            .select("id, itens_pedido(total_item)")
+            .gte("data_pedido", campanha.data_inicio)
+            .lte("data_pedido", campanha.data_fim)
+            .not("status", "in", '("cancelado","devolvido","rascunho")');
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const entrada = ((pedidosCampanha ?? []) as any[]).reduce(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (s: number, p: any) => s + (p.itens_pedido ?? []).reduce((si: number, i: any) => si + Number(i.total_item), 0),
+            0,
+          );
+          setEntradaCampanha(entrada);
+        } else {
+          setEntradaCampanha(0);
+        }
+
+        // Ranking vendedores — todos, sem slice
         const vendedorAgg: Record<string, { faturamento: number; numPedidos: number }> = {};
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pedidosSemCancelado.forEach((p: any) => {
@@ -205,31 +250,29 @@ export default function Dashboard() {
             faturamento: data.faturamento,
             numPedidos: data.numPedidos,
           }))
-          .sort((a, b) => b.faturamento - a.faturamento)
-          .slice(0, 5);
+          .sort((a, b) => b.faturamento - a.faturamento);
         setRanking(rankingList);
 
-        // Top 5 SKUs por quantidade
-        const skuAgg: Record<string, { quantidade: number }> = {};
+        // Top SKUs por quantidade e por valor — todos, sem slice
+        const skuAgg: Record<string, { quantidade: number; valor: number }> = {};
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         pedidosSemCancelado.forEach((p: any) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (p.itens_pedido ?? []).forEach((i: any) => {
             if (!i.produto_id) return;
-            if (!skuAgg[i.produto_id]) skuAgg[i.produto_id] = { quantidade: 0 };
+            if (!skuAgg[i.produto_id]) skuAgg[i.produto_id] = { quantidade: 0, valor: 0 };
             skuAgg[i.produto_id].quantidade += Number(i.quantidade);
+            skuAgg[i.produto_id].valor += Number(i.total_item);
           });
         });
 
-        const topSkuIds = Object.keys(skuAgg)
-          .sort((a, b) => skuAgg[b].quantidade - skuAgg[a].quantidade)
-          .slice(0, 5);
+        const allSkuIds = Object.keys(skuAgg);
 
-        if (topSkuIds.length > 0) {
+        if (allSkuIds.length > 0) {
           const { data: produtosData } = await supabase
             .from("produtos")
             .select("id, codigo_jiva, nome, marca")
-            .in("id", topSkuIds);
+            .in("id", allSkuIds);
 
           const prodMap: Record<string, { codigo_jiva: string; nome: string; marca: string }> = {};
           (produtosData ?? []).forEach((p) => {
@@ -237,16 +280,41 @@ export default function Dashboard() {
           });
 
           setTopSkus(
-            topSkuIds.map((id) => ({
-              produto_id: id,
-              codigo_jiva: prodMap[id]?.codigo_jiva ?? "—",
-              nome: prodMap[id]?.nome ?? "—",
-              marca: prodMap[id]?.marca ?? "—",
-              quantidade: skuAgg[id].quantidade,
-            })),
+            [...allSkuIds]
+              .sort((a, b) => skuAgg[b].quantidade - skuAgg[a].quantidade)
+              .map((id) => ({
+                produto_id: id,
+                codigo_jiva: prodMap[id]?.codigo_jiva ?? "—",
+                nome: prodMap[id]?.nome ?? "—",
+                marca: prodMap[id]?.marca ?? "—",
+                quantidade: skuAgg[id].quantidade,
+              })),
           );
+
+          setTopSkusValor(
+            [...allSkuIds]
+              .sort((a, b) => skuAgg[b].valor - skuAgg[a].valor)
+              .map((id) => ({
+                produto_id: id,
+                codigo_jiva: prodMap[id]?.codigo_jiva ?? "—",
+                nome: prodMap[id]?.nome ?? "—",
+                marca: prodMap[id]?.marca ?? "—",
+                valor: skuAgg[id].valor,
+              })),
+          );
+
+          // Entrada por marca
+          const marcaAgg: Record<string, number> = {};
+          allSkuIds.forEach((id) => {
+            const marca = prodMap[id]?.marca ?? "Outros";
+            if (!marcaAgg[marca]) marcaAgg[marca] = 0;
+            marcaAgg[marca] += skuAgg[id].valor;
+          });
+          setEntradaMarca(marcaAgg);
         } else {
           setTopSkus([]);
+          setTopSkusValor([]);
+          setEntradaMarca({});
         }
       } catch {
         toast.error("Erro ao carregar dashboard");
@@ -257,6 +325,16 @@ export default function Dashboard() {
   const metaPct = metaTotal > 0 ? Math.min((fatMesAtual / metaTotal) * 100, 100) : 0;
   const previsaoMes = fatMesAtual + pipelineTotal;
   const previsaoPct = metaTotal > 0 ? Math.min((previsaoMes / metaTotal) * 100, 100) : 0;
+
+  // Campanha: meta máxima (nível mais alto), progresso e dias restantes
+  const campanhaMetaMaxima = campanhaAtiva
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? Math.max(...((campanhaAtiva.campanha_niveis ?? []) as any[]).map((n: any) => Number(n.valor_maximo ?? n.valor_minimo ?? 0)), 0)
+    : 0;
+  const campanhaPct = campanhaMetaMaxima > 0 ? Math.min((entradaCampanha / campanhaMetaMaxima) * 100, 100) : 0;
+  const campanhaDiasRestantes = campanhaAtiva
+    ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 0;
 
   if (loading) {
     return (
@@ -288,6 +366,77 @@ export default function Dashboard() {
           </Button>
         ))}
       </div>
+
+      {/* Campanha ativa */}
+      {campanhaAtiva && (
+        <Card className="border-2 border-[#1A6B3A]/30 bg-[#1A6B3A]/5">
+          <CardHeader className="pb-2">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <CardTitle className="text-base font-bold text-[#1A6B3A]">{campanhaAtiva.nome}</CardTitle>
+                {campanhaAtiva.descricao && (
+                  <p className="text-sm text-muted-foreground mt-1">{campanhaAtiva.descricao}</p>
+                )}
+                {Array.isArray(campanhaAtiva.marcas) && campanhaAtiva.marcas.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    {(campanhaAtiva.marcas as string[]).map((m) => (
+                      <Badge
+                        key={m}
+                        style={{ backgroundColor: MARCA_CORES[m] ?? "#6B7280", color: "#fff", border: "none" }}
+                      >
+                        {m}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="text-right shrink-0 text-xs text-muted-foreground">
+                {campanhaDiasRestantes} dias restantes
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Níveis / prêmios */}
+            {((campanhaAtiva.campanha_niveis ?? []) as any[]).length > 0 && (
+              <div className="space-y-2">
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Prêmios</div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {((campanhaAtiva.campanha_niveis ?? []) as any[])
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    .sort((a: any, b: any) => (a.ordem ?? 0) - (b.ordem ?? 0))
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    .map((nivel: any) => (
+                      <div key={nivel.id} className="rounded-md border bg-white p-2 text-sm">
+                        <div className="font-medium">{nivel.nome}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {formatBRL(nivel.valor_minimo)} – {formatBRL(nivel.valor_maximo)}
+                        </div>
+                        {nivel.descricao_premio && (
+                          <div className="text-xs text-[#1A6B3A] mt-1">{nivel.descricao_premio}</div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Progresso */}
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Meta: {formatBRL(campanhaMetaMaxima)}</span>
+                <span className="font-medium">Entrada: {formatBRL(entradaCampanha)}</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-muted">
+                <div
+                  className="h-2 rounded-full transition-all"
+                  style={{ width: `${campanhaPct}%`, backgroundColor: "#1A6B3A" }}
+                />
+              </div>
+              <div className="text-xs text-muted-foreground text-right">{campanhaPct.toFixed(1)}% atingido</div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Previsão do mês */}
       {metaTotal > 0 && (
@@ -357,12 +506,47 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Ranking e Top SKUs */}
+      {/* Entrada por marca */}
+      {Object.keys(entradaMarca).length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Entrada por marca</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {(() => {
+                const maxValor = Math.max(...Object.values(entradaMarca));
+                return Object.entries(entradaMarca)
+                  .sort(([, a], [, b]) => b - a)
+                  .map(([marca, valor]) => (
+                    <div key={marca} className="space-y-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium">{marca}</span>
+                        <span className="text-muted-foreground">{formatBRL(valor)}</span>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-muted">
+                        <div
+                          className="h-2 rounded-full"
+                          style={{
+                            width: `${maxValor > 0 ? (valor / maxValor) * 100 : 0}%`,
+                            backgroundColor: MARCA_CORES[marca] ?? "#6B7280",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ));
+              })()}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Ranking vendedores e produtos */}
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Top 5 vendedores */}
+        {/* Ranking vendedores — todos */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Top 5 vendedores</CardTitle>
+            <CardTitle className="text-sm font-medium">Ranking de vendedores</CardTitle>
             <Trophy className="h-4 w-4" style={{ color: "#1A6B3A" }} />
           </CardHeader>
           <CardContent>
@@ -395,42 +579,94 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Top 5 produtos por quantidade */}
+        {/* Ranking produtos — por quantidade ou por valor */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Top 5 produtos</CardTitle>
+            <CardTitle className="text-sm font-medium">Ranking de produtos</CardTitle>
             <Package className="h-4 w-4" style={{ color: "#1A6B3A" }} />
           </CardHeader>
           <CardContent>
-            {topSkus.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
-            ) : (
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10">#</TableHead>
-                      <TableHead>Código</TableHead>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Marca</TableHead>
-                      <TableHead className="text-right">Qtd</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {topSkus.map((s, idx) => (
-                      <TableRow key={s.produto_id}>
-                        <TableCell className="font-bold">{idx + 1}</TableCell>
-                        <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
-                        <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">{s.marca}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right text-sm font-medium">{s.quantidade}</TableCell>
+            <div className="flex gap-2 mb-3">
+              <Button
+                size="sm"
+                variant={tabProdutos === "quantidade" ? "default" : "outline"}
+                onClick={() => setTabProdutos("quantidade")}
+                style={tabProdutos === "quantidade" ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
+              >
+                Por quantidade
+              </Button>
+              <Button
+                size="sm"
+                variant={tabProdutos === "valor" ? "default" : "outline"}
+                onClick={() => setTabProdutos("valor")}
+                style={tabProdutos === "valor" ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
+              >
+                Por valor
+              </Button>
+            </div>
+
+            {tabProdutos === "quantidade" ? (
+              topSkus.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">#</TableHead>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Marca</TableHead>
+                        <TableHead className="text-right">Qtd</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {topSkus.map((s, idx) => (
+                        <TableRow key={s.produto_id}>
+                          <TableCell className="font-bold">{idx + 1}</TableCell>
+                          <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
+                          <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{s.marca}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-medium">{s.quantidade}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )
+            ) : (
+              topSkusValor.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">#</TableHead>
+                        <TableHead>Código</TableHead>
+                        <TableHead>Nome</TableHead>
+                        <TableHead>Marca</TableHead>
+                        <TableHead className="text-right">Valor</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {topSkusValor.map((s, idx) => (
+                        <TableRow key={s.produto_id}>
+                          <TableCell className="font-bold">{idx + 1}</TableCell>
+                          <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
+                          <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="text-xs">{s.marca}</Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-sm font-medium">{formatBRL(s.valor)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )
             )}
           </CardContent>
         </Card>
