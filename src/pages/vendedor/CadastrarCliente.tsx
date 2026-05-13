@@ -306,7 +306,7 @@ export default function CadastrarCliente() {
         bairro: form.bairro || null,
         cidade: form.cidade || null,
         uf: form.uf.toUpperCase() || null,
-        status: "pendente_sankhya",
+        status: "pendente_cadastro",
         origem: "vendedor",
         vendedor_id: user?.id ?? null,
         vendedor_nome: fullName ?? null,
@@ -319,6 +319,13 @@ export default function CadastrarCliente() {
           .eq("id", corrigirId));
       } else {
         ({ error } = await (supabase.from("cadastros_pendentes") as any).insert(payload));
+        if (!error) {
+          await (supabase.from("notificacoes") as any).insert({
+            destinatario_role: "faturamento",
+            tipo: "cliente_pendente",
+            mensagem: `Novo cliente pendente de cadastro: ${form.razao_social || form.nome_cliente} (CNPJ: ${onlyDigits(form.cnpj) || "não informado"})`,
+          });
+        }
       }
       if (error) throw error;
       toast.success("Cadastro enviado para o faturamento!");
