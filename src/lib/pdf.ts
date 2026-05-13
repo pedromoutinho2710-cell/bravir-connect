@@ -347,94 +347,168 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
   const pesoTotal = d.itens.reduce((s, i) => s + i.peso_unitario * i.quantidade, 0);
 
   // ── Tabela de itens ───────────────────────────────────────────────────────
-  const heads = [
-    "COD.\nJIVA",
-    "CX DE\nEMBARQUE",
-    "QTD\nPEDIDA",
-    "DESCRICAO DOS PRODUTOS",
-    "PRECO BRUTO\nS/ IMPOSTOS",
-    "DESC%\nCLUSTER",
-    "DESC%\nADICIONAL",
-    "PRECO LIQ.\nS/ IMPOSTOS",
-    "DESC%\nCAMPANHA",
-    "PRECO\nLIQ. FINAL",
-    "DESCONTO\nREAL",
-    "TOTAL S/\nIMPOSTOS",
-    "PESO",
-    "TOTAL\nPESO",
-    "QTD\nVOL",
-  ];
+  const temLancados = d.itens.some((i) => (i.qtd_faturada ?? 0) > 0);
+  let finalY: number;
 
-  const rows = d.itens.map((i) => {
-    const precoLiqSImp = i.preco_apos_perfil ?? Math.round(i.preco_bruto * (1 - i.desconto_perfil - i.desconto_comercial / 100) * 100) / 100;
-    const precoLiqFinal = i.preco_final;
-    const descontoReal = ((i.preco_bruto - precoLiqFinal) / i.preco_bruto) * 100;
-    const qtdVol = i.quantidade / (i.cx_embarque || 1);
-    return [
-      i.codigo_jiva,
-      String(i.cx_embarque || "—"),
-      String(i.quantidade),
-      i.nome,
-      fR(i.preco_bruto),
-      fPDecimal(i.desconto_perfil),
-      fPInt(i.desconto_comercial),
-      fR(precoLiqSImp),
-      fPInt(i.desconto_trade),
-      fR(precoLiqFinal),
-      `${descontoReal.toFixed(2)}%`,
-      fR(i.total_item),
-      i.peso_unitario > 0 ? i.peso_unitario.toFixed(3) : "—",
-      i.peso_unitario > 0 ? (i.peso_unitario * i.quantidade).toFixed(2) : "—",
-      String(qtdVol),
+  const TABLE_HEAD_STYLES = {
+    fillColor: GREEN as [number, number, number],
+    textColor: 255 as number,
+    fontStyle: "bold" as const,
+    fontSize: 6,
+    cellPadding: 1,
+    halign: "center" as const,
+    valign: "middle" as const,
+    minCellHeight: 8,
+  };
+  const TABLE_BODY_STYLES = { fontSize: 6.5, cellPadding: 1 };
+  const TABLE_STYLES = { overflow: "ellipsize" as const, lineColor: [180, 180, 180] as [number, number, number], lineWidth: 0.2 };
+  const TABLE_FOOT_STYLES = { fillColor: [240, 240, 235] as [number, number, number], textColor: 30 as number, fontStyle: "bold" as const };
+
+  if (!temLancados) {
+    const heads = [
+      "COD.\nJIVA", "CX DE\nEMBARQUE", "QTD\nPEDIDA", "DESCRICAO DOS PRODUTOS",
+      "PRECO BRUTO\nS/ IMPOSTOS", "DESC%\nCLUSTER", "DESC%\nADICIONAL",
+      "PRECO LIQ.\nS/ IMPOSTOS", "DESC%\nCAMPANHA", "PRECO\nLIQ. FINAL",
+      "DESCONTO\nREAL", "TOTAL S/\nIMPOSTOS", "PESO", "TOTAL\nPESO", "QTD\nVOL",
     ];
-  });
+    const rows = d.itens.map((i) => {
+      const precoLiqSImp = i.preco_apos_perfil ?? Math.round(i.preco_bruto * (1 - i.desconto_perfil - i.desconto_comercial / 100) * 100) / 100;
+      const precoLiqFinal = i.preco_final;
+      const descontoReal = ((i.preco_bruto - precoLiqFinal) / i.preco_bruto) * 100;
+      const qtdVol = i.quantidade / (i.cx_embarque || 1);
+      return [
+        i.codigo_jiva, String(i.cx_embarque || "—"), String(i.quantidade), i.nome,
+        fR(i.preco_bruto), fPDecimal(i.desconto_perfil), fPInt(i.desconto_comercial),
+        fR(precoLiqSImp), fPInt(i.desconto_trade), fR(precoLiqFinal),
+        `${descontoReal.toFixed(2)}%`, fR(i.total_item),
+        i.peso_unitario > 0 ? i.peso_unitario.toFixed(3) : "—",
+        i.peso_unitario > 0 ? (i.peso_unitario * i.quantidade).toFixed(2) : "—",
+        String(qtdVol),
+      ];
+    });
+    autoTable(doc, {
+      startY: y, head: [heads], body: rows, theme: "grid",
+      headStyles: TABLE_HEAD_STYLES,
+      bodyStyles: TABLE_BODY_STYLES,
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      styles: TABLE_STYLES,
+      didParseCell: (data) => {
+        if (data.section === "body" && data.column.index === 2) {
+          data.cell.styles.fillColor = [214, 236, 210];
+        }
+      },
+      columnStyles: {
+        0:  { cellWidth: 14, halign: "center" }, 1:  { cellWidth: 10, halign: "center" },
+        2:  { cellWidth: 10, halign: "center" }, 3:  { cellWidth: 75 },
+        4:  { cellWidth: 18, halign: "right" },  5:  { cellWidth: 12, halign: "center" },
+        6:  { cellWidth: 12, halign: "center" }, 7:  { cellWidth: 18, halign: "right" },
+        8:  { cellWidth: 12, halign: "center" }, 9:  { cellWidth: 18, halign: "right" },
+        10: { cellWidth: 16, halign: "right" },  11: { cellWidth: 18, halign: "right" },
+        12: { cellWidth: 10, halign: "right" },  13: { cellWidth: 14, halign: "right" },
+        14: { cellWidth: 10, halign: "center" },
+      },
+      margin: { left: ml, right: mr },
+    });
+    // @ts-expect-error lastAutoTable
+    finalY = doc.lastAutoTable.finalY + 2;
+  } else {
+    // Bloco 1 — CADASTRADO NO SANKHYA
+    const itensLancados = d.itens.filter((i) => (i.qtd_faturada ?? 0) > 0);
 
-  autoTable(doc, {
-    startY: y,
-    head: [heads],
-    body: rows,
-    theme: "grid",
-    headStyles: {
-      fillColor: GREEN,
-      textColor: 255,
-      fontStyle: "bold",
-      fontSize: 6,
-      cellPadding: 1,
-      halign: "center",
-      valign: "middle",
-      minCellHeight: 8,
-    },
-    bodyStyles: { fontSize: 6.5, cellPadding: 1 },
-    alternateRowStyles: { fillColor: [245, 245, 245] },
-    styles: { overflow: "ellipsize", lineColor: [180, 180, 180], lineWidth: 0.2 },
-    // Coluna QTD PEDIDA (índice 2) com fundo verde claro — simula campo editável
-    didParseCell: (data) => {
-      if (data.section === "body" && data.column.index === 2) {
-        data.cell.styles.fillColor = [214, 236, 210];
-      }
-    },
-    columnStyles: {
-      0:  { cellWidth: 14, halign: "center" },
-      1:  { cellWidth: 10, halign: "center" },
-      2:  { cellWidth: 10, halign: "center" },
-      3:  { cellWidth: 75 },
-      4:  { cellWidth: 18, halign: "right" },
-      5:  { cellWidth: 12, halign: "center" },
-      6:  { cellWidth: 12, halign: "center" },
-      7:  { cellWidth: 18, halign: "right" },
-      8:  { cellWidth: 12, halign: "center" },
-      9:  { cellWidth: 18, halign: "right" },
-      10: { cellWidth: 16, halign: "right" },
-      11: { cellWidth: 18, halign: "right" },
-      12: { cellWidth: 10, halign: "right" },
-      13: { cellWidth: 14, halign: "right" },
-      14: { cellWidth: 10, halign: "center" },
-    },
-    margin: { left: ml, right: mr },
-  });
+    doc.setFillColor(26, 107, 58);
+    doc.rect(ml, y, W, 6, "F");
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+    doc.text("CADASTRADO NO SANKHYA", ml + W / 2, y + 4.2, { align: "center" });
+    doc.setTextColor(0);
+    y += 7;
 
-  // @ts-expect-error lastAutoTable
-  const finalY: number = doc.lastAutoTable.finalY + 2;
+    autoTable(doc, {
+      startY: y,
+      head: [[
+        "COD.\nJIVA", "CX DE\nEMBARQUE", "QTD\nPEDIDA", "QTD\nLANÇADA",
+        "DESCRICAO DOS PRODUTOS", "PRECO BRUTO\nS/ IMPOSTOS",
+        "DESC%\nCLUSTER", "DESC%\nADICIONAL", "DESC%\nCAMPANHA",
+        "PRECO\nLIQ. FINAL", "TOTAL\nLANÇADO", "TOTAL\nPESO",
+      ]],
+      body: itensLancados.map((i) => [
+        i.codigo_jiva, String(i.cx_embarque || "—"), String(i.quantidade),
+        String(i.qtd_faturada), i.nome, fR(i.preco_bruto),
+        fPDecimal(i.desconto_perfil), fPInt(i.desconto_comercial), fPInt(i.desconto_trade),
+        fR(i.preco_final), fR(i.qtd_faturada * i.preco_final),
+        i.peso_unitario > 0 ? (i.peso_unitario * i.qtd_faturada).toFixed(2) : "—",
+      ]),
+      foot: [["", "", "", "", "", "", "", "", "Total Lançado",
+        fR(itensLancados.reduce((s, i) => s + i.qtd_faturada * i.preco_final, 0)), "", ""]],
+      theme: "grid",
+      headStyles: TABLE_HEAD_STYLES,
+      footStyles: TABLE_FOOT_STYLES,
+      bodyStyles: TABLE_BODY_STYLES,
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+      styles: TABLE_STYLES,
+      columnStyles: {
+        0:  { cellWidth: 14, halign: "center" }, 1:  { cellWidth: 10, halign: "center" },
+        2:  { cellWidth: 12, halign: "center" }, 3:  { cellWidth: 12, halign: "center" },
+        4:  { cellWidth: 88 },                  5:  { cellWidth: 20, halign: "right" },
+        6:  { cellWidth: 13, halign: "center" }, 7:  { cellWidth: 13, halign: "center" },
+        8:  { cellWidth: 13, halign: "center" }, 9:  { cellWidth: 20, halign: "right" },
+        10: { cellWidth: 24, halign: "right" },  11: { cellWidth: 15, halign: "right" },
+      },
+      margin: { left: ml, right: mr },
+    });
+    // @ts-expect-error lastAutoTable
+    y = doc.lastAutoTable.finalY + 5;
+
+    // Bloco 2 — SALDO PENDENTE
+    const itensSaldo = d.itens.filter((i) => (i.qtd_faturada ?? 0) < i.quantidade);
+    if (itensSaldo.length > 0) {
+      doc.setFillColor(30, 30, 30);
+      doc.rect(ml, y, W, 6, "F");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(255, 255, 255);
+      doc.text("SALDO PENDENTE", ml + W / 2, y + 4.2, { align: "center" });
+      doc.setTextColor(0);
+      y += 7;
+
+      autoTable(doc, {
+        startY: y,
+        head: [[
+          "COD.\nJIVA", "CX DE\nEMBARQUE", "QTD\nPEDIDA", "QTD\nLANÇADA", "SALDO",
+          "DESCRICAO DOS PRODUTOS", "PRECO BRUTO\nS/ IMPOSTOS",
+          "DESC%\nCLUSTER", "DESC%\nADICIONAL", "DESC%\nCAMPANHA",
+          "PRECO\nLIQ. FINAL", "TOTAL\nSALDO", "TOTAL\nPESO",
+        ]],
+        body: itensSaldo.map((i) => {
+          const saldo = i.quantidade - (i.qtd_faturada ?? 0);
+          return [
+            i.codigo_jiva, String(i.cx_embarque || "—"), String(i.quantidade),
+            String(i.qtd_faturada ?? 0), String(saldo), i.nome, fR(i.preco_bruto),
+            fPDecimal(i.desconto_perfil), fPInt(i.desconto_comercial), fPInt(i.desconto_trade),
+            fR(i.preco_final), fR(saldo * i.preco_final),
+            i.peso_unitario > 0 ? (i.peso_unitario * saldo).toFixed(2) : "—",
+          ];
+        }),
+        foot: [["", "", "", "", "", "", "", "", "", "Total Saldo",
+          fR(itensSaldo.reduce((s, i) => s + (i.quantidade - (i.qtd_faturada ?? 0)) * i.preco_final, 0)), "", ""]],
+        theme: "grid",
+        headStyles: { ...TABLE_HEAD_STYLES, fillColor: [30, 30, 30] },
+        footStyles: TABLE_FOOT_STYLES,
+        bodyStyles: TABLE_BODY_STYLES,
+        alternateRowStyles: { fillColor: [245, 245, 245] },
+        styles: TABLE_STYLES,
+        columnStyles: {
+          0:  { cellWidth: 14, halign: "center" }, 1:  { cellWidth: 10, halign: "center" },
+          2:  { cellWidth: 12, halign: "center" }, 3:  { cellWidth: 12, halign: "center" },
+          4:  { cellWidth: 10, halign: "center" }, 5:  { cellWidth: 78 },
+          6:  { cellWidth: 20, halign: "right" },  7:  { cellWidth: 13, halign: "center" },
+          8:  { cellWidth: 13, halign: "center" }, 9:  { cellWidth: 13, halign: "center" },
+          10: { cellWidth: 20, halign: "right" },  11: { cellWidth: 24, halign: "right" },
+          12: { cellWidth: 15, halign: "right" },
+        },
+        margin: { left: ml, right: mr },
+      });
+    }
+    // @ts-expect-error lastAutoTable
+    finalY = doc.lastAutoTable.finalY + 2;
+  }
 
   // ── Área reservada faturamento ────────────────────────────────────────────
   const resH = 8;
@@ -468,93 +542,6 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
   ].forEach((text, idx) => {
     doc.text(text, ml + idx * sumW + 1, sumY + sumH - 1.5);
   });
-
-  // ── Blocos lançados / saldo ───────────────────────────────────────────────
-  const itensLancados = d.itens.filter((i) => (i.qtd_faturada ?? 0) > 0);
-  if (itensLancados.length > 0) {
-    let blockY = sumY + sumH + 5;
-
-    doc.setFillColor(26, 107, 58);
-    doc.rect(ml, blockY, W, 6, "F");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(255, 255, 255);
-    doc.text("CADASTRADO NO SANKHYA", ml + W / 2, blockY + 4.2, { align: "center" });
-    doc.setTextColor(0);
-    blockY += 7;
-
-    autoTable(doc, {
-      startY: blockY,
-      head: [["Código", "Produto", "Qtd Pedida", "Qtd Lançada", "Preço Final", "Total Lançado"]],
-      body: itensLancados.map((i) => [
-        i.codigo_jiva,
-        i.nome,
-        String(i.quantidade),
-        String(i.qtd_faturada),
-        fR(i.preco_final),
-        fR(i.qtd_faturada * i.preco_final),
-      ]),
-      foot: [["", "", "", "", "Total Lançado", fR(itensLancados.reduce((s, i) => s + i.qtd_faturada * i.preco_final, 0))]],
-      theme: "grid",
-      headStyles: { fillColor: [26, 107, 58], textColor: 255, fontStyle: "bold", fontSize: 7 },
-      footStyles: { fillColor: [240, 240, 235], textColor: 30, fontStyle: "bold", fontSize: 7 },
-      bodyStyles: { fontSize: 7, cellPadding: 1.5 },
-      styles: { overflow: "ellipsize", lineColor: [180, 180, 180], lineWidth: 0.2 },
-      columnStyles: {
-        0: { cellWidth: 20, halign: "center" },
-        1: { cellWidth: 95 },
-        2: { cellWidth: 22, halign: "right" },
-        3: { cellWidth: 22, halign: "right" },
-        4: { cellWidth: 25, halign: "right" },
-        5: { cellWidth: 28, halign: "right" },
-      },
-      margin: { left: ml, right: mr },
-    });
-    // @ts-expect-error lastAutoTable
-    blockY = doc.lastAutoTable.finalY + 5;
-
-    const itensSaldo = d.itens.filter((i) => (i.qtd_faturada ?? 0) < i.quantidade);
-    if (itensSaldo.length > 0) {
-      doc.setFillColor(30, 30, 30);
-      doc.rect(ml, blockY, W, 6, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(255, 255, 255);
-      doc.text("SALDO PENDENTE", ml + W / 2, blockY + 4.2, { align: "center" });
-      doc.setTextColor(0);
-      blockY += 7;
-
-      autoTable(doc, {
-        startY: blockY,
-        head: [["Código", "Produto", "Qtd Pedida", "Qtd Lançada", "Saldo", "Preço Final", "Total Saldo"]],
-        body: itensSaldo.map((i) => [
-          i.codigo_jiva,
-          i.nome,
-          String(i.quantidade),
-          String(i.qtd_faturada ?? 0),
-          String(i.quantidade - (i.qtd_faturada ?? 0)),
-          fR(i.preco_final),
-          fR((i.quantidade - (i.qtd_faturada ?? 0)) * i.preco_final),
-        ]),
-        foot: [["", "", "", "", "", "Total Saldo", fR(itensSaldo.reduce((s, i) => s + (i.quantidade - (i.qtd_faturada ?? 0)) * i.preco_final, 0))]],
-        theme: "grid",
-        headStyles: { fillColor: [30, 30, 30], textColor: 255, fontStyle: "bold", fontSize: 7 },
-        footStyles: { fillColor: [240, 240, 235], textColor: 30, fontStyle: "bold", fontSize: 7 },
-        bodyStyles: { fontSize: 7, cellPadding: 1.5 },
-        styles: { overflow: "ellipsize", lineColor: [180, 180, 180], lineWidth: 0.2 },
-        columnStyles: {
-          0: { cellWidth: 20, halign: "center" },
-          1: { cellWidth: 82 },
-          2: { cellWidth: 22, halign: "right" },
-          3: { cellWidth: 22, halign: "right" },
-          4: { cellWidth: 18, halign: "right" },
-          5: { cellWidth: 25, halign: "right" },
-          6: { cellWidth: 28, halign: "right" },
-        },
-        margin: { left: ml, right: mr },
-      });
-    }
-  }
 
   // ── Rodapé de páginas ─────────────────────────────────────────────────────
   const pages = doc.getNumberOfPages();
