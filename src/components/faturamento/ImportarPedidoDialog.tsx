@@ -158,27 +158,23 @@ export default function ImportarPedidoDialog({
       const prodMap: Record<string, { id: string; nome: string }> = {};
       (prodData ?? []).forEach((p) => { prodMap[p.codigo_jiva] = { id: p.id, nome: p.nome }; });
 
-      const produtosResolvidos = calcularLinhas(
-        rawProdutos.map((r) => ({
-          ...r,
-          produto_id: prodMap[r.codigo_jiva]?.id ?? null,
-          nome: prodMap[r.codigo_jiva]?.nome ?? "— produto não encontrado —",
-        }))
-      );
-
-      const dadosExtraidos: DadosExcel = {
-        codigo_cliente,
-        cond_pagamento,
-        agendamento,
-        observacoes,
-        tabela_preco,
-        produtos: produtosResolvidos,
-      };
+      const produtosResolvidos = rawProdutos.map((r) => ({
+        ...r,
+        produto_id: prodMap[r.codigo_jiva]?.id ?? null,
+        nome: prodMap[r.codigo_jiva]?.nome ?? "— produto não encontrado —",
+      }));
 
       // Buscar cliente
       if (!codigo_cliente) {
         setErroCliente("Código do cliente não encontrado na planilha (célula L3).");
-        setDados(dadosExtraidos);
+        setDados({
+          codigo_cliente,
+          cond_pagamento,
+          agendamento,
+          observacoes,
+          tabela_preco,
+          produtos: calcularLinhas(produtosResolvidos),
+        });
         setCondPag(cond_pagamento);
         setObs(observacoes);
         setStep(2);
@@ -196,6 +192,41 @@ export default function ImportarPedidoDialog({
       } else {
         setCliente({ ...clData, cluster: clData.cluster ?? "" });
       }
+
+      // Buscar descontos do cluster
+      let produtosFinal = calcularLinhas(produtosResolvidos);
+      if (clData?.cluster) {
+        const produtoIds = produtosResolvidos
+          .filter((p) => p.produto_id)
+          .map((p) => p.produto_id!);
+
+        const { data: descontosData } = await supabase
+          .from("descontos")
+          .select("produto_id, percentual_desconto")
+          .in("produto_id", produtoIds)
+          .eq("perfil_cliente", clData.cluster);
+
+        const descontoMap: Record<string, number> = {};
+        (descontosData ?? []).forEach((d) => {
+          descontoMap[d.produto_id] = Number(d.percentual_desconto);
+        });
+
+        const produtosComDesconto = produtosResolvidos.map((p) => ({
+          ...p,
+          desconto_perfil: p.produto_id ? (descontoMap[p.produto_id] ?? 0) : 0,
+        }));
+
+        produtosFinal = calcularLinhas(produtosComDesconto);
+      }
+
+      const dadosExtraidos: DadosExcel = {
+        codigo_cliente,
+        cond_pagamento,
+        agendamento,
+        observacoes,
+        tabela_preco,
+        produtos: produtosFinal,
+      };
 
       setDados(dadosExtraidos);
       setCondPag(cond_pagamento);
