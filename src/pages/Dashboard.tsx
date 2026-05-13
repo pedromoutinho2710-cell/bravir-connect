@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, TrendingUp, Trophy, Package, Calendar } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
 
@@ -78,11 +79,13 @@ const PERIODOS: { key: Periodo; label: string }[] = [
 ];
 
 const MARCA_CORES: Record<string, string> = {
-  "Bendita Cânfora": "#7C3AED",
-  "Laby": "#2563EB",
-  "Tattoo do Bem": "#EA580C",
-  "InkPro": "#16A34A",
+  "Bendita Cânfora": "#7f77dd",
+  "Laby": "#378add",
+  "Bravir": "#888780",
+  "Alivik": "#1d9e75",
 };
+
+const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 export default function Dashboard() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
@@ -106,6 +109,7 @@ export default function Dashboard() {
   const [campanhaAtiva, setCampanhaAtiva] = useState<any>(null);
   const [entradaCampanha, setEntradaCampanha] = useState(0);
   const [entradaMarca, setEntradaMarca] = useState<Record<string, number>>({});
+  const [fatMensal, setFatMensal] = useState<{ mes: string; valor: number }[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -117,11 +121,21 @@ export default function Dashboard() {
     const mesInicio = `${anoAtual}-${pad(mesAtual)}-01`;
     const mesFim = new Date(anoAtual, mesAtual, 0).toISOString().slice(0, 10);
 
+    // Build array of last 6 months (oldest first, current month last)
+    const meses6 = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(anoAtual, now.getMonth() - (5 - i), 1);
+      const ano = d.getFullYear();
+      const mes = d.getMonth(); // 0-based
+      const inicio = `${ano}-${pad(mes + 1)}-01`;
+      const fim = new Date(ano, mes + 1, 0).toISOString().slice(0, 10);
+      return { label: MESES_ABREV[mes], inicio, fim };
+    });
+
     (async () => {
       try {
         const { dataInicio: kpiInicio, dataFim: kpiFim } = getDateRange(periodoKpi);
 
-        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes] = await Promise.all([
+        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, ...mensaisRes] = await Promise.all([
           // Pedidos do período — base para ranking e top SKUs
           supabase
             .from("pedidos")
@@ -160,6 +174,15 @@ export default function Dashboard() {
           // Campanha ativa
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any).from("campanhas").select("*, campanha_niveis(*)").eq("ativa", true).maybeSingle(),
+          // Faturamento mensal — últimos 6 meses
+          ...meses6.map((m) =>
+            supabase
+              .from("pedidos")
+              .select("id, itens_pedido(total_item)")
+              .eq("status", "faturado")
+              .gte("data_pedido", m.inicio)
+              .lte("data_pedido", m.fim)
+          ),
         ]);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -316,6 +339,19 @@ export default function Dashboard() {
           setTopSkusValor([]);
           setEntradaMarca({});
         }
+
+        // Faturamento mensal — mapear respostas com labels dos meses
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fatMensalArr = (mensaisRes as any[]).map((res, i) => ({
+          mes: meses6[i].label,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          valor: ((res.data ?? []) as any[]).reduce(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (s: number, p: any) => s + (p.itens_pedido ?? []).reduce((si: number, ii: any) => si + Number(ii.total_item), 0),
+            0,
+          ),
+        }));
+        setFatMensal(fatMensalArr);
       } catch {
         toast.error("Erro ao carregar dashboard");
       }
@@ -326,15 +362,43 @@ export default function Dashboard() {
   const previsaoMes = fatMesAtual + pipelineTotal;
   const previsaoPct = metaTotal > 0 ? Math.min((previsaoMes / metaTotal) * 100, 100) : 0;
 
-  // Campanha: meta máxima (nível mais alto), progresso e dias restantes
-  const campanhaMetaMaxima = campanhaAtiva
+  // Campanha: nível mais alto (maior valor_minimo), progresso e dias restantes
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const niveisOrdenados: any[] = campanhaAtiva
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? Math.max(...((campanhaAtiva.campanha_niveis ?? []) as any[]).map((n: any) => Number(n.valor_maximo ?? n.valor_minimo ?? 0)), 0)
-    : 0;
+    ? [...((campanhaAtiva.campanha_niveis ?? []) as any[])].sort((a: any, b: any) => (a.ordem ?? 0) - (b.ordem ?? 0))
+    : [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const nivelMaisAlto: any = niveisOrdenados.length > 0
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ? niveisOrdenados.reduce((acc: any, n: any) => (Number(n.valor_minimo) > Number(acc.valor_minimo) ? n : acc), niveisOrdenados[0])
+    : null;
+  const campanhaMetaMaxima = nivelMaisAlto ? Number(nivelMaisAlto.valor_minimo) : 0;
   const campanhaPct = campanhaMetaMaxima > 0 ? Math.min((entradaCampanha / campanhaMetaMaxima) * 100, 100) : 0;
   const campanhaDiasRestantes = campanhaAtiva
     ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 0;
+
+  // Fluxo de metas
+  const fatFaturadoMes = fatMensal.length > 0 ? fatMensal[fatMensal.length - 1].valor : 0;
+  const entradaPct = metaTotal > 0 ? (fatMesAtual / metaTotal) * 100 : 0;
+  const faturadoPct = metaTotal > 0 ? (fatFaturadoMes / metaTotal) * 100 : 0;
+
+  const badgeColor = (pct: number) => {
+    if (pct >= 80) return "bg-green-100 text-green-800";
+    if (pct >= 50) return "bg-yellow-100 text-yellow-800";
+    return "bg-red-100 text-red-800";
+  };
+
+  const maxFatMensal = Math.max(...fatMensal.map((m) => m.valor), 1);
+
+  // Pipeline card bar scale
+  const maxKpi = Math.max(kpis.preFaturado, kpis.lancados, kpis.aguardandoFaturamento, kpis.problemas, 1);
+
+  // Keep existing derived values used elsewhere
+  void metaPct;
+  void previsaoMes;
+  void previsaoPct;
 
   if (loading) {
     return (
@@ -346,43 +410,90 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div>
-        <h1 className="text-2xl font-bold text-[#1A6B3A]">Dashboard</h1>
-        <p className="text-sm text-muted-foreground">Visão geral do negócio</p>
+      {/* Seção 1 — Cabeçalho */}
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-[#1A6B3A]">Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Visão geral do negócio</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {PERIODOS.map(({ key, label }) => (
+            <Button
+              key={key}
+              variant={periodo === key ? "default" : "outline"}
+              size="sm"
+              onClick={() => { setPeriodo(key); setPeriodoKpi(key); }}
+              style={periodo === key ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
       </div>
 
-      {/* Filtro de período */}
-      <div className="flex gap-2">
-        {PERIODOS.map(({ key, label }) => (
-          <Button
-            key={key}
-            variant={periodo === key ? "default" : "outline"}
-            size="sm"
-            onClick={() => setPeriodo(key)}
-            style={periodo === key ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
-          >
-            {label}
-          </Button>
-        ))}
+      {/* Seção 2 — Fluxo de Metas */}
+      <div className="flex flex-wrap items-center gap-2">
+        {/* Nó 1: Meta de entrada */}
+        <div className="rounded-lg border p-4 flex-1 min-w-[160px]">
+          <div className="text-xs text-muted-foreground mb-1">Meta de entrada</div>
+          <div className="text-xl font-bold">{formatBRL(metaTotal)}</div>
+          <span className="inline-block mt-2 rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-700">
+            Definida manualmente
+          </span>
+        </div>
+
+        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+
+        {/* Nó 2: Entrada de pedidos — destaque azul */}
+        <div className="rounded-lg border-2 border-blue-400 bg-blue-50 p-4 flex-1 min-w-[160px]">
+          <div className="text-xs text-muted-foreground mb-1">Entrada de pedidos</div>
+          <div className="text-xl font-bold">{formatBRL(fatMesAtual)}</div>
+          <span className={`inline-block mt-2 rounded-full px-2 py-0.5 text-xs ${badgeColor(entradaPct)}`}>
+            {entradaPct.toFixed(0)}% da meta
+          </span>
+        </div>
+
+        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+
+        {/* Nó 3: Total faturado */}
+        <div className="rounded-lg border p-4 flex-1 min-w-[160px]">
+          <div className="text-xs text-muted-foreground mb-1">Total faturado</div>
+          <div className="text-xl font-bold">{formatBRL(fatFaturadoMes)}</div>
+          <span className={`inline-block mt-2 rounded-full px-2 py-0.5 text-xs ${badgeColor(faturadoPct)}`}>
+            {faturadoPct.toFixed(0)}% da meta
+          </span>
+        </div>
+
+        <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />
+
+        {/* Nó 4: Total a faturar (pipeline) */}
+        <div className="rounded-lg border p-4 flex-1 min-w-[160px]">
+          <div className="text-xs text-muted-foreground mb-1">Total a faturar</div>
+          <div className="text-xl font-bold">{formatBRL(pipelineTotal)}</div>
+          <span className="inline-block mt-2 rounded-full px-2 py-0.5 text-xs bg-blue-100 text-blue-800">
+            em processamento
+          </span>
+        </div>
       </div>
 
-      {/* Campanha ativa */}
+      {/* Seção 3 — Campanha Ativa */}
       {campanhaAtiva && (
-        <Card className="border-2 border-[#1A6B3A]/30 bg-[#1A6B3A]/5">
-          <CardHeader className="pb-2">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex-1">
-                <CardTitle className="text-base font-bold text-[#1A6B3A]">{campanhaAtiva.nome}</CardTitle>
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            {/* Área superior */}
+            <div className="flex flex-col lg:flex-row gap-4">
+              {/* Esquerda: info da campanha */}
+              <div className="flex-1 space-y-2">
+                <h3 className="text-xl font-bold">{campanhaAtiva.nome}</h3>
                 {campanhaAtiva.descricao && (
-                  <p className="text-sm text-muted-foreground mt-1">{campanhaAtiva.descricao}</p>
+                  <p className="text-sm text-muted-foreground">{campanhaAtiva.descricao}</p>
                 )}
                 {Array.isArray(campanhaAtiva.marcas) && campanhaAtiva.marcas.length > 0 && (
-                  <div className="flex flex-wrap gap-1 mt-2">
+                  <div className="flex flex-wrap gap-1">
                     {(campanhaAtiva.marcas as string[]).map((m) => (
                       <Badge
                         key={m}
-                        style={{ backgroundColor: MARCA_CORES[m] ?? "#6B7280", color: "#fff", border: "none" }}
+                        style={{ backgroundColor: MARCA_CORES[m] ?? "#888780", color: "#fff", border: "none" }}
                       >
                         {m}
                       </Badge>
@@ -390,41 +501,45 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
-              <div className="text-right shrink-0 text-xs text-muted-foreground">
-                {campanhaDiasRestantes} dias restantes
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Níveis / prêmios */}
-            {((campanhaAtiva.campanha_niveis ?? []) as any[]).length > 0 && (
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Prêmios</div>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {((campanhaAtiva.campanha_niveis ?? []) as any[])
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    .sort((a: any, b: any) => (a.ordem ?? 0) - (b.ordem ?? 0))
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    .map((nivel: any) => (
-                      <div key={nivel.id} className="rounded-md border bg-white p-2 text-sm">
-                        <div className="font-medium">{nivel.nome}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatBRL(nivel.valor_minimo)} – {formatBRL(nivel.valor_maximo)}
-                        </div>
-                        {nivel.descricao_premio && (
-                          <div className="text-xs text-[#1A6B3A] mt-1">{nivel.descricao_premio}</div>
-                        )}
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
 
-            {/* Progresso */}
+              {/* Direita: tabela de níveis */}
+              {niveisOrdenados.length > 0 && (
+                <div className="flex-1 overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Nível</TableHead>
+                        <TableHead>De</TableHead>
+                        <TableHead>Até</TableHead>
+                        <TableHead>Prêmio</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {niveisOrdenados.map((nivel: any) => (
+                        <TableRow key={nivel.id}>
+                          <TableCell className="font-medium">{nivel.nome}</TableCell>
+                          <TableCell>{formatBRL(nivel.valor_minimo)}</TableCell>
+                          <TableCell>{nivel.valor_maximo == null ? "Sem limite" : formatBRL(nivel.valor_maximo)}</TableCell>
+                          <TableCell className="text-sm">{nivel.descricao_premio}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+
+            {/* Separador */}
+            <div className="border-t" />
+
+            {/* Área inferior: progresso */}
             <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Meta: {formatBRL(campanhaMetaMaxima)}</span>
-                <span className="font-medium">Entrada: {formatBRL(entradaCampanha)}</span>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  Meta: {formatBRL(campanhaMetaMaxima)} → Entrada: {formatBRL(entradaCampanha)} · {campanhaPct.toFixed(1)}% da meta
+                </span>
+                <span className="text-muted-foreground">{campanhaDiasRestantes} dias restantes</span>
               </div>
               <div className="h-2 w-full rounded-full bg-muted">
                 <div
@@ -432,81 +547,32 @@ export default function Dashboard() {
                   style={{ width: `${campanhaPct}%`, backgroundColor: "#1A6B3A" }}
                 />
               </div>
-              <div className="text-xs text-muted-foreground text-right">{campanhaPct.toFixed(1)}% atingido</div>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Previsão do mês */}
-      {metaTotal > 0 && (
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Previsão do mês</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              <div className="text-2xl font-bold">{formatBRL(previsaoMes)}</div>
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>Meta: {formatBRL(metaTotal)}</span>
-                <span className="font-medium">{previsaoPct.toFixed(1)}% previsto</span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-muted">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    previsaoPct >= 80 ? "" : previsaoPct >= 50 ? "bg-yellow-400" : "bg-red-500"
-                  }`}
-                  style={{
-                    width: `${previsaoPct}%`,
-                    ...(previsaoPct >= 80 ? { backgroundColor: "#1A6B3A" } : {}),
-                  }}
-                />
-              </div>
-              <div className="flex gap-4 text-xs text-muted-foreground">
-                <span>Faturado: {formatBRL(fatMesAtual)}</span>
-                <span>Pipeline: {formatBRL(pipelineTotal)}</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Seção 4 — KPIs */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-lg border p-4 bg-yellow-50 border-yellow-300">
+          <div className="text-sm font-medium text-yellow-800">Pré Faturado</div>
+          <div className="text-3xl font-bold mt-1 text-yellow-900">{kpis.preFaturado}</div>
+        </div>
+        <div className="rounded-lg border p-4 bg-purple-50 border-purple-300">
+          <div className="text-sm font-medium text-purple-800">No Sankhya</div>
+          <div className="text-3xl font-bold mt-1 text-purple-900">{kpis.lancados}</div>
+        </div>
+        <div className="rounded-lg border p-4 bg-blue-50 border-blue-300">
+          <div className="text-sm font-medium text-blue-800">Aguardando Faturamento</div>
+          <div className="text-3xl font-bold mt-1 text-blue-900">{kpis.aguardandoFaturamento}</div>
+        </div>
+        <div className="rounded-lg border p-4 bg-red-50 border-red-300">
+          <div className="text-sm font-medium text-red-800">Com Problema</div>
+          <div className="text-3xl font-bold mt-1 text-red-900">{kpis.problemas}</div>
+        </div>
+      </div>
 
-      {/* Meta geral da empresa */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-2">
-          <CardTitle className="text-sm font-medium">Meta geral da empresa</CardTitle>
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-        </CardHeader>
-        <CardContent>
-          {metaTotal === 0 ? (
-            <p className="text-sm text-muted-foreground">Nenhuma meta cadastrada para o mês atual</p>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Meta: {formatBRL(metaTotal)}</span>
-                <span className="font-medium">{metaPct.toFixed(1)}% atingido</span>
-              </div>
-              <div className="text-sm text-muted-foreground">
-                Faturado no mês: {formatBRL(fatMesAtual)}
-              </div>
-              <div className="h-2 w-full rounded-full bg-muted">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    metaPct >= 80 ? "" : metaPct >= 50 ? "bg-yellow-400" : "bg-red-500"
-                  }`}
-                  style={{
-                    width: `${metaPct}%`,
-                    ...(metaPct >= 80 ? { backgroundColor: "#1A6B3A" } : {}),
-                  }}
-                />
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Entrada por marca */}
+      {/* Seção 5 — Entrada por marca */}
       {Object.keys(entradaMarca).length > 0 && (
         <Card>
           <CardHeader className="pb-2">
@@ -529,7 +595,7 @@ export default function Dashboard() {
                           className="h-2 rounded-full"
                           style={{
                             width: `${maxValor > 0 ? (valor / maxValor) * 100 : 0}%`,
-                            backgroundColor: MARCA_CORES[marca] ?? "#6B7280",
+                            backgroundColor: MARCA_CORES[marca] ?? "#888780",
                           }}
                         />
                       </div>
@@ -541,13 +607,75 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Ranking vendedores e produtos */}
+      {/* Seção 6 — Faturamento mensal + Pipeline */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {/* Faturamento mensal — gráfico de barras div+Tailwind */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Faturamento mensal (últimos 6 meses)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end justify-between gap-2 h-48">
+              {fatMensal.map((m, idx) => (
+                <div key={m.mes} className="flex flex-col items-center flex-1 h-full justify-end">
+                  <span className="text-xs font-medium mb-1 text-center leading-tight">
+                    {formatBRL(m.valor)}
+                  </span>
+                  <div
+                    className="w-full rounded-t transition-all"
+                    style={{
+                      height: `${(m.valor / maxFatMensal) * 100}%`,
+                      backgroundColor: idx === fatMensal.length - 1 ? "#1A6B3A" : "#A7C7B7",
+                      minHeight: m.valor > 0 ? "4px" : "0px",
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground mt-1">{m.mes}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Pipeline por status */}
+        <Card className="lg:col-span-1">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Pipeline por status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {[
+                { label: "Pré Faturado", value: kpis.preFaturado, color: "#CA8A04" },
+                { label: "No Sankhya", value: kpis.lancados, color: "#9333EA" },
+                { label: "Aguardando Fat.", value: kpis.aguardandoFaturamento, color: "#2563EB" },
+                { label: "Com Problema", value: kpis.problemas, color: "#DC2626" },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className="font-medium">{value}</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted">
+                    <div
+                      className="h-2 rounded-full"
+                      style={{
+                        width: `${(value / maxKpi) * 100}%`,
+                        backgroundColor: color,
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Seção 7 — Rankings */}
       <div className="grid gap-4 lg:grid-cols-2">
-        {/* Ranking vendedores — todos */}
+        {/* Ranking vendedores */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Ranking de vendedores</CardTitle>
-            <Trophy className="h-4 w-4" style={{ color: "#1A6B3A" }} />
           </CardHeader>
           <CardContent>
             {ranking.length === 0 ? (
@@ -579,156 +707,86 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Ranking produtos — por quantidade ou por valor */}
+        {/* Ranking produtos — tabs quantidade / valor */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Ranking de produtos</CardTitle>
-            <Package className="h-4 w-4" style={{ color: "#1A6B3A" }} />
           </CardHeader>
           <CardContent>
-            <div className="flex gap-2 mb-3">
-              <Button
-                size="sm"
-                variant={tabProdutos === "quantidade" ? "default" : "outline"}
-                onClick={() => setTabProdutos("quantidade")}
-                style={tabProdutos === "quantidade" ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
-              >
-                Por quantidade
-              </Button>
-              <Button
-                size="sm"
-                variant={tabProdutos === "valor" ? "default" : "outline"}
-                onClick={() => setTabProdutos("valor")}
-                style={tabProdutos === "valor" ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
-              >
-                Por valor
-              </Button>
-            </div>
+            <Tabs value={tabProdutos} onValueChange={(v) => setTabProdutos(v as "quantidade" | "valor")}>
+              <TabsList className="mb-3">
+                <TabsTrigger value="quantidade">Por quantidade</TabsTrigger>
+                <TabsTrigger value="valor">Por valor</TabsTrigger>
+              </TabsList>
 
-            {tabProdutos === "quantidade" ? (
-              topSkus.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
-              ) : (
-                <div className="rounded-md border overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10">#</TableHead>
-                        <TableHead>Código</TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Marca</TableHead>
-                        <TableHead className="text-right">Qtd</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {topSkus.map((s, idx) => (
-                        <TableRow key={s.produto_id}>
-                          <TableCell className="font-bold">{idx + 1}</TableCell>
-                          <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
-                          <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">{s.marca}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right text-sm font-medium">{s.quantidade}</TableCell>
+              <TabsContent value="quantidade">
+                {topSkus.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
+                ) : (
+                  <div className="rounded-md border overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10">#</TableHead>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Marca</TableHead>
+                          <TableHead className="text-right">Qtd</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )
-            ) : (
-              topSkusValor.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
-              ) : (
-                <div className="rounded-md border overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10">#</TableHead>
-                        <TableHead>Código</TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Marca</TableHead>
-                        <TableHead className="text-right">Valor</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {topSkusValor.map((s, idx) => (
-                        <TableRow key={s.produto_id}>
-                          <TableCell className="font-bold">{idx + 1}</TableCell>
-                          <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
-                          <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="text-xs">{s.marca}</Badge>
-                          </TableCell>
-                          <TableCell className="text-right text-sm font-medium">{formatBRL(s.valor)}</TableCell>
+                      </TableHeader>
+                      <TableBody>
+                        {topSkus.map((s, idx) => (
+                          <TableRow key={s.produto_id}>
+                            <TableCell className="font-bold">{idx + 1}</TableCell>
+                            <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
+                            <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">{s.marca}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right text-sm font-medium">{s.quantidade}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="valor">
+                {topSkusValor.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
+                ) : (
+                  <div className="rounded-md border overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10">#</TableHead>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Marca</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )
-            )}
+                      </TableHeader>
+                      <TableBody>
+                        {topSkusValor.map((s, idx) => (
+                          <TableRow key={s.produto_id}>
+                            <TableCell className="font-bold">{idx + 1}</TableCell>
+                            <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
+                            <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">{s.marca}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right text-sm font-medium">{formatBRL(s.valor)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
-      </div>
-
-      {/* Painel de pedidos por status do fluxo */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
-            Painel de pedidos
-          </h2>
-          <div className="flex gap-1">
-            {PERIODOS.map(({ key, label }) => (
-              <Button
-                key={key}
-                variant={periodoKpi === key ? "default" : "outline"}
-                size="sm"
-                onClick={() => setPeriodoKpi(key)}
-                style={periodoKpi === key
-                  ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" }
-                  : undefined}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="rounded-lg border p-4 bg-yellow-50 border-yellow-300">
-            <div className="text-sm font-medium text-yellow-800">Pré Faturado</div>
-            <div className="text-3xl font-bold mt-1 text-yellow-900">{kpis.preFaturado}</div>
-            <div className="text-xs text-yellow-700 mt-1">Pedidos recebidos</div>
-          </div>
-          <div className="rounded-lg border p-4 bg-purple-50 border-purple-300">
-            <div className="text-sm font-medium text-purple-800">Pedidos Lançados</div>
-            <div className="text-3xl font-bold mt-1 text-purple-900">{kpis.lancados}</div>
-            <div className="text-xs text-purple-700 mt-1">Cadastrados no Sankhya</div>
-          </div>
-          <div className="rounded-lg border p-4 bg-blue-50 border-blue-300">
-            <div className="text-sm font-medium text-blue-800">Aguardando Faturamento</div>
-            <div className="text-3xl font-bold mt-1 text-blue-900">{kpis.aguardandoFaturamento}</div>
-            <div className="text-xs text-blue-700 mt-1">Enviados à logística</div>
-          </div>
-          <div className="rounded-lg border p-4 bg-green-50 border-green-300">
-            <div className="text-sm font-medium text-green-800">Faturado</div>
-            <div className="text-3xl font-bold mt-1 text-green-900">{kpis.faturado}</div>
-            <div className="text-xs text-green-700 mt-1">Efetivamente faturados</div>
-          </div>
-          <div className={`rounded-lg border p-4 ${
-            kpis.problemas > 0 ? "bg-red-50 border-red-300" : "bg-gray-50 border-gray-200"
-          }`}>
-            <div className={`text-sm font-medium ${kpis.problemas > 0 ? "text-red-800" : "text-gray-600"}`}>
-              Problemas
-            </div>
-            <div className={`text-3xl font-bold mt-1 ${kpis.problemas > 0 ? "text-red-900" : "text-gray-700"}`}>
-              {kpis.problemas}
-            </div>
-            <div className={`text-xs mt-1 ${kpis.problemas > 0 ? "text-red-700" : "text-gray-500"}`}>
-              Com problema
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );
