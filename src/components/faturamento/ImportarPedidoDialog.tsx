@@ -50,6 +50,10 @@ type DadosExcel = {
 
 function calcularLinhas(rows: ProdutoRow[]) {
   return rows.map((r) => {
+    const temDesconto = r.desconto_perfil !== 0 || r.desconto_comercial !== 0 || r.desconto_trade !== 0;
+    if (!temDesconto) {
+      return { ...r, preco_apos_perfil: r.preco_bruto, preco_final: r.preco_bruto, total: r.preco_bruto * r.quantidade };
+    }
     const preco_apos_perfil = r.preco_bruto * (1 - r.desconto_perfil - r.desconto_comercial / 100);
     const preco_final = preco_apos_perfil * (1 - r.desconto_trade / 100);
     return { ...r, preco_apos_perfil, preco_final, total: preco_final * r.quantidade };
@@ -107,11 +111,11 @@ export default function ImportarPedidoDialog({
 
       const tabelaRaw = cel(1, 7); // H2
       const tabela_preco = (tabelaRaw.match(/\d+|suframa/i) ?? [""])[0].toLowerCase();
-      const codigo_cliente = cel(2, 14); // O3
-      const cond_pagamento = cel(4, 14); // O5
+      const codigo_cliente = cel(2, 11); // L3
+      const cond_pagamento = cel(4, 10); // K5
 
-      // Agendamento: linha 12 (índice 11), coluna F (índice 5)
-      const agendamento = cel(11, 5).toUpperCase().includes("SIM");
+      // Agendamento: linha 12 (índice 11), coluna E (índice 4) = "X" ou coluna F (índice 5) = "SIM"
+      const agendamento = cel(11, 4).toUpperCase() === "X" || cel(11, 5).toUpperCase() === "SIM";
 
       const observacoes = cel(11, 12); // M12
 
@@ -123,17 +127,14 @@ export default function ImportarPedidoDialog({
         if (!cod) break;
         const quantidade = Number(row?.[5] ?? 0);   // F
         const preco_bruto = Number(row?.[8] ?? 0);  // I
-        const dPerfilRaw = Number(row?.[9] ?? 0);   // J — decimal
-        const dComRaw = Number(row?.[10] ?? 0);     // K — decimal → converter pra %
-        const dTradeRaw = Number(row?.[12] ?? 0);   // M — decimal → converter pra %
         if (!quantidade || quantidade <= 0) continue;
         rawProdutos.push({
           codigo_jiva: cod,
           quantidade,
           preco_bruto,
-          desconto_perfil: dPerfilRaw,
-          desconto_comercial: dComRaw * 100,
-          desconto_trade: dTradeRaw * 100,
+          desconto_perfil: 0,
+          desconto_comercial: 0,
+          desconto_trade: 0,
           preco_apos_perfil: 0,
           preco_final: 0,
           total: 0,
@@ -176,7 +177,7 @@ export default function ImportarPedidoDialog({
 
       // Buscar cliente
       if (!codigo_cliente) {
-        setErroCliente("Código do cliente não encontrado na planilha (célula N4).");
+        setErroCliente("Código do cliente não encontrado na planilha (célula L3).");
         setDados(dadosExtraidos);
         setCondPag(cond_pagamento);
         setObs(observacoes);
