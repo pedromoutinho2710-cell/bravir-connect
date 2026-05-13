@@ -127,12 +127,13 @@ export default function ImportarPedidoDialog({
         if (!cod) break;
         const quantidade = Number(row?.[5] ?? 0);   // F
         const preco_bruto = Number(row?.[8] ?? 0);  // I
+        const dPerfilRaw = Number(row?.[9] ?? 0);   // J — decimal, ex: 0.20
         if (!quantidade || quantidade <= 0) continue;
         rawProdutos.push({
           codigo_jiva: cod,
           quantidade,
           preco_bruto,
-          desconto_perfil: 0,
+          desconto_perfil: dPerfilRaw,
           desconto_comercial: 0,
           desconto_trade: 0,
           preco_apos_perfil: 0,
@@ -193,39 +194,13 @@ export default function ImportarPedidoDialog({
         setCliente({ ...clData, cluster: clData.cluster ?? "" });
       }
 
-      // Buscar descontos do cluster
-      let produtosFinal = calcularLinhas(produtosResolvidos);
-      if (clData?.cluster) {
-        const produtoIds = produtosResolvidos
-          .filter((p) => p.produto_id)
-          .map((p) => p.produto_id!);
-
-        const { data: descontosData } = await supabase
-          .from("descontos")
-          .select("produto_id, percentual_desconto")
-          .in("produto_id", produtoIds)
-          .eq("perfil_cliente", clData.cluster);
-
-        const descontoMap: Record<string, number> = {};
-        (descontosData ?? []).forEach((d) => {
-          descontoMap[d.produto_id] = Number(d.percentual_desconto);
-        });
-
-        const produtosComDesconto = produtosResolvidos.map((p) => ({
-          ...p,
-          desconto_perfil: p.produto_id ? (descontoMap[p.produto_id] ?? 0) : 0,
-        }));
-
-        produtosFinal = calcularLinhas(produtosComDesconto);
-      }
-
       const dadosExtraidos: DadosExcel = {
         codigo_cliente,
         cond_pagamento,
         agendamento,
         observacoes,
         tabela_preco,
-        produtos: produtosFinal,
+        produtos: calcularLinhas(produtosResolvidos),
       };
 
       setDados(dadosExtraidos);
