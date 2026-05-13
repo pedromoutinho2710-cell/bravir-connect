@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -46,6 +46,14 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+type FormProduto = {
+  tipo: "marca" | "produto";
+  marca?: string;
+  produto_id?: string;
+  produto_nome?: string;
+  produto_codigo?: string;
+};
+
 type Nivel = {
   id?: string;
   nome: string;
@@ -65,6 +73,8 @@ type Campanha = {
   ativa: boolean;
   created_at: string;
   niveis: Nivel[];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  campanha_produtos: any[];
 };
 
 type FormNivel = {
@@ -77,43 +87,55 @@ type FormNivel = {
 type FormData = {
   nome: string;
   descricao: string;
-  marcas: string[];
   data_inicio: string;
   data_fim: string;
   niveis: FormNivel[];
+  produtos: FormProduto[];
 };
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MARCAS = ["Bendita Cânfora", "Laby", "Tattoo do Bem", "InkPro"] as const;
+const MARCAS = [
+  "Bendita Cânfora",
+  "Laby",
+  "Tattoo do Bem",
+  "InkPro",
+  "Bravir",
+  "Alivik",
+] as const;
 
 const MARCA_COLORS: Record<string, string> = {
   "Bendita Cânfora": "bg-purple-100 text-purple-800",
   Laby: "bg-blue-100 text-blue-800",
   "Tattoo do Bem": "bg-green-100 text-green-800",
   InkPro: "bg-orange-100 text-orange-800",
+  Bravir: "bg-red-100 text-red-800",
+  Alivik: "bg-yellow-100 text-yellow-800",
 };
 
 const formVazio = (): FormData => ({
   nome: "",
   descricao: "",
-  marcas: [],
   data_inicio: "",
   data_fim: "",
   niveis: [{ nome: "", valor_minimo: "", valor_maximo: "", descricao_premio: "" }],
+  produtos: [],
 });
 
 // ─── Fetch ────────────────────────────────────────────────────────────────────
 
 async function fetchCampanhas(): Promise<Campanha[]> {
-  const [campanhasRes, niveisRes] = await Promise.all([
+  const [campanhasRes, niveisRes, cpRes] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.from("campanhas") as any).select("*").order("created_at", { ascending: false }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.from("campanha_niveis") as any).select("*").order("ordem", { ascending: true }),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("campanha_produtos") as any).select("*"),
   ]);
   if (campanhasRes.error) throw campanhasRes.error;
   if (niveisRes.error) throw niveisRes.error;
+  if (cpRes.error) throw cpRes.error;
 
   const niveisMap: Record<string, Nivel[]> = {};
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -122,10 +144,42 @@ async function fetchCampanhas(): Promise<Campanha[]> {
     niveisMap[n.campanha_id].push(n as Nivel);
   });
 
+  // Fetch product details for all produto_ids referenced in campanha_produtos
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cpData: any[] = cpRes.data ?? [];
+  const produtoIds = cpData
+    .filter((cp) => cp.tipo === "produto" && cp.produto_id)
+    .map((cp) => cp.produto_id);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let produtoInfoMap: Record<string, any> = {};
+  if (produtoIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: pInfo } = await (supabase.from("produtos") as any)
+      .select("id, codigo_jiva, nome")
+      .in("id", produtoIds);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (pInfo ?? []).forEach((p: any) => { produtoInfoMap[p.id] = p; });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cpMap: Record<string, any[]> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  cpData.forEach((cp: any) => {
+    if (!cpMap[cp.campanha_id]) cpMap[cp.campanha_id] = [];
+    const info = cp.produto_id ? produtoInfoMap[cp.produto_id] : null;
+    cpMap[cp.campanha_id].push({
+      ...cp,
+      produto_nome: info?.nome ?? null,
+      produto_codigo: info?.codigo_jiva ?? null,
+    });
+  });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (campanhasRes.data ?? []).map((c: any) => ({
     ...c,
     niveis: niveisMap[c.id] ?? [],
+    campanha_produtos: cpMap[c.id] ?? [],
   }));
 }
 
@@ -151,6 +205,13 @@ export default function Campanhas() {
   const [form, setForm] = useState<FormData>(formVazio());
   const [salvando, setSalvando] = useState(false);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
+
+  // Busca de produtos específicos
+  const [buscaProduto, setBuscaProduto] = useState("");
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [resultadosBusca, setResultadosBusca] = useState<any[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const timerBusca = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Query ──────────────────────────────────────────────────────────────────
 
@@ -189,6 +250,11 @@ export default function Campanhas() {
         .eq("campanha_id", id);
       if (eNiveis) throw eNiveis;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: eProd } = await (supabase.from("campanha_produtos") as any)
+        .delete()
+        .eq("campanha_id", id);
+      if (eProd) throw eProd;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from("campanhas") as any).delete().eq("id", id);
       if (error) throw error;
     },
@@ -211,6 +277,11 @@ export default function Campanhas() {
       return;
     }
 
+    // Derive marcas array from produtos for backward compat
+    const marcasDerivadas = form.produtos
+      .filter((p) => p.tipo === "marca")
+      .map((p) => p.marca!);
+
     setSalvando(true);
     try {
       let campanhaId = editandoId;
@@ -221,14 +292,13 @@ export default function Campanhas() {
           .update({
             nome: form.nome.trim(),
             descricao: form.descricao.trim(),
-            marcas: form.marcas,
+            marcas: marcasDerivadas,
             data_inicio: form.data_inicio,
             data_fim: form.data_fim,
           })
           .eq("id", editandoId);
         if (error) throw error;
 
-        // Recriar níveis: excluir antigos e inserir novos
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { error: eNiveis } = await (supabase.from("campanha_niveis") as any)
           .delete()
@@ -240,7 +310,7 @@ export default function Campanhas() {
           .insert({
             nome: form.nome.trim(),
             descricao: form.descricao.trim(),
-            marcas: form.marcas,
+            marcas: marcasDerivadas,
             data_inicio: form.data_inicio,
             data_fim: form.data_fim,
             ativa: false,
@@ -266,6 +336,26 @@ export default function Campanhas() {
         if (eNiveis) throw eNiveis;
       }
 
+      // Recriar campanha_produtos
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: eProdDelete } = await (supabase.from("campanha_produtos") as any)
+        .delete()
+        .eq("campanha_id", campanhaId);
+      if (eProdDelete) throw eProdDelete;
+
+      if (form.produtos.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { error: eProdInsert } = await (supabase.from("campanha_produtos") as any).insert(
+          form.produtos.map((p) => ({
+            campanha_id: campanhaId,
+            tipo: p.tipo,
+            marca: p.tipo === "marca" ? p.marca : null,
+            produto_id: p.tipo === "produto" ? p.produto_id : null,
+          }))
+        );
+        if (eProdInsert) throw eProdInsert;
+      }
+
       qc.invalidateQueries({ queryKey: ["campanhas"] });
       toast.success(editandoId ? "Campanha atualizada." : "Campanha criada.");
       fecharDialog();
@@ -281,6 +371,8 @@ export default function Campanhas() {
   function abrirNovo() {
     setEditandoId(null);
     setForm(formVazio());
+    setBuscaProduto("");
+    setResultadosBusca([]);
     setDialogAberto(true);
   }
 
@@ -289,7 +381,6 @@ export default function Campanhas() {
     setForm({
       nome: c.nome,
       descricao: c.descricao ?? "",
-      marcas: c.marcas ?? [],
       data_inicio: c.data_inicio ?? "",
       data_fim: c.data_fim ?? "",
       niveis: c.niveis.map((n) => ({
@@ -298,7 +389,20 @@ export default function Campanhas() {
         valor_maximo: n.valor_maximo !== null ? String(n.valor_maximo) : "",
         descricao_premio: n.descricao_premio ?? "",
       })),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      produtos: (c.campanha_produtos ?? []).map((cp: any): FormProduto =>
+        cp.tipo === "marca"
+          ? { tipo: "marca", marca: cp.marca }
+          : {
+              tipo: "produto",
+              produto_id: cp.produto_id,
+              produto_nome: cp.produto_nome ?? "",
+              produto_codigo: cp.produto_codigo ?? "",
+            }
+      ),
     });
+    setBuscaProduto("");
+    setResultadosBusca([]);
     setDialogAberto(true);
   }
 
@@ -306,6 +410,8 @@ export default function Campanhas() {
     setDialogAberto(false);
     setEditandoId(null);
     setForm(formVazio());
+    setBuscaProduto("");
+    setResultadosBusca([]);
   }
 
   // ── Níveis helpers ────────────────────────────────────────────────────────
@@ -329,15 +435,73 @@ export default function Campanhas() {
     });
   }
 
-  // ── Marcas helpers ────────────────────────────────────────────────────────
+  // ── Produtos helpers ──────────────────────────────────────────────────────
 
-  function toggleMarca(marca: string) {
+  function toggleProdutoMarca(marca: string) {
+    setForm((f) => {
+      const jaExiste = f.produtos.some((p) => p.tipo === "marca" && p.marca === marca);
+      if (jaExiste) {
+        return { ...f, produtos: f.produtos.filter((p) => !(p.tipo === "marca" && p.marca === marca)) };
+      }
+      return { ...f, produtos: [...f.produtos, { tipo: "marca", marca }] };
+    });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function adicionarProduto(p: any) {
+    setForm((f) => {
+      if (f.produtos.some((x) => x.tipo === "produto" && x.produto_id === p.id)) return f;
+      return {
+        ...f,
+        produtos: [
+          ...f.produtos,
+          {
+            tipo: "produto" as const,
+            produto_id: p.id,
+            produto_nome: p.nome,
+            produto_codigo: p.codigo_jiva,
+          },
+        ],
+      };
+    });
+    setBuscaProduto("");
+    setResultadosBusca([]);
+  }
+
+  function removerProduto(produto_id: string) {
     setForm((f) => ({
       ...f,
-      marcas: f.marcas.includes(marca)
-        ? f.marcas.filter((m) => m !== marca)
-        : [...f.marcas, marca],
+      produtos: f.produtos.filter((p) => !(p.tipo === "produto" && p.produto_id === produto_id)),
     }));
+  }
+
+  async function buscarProdutos(busca: string) {
+    setBuscando(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from("produtos") as any)
+        .select("id, codigo_jiva, nome, marca")
+        .or(`nome.ilike.%${busca}%,codigo_jiva.ilike.%${busca}%`)
+        .eq("ativo", true)
+        .limit(10);
+      if (error) throw error;
+      setResultadosBusca(data ?? []);
+    } catch {
+      setResultadosBusca([]);
+    } finally {
+      setBuscando(false);
+    }
+  }
+
+  function handleBuscaChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const v = e.target.value;
+    setBuscaProduto(v);
+    if (timerBusca.current) clearTimeout(timerBusca.current);
+    if (v.length >= 3) {
+      timerBusca.current = setTimeout(() => buscarProdutos(v), 400);
+    } else {
+      setResultadosBusca([]);
+    }
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -426,8 +590,8 @@ export default function Campanhas() {
               </div>
             </CardHeader>
 
-            {c.niveis.length > 0 && (
-              <CardContent className="pt-0">
+            <CardContent className="pt-0 space-y-4">
+              {c.niveis.length > 0 && (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -450,8 +614,42 @@ export default function Campanhas() {
                     ))}
                   </TableBody>
                 </Table>
-              </CardContent>
-            )}
+              )}
+
+              {/* Participantes da campanha */}
+              {(c.campanha_produtos ?? []).length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-muted-foreground">Participantes da campanha</p>
+                  <div className="flex flex-wrap gap-2">
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    {(c.campanha_produtos as any[])
+                      .filter((cp) => cp.tipo === "marca")
+                      .map((cp) => (
+                        <span
+                          key={cp.id}
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium ${MARCA_COLORS[cp.marca] ?? "bg-gray-100 text-gray-700"}`}
+                        >
+                          {cp.marca}
+                        </span>
+                      ))}
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    {(c.campanha_produtos as any[])
+                      .filter((cp) => cp.tipo === "produto")
+                      .map((cp) => (
+                        <span
+                          key={cp.id}
+                          className="flex items-center gap-1 bg-secondary text-secondary-foreground text-xs px-2 py-0.5 rounded-full"
+                        >
+                          {cp.produto_codigo && (
+                            <span className="font-medium">{cp.produto_codigo}</span>
+                          )}
+                          <span>{cp.produto_nome ?? cp.produto_id}</span>
+                        </span>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
           </Card>
         ))}
 
@@ -507,25 +705,6 @@ export default function Campanhas() {
                   value={form.data_fim}
                   onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))}
                 />
-              </div>
-            </div>
-
-            {/* Marcas */}
-            <div className="space-y-2">
-              <Label>Marcas participantes</Label>
-              <div className="flex flex-wrap gap-4">
-                {MARCAS.map((m) => (
-                  <div key={m} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`marca-${m}`}
-                      checked={form.marcas.includes(m)}
-                      onCheckedChange={() => toggleMarca(m)}
-                    />
-                    <Label htmlFor={`marca-${m}`} className="font-normal cursor-pointer">
-                      {m}
-                    </Label>
-                  </div>
-                ))}
               </div>
             </div>
 
@@ -608,6 +787,93 @@ export default function Campanhas() {
                 </div>
               ))}
             </div>
+
+            {/* Marcas e produtos participantes */}
+            <div className="space-y-4 border rounded-lg p-4">
+              <Label className="text-base font-semibold">Marcas e produtos participantes</Label>
+
+              {/* Por marca */}
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Por marca</p>
+                <div className="flex flex-wrap gap-4">
+                  {MARCAS.map((m) => (
+                    <div key={m} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`pmarca-${m}`}
+                        checked={form.produtos.some((p) => p.tipo === "marca" && p.marca === m)}
+                        onCheckedChange={() => toggleProdutoMarca(m)}
+                      />
+                      <Label htmlFor={`pmarca-${m}`} className="font-normal cursor-pointer">
+                        {m}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Produtos específicos */}
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Produtos específicos</p>
+                <div className="relative">
+                  <Input
+                    value={buscaProduto}
+                    onChange={handleBuscaChange}
+                    placeholder="Buscar por nome ou código Jiva..."
+                  />
+                  {buscando && (
+                    <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                  )}
+                </div>
+
+                {resultadosBusca.length > 0 && (
+                  <div className="border rounded-md divide-y max-h-48 overflow-y-auto bg-background shadow-sm">
+                    {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                    {resultadosBusca.map((p: any) => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2 hover:bg-muted text-sm flex items-center gap-2"
+                        onClick={() => adicionarProduto(p)}
+                      >
+                        <span className="font-medium text-muted-foreground">{p.codigo_jiva}</span>
+                        <span>{p.nome}</span>
+                        {p.marca && (
+                          <span className={`ml-auto text-xs px-1.5 py-0.5 rounded-full ${MARCA_COLORS[p.marca] ?? "bg-gray-100 text-gray-700"}`}>
+                            {p.marca}
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Chips dos produtos selecionados */}
+                {form.produtos.filter((p) => p.tipo === "produto").length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {form.produtos
+                      .filter((p) => p.tipo === "produto")
+                      .map((p) => (
+                        <span
+                          key={p.produto_id}
+                          className="flex items-center gap-1 bg-secondary text-secondary-foreground text-xs px-2 py-1 rounded-full"
+                        >
+                          {p.produto_codigo && (
+                            <span className="font-medium">{p.produto_codigo}</span>
+                          )}
+                          <span>{p.produto_nome}</span>
+                          <button
+                            type="button"
+                            className="ml-1 hover:text-destructive"
+                            onClick={() => removerProduto(p.produto_id!)}
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <DialogFooter className="pt-2">
@@ -628,7 +894,7 @@ export default function Campanhas() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir campanha?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação é irreversível. Todos os níveis da campanha também serão excluídos.
+              Esta ação é irreversível. Todos os níveis e produtos da campanha também serão excluídos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
