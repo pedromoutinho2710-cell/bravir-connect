@@ -31,6 +31,7 @@ import ImportarClientes from "./pages/admin/ImportarClientes";
 import ClienteDetalhe from "./pages/ClienteDetalhe";
 import TabelasPreco from "./pages/admin/TabelasPreco";
 import Configuracoes from "./pages/admin/Configuracoes";
+import Campanhas from "./pages/admin/Campanhas";
 import DashboardLogistica from "./pages/logistica/DashboardLogistica";
 import FilaLogistica from "./pages/logistica/FilaLogistica";
 import SiteLanding from "./pages/site/SiteLanding";
@@ -72,6 +73,7 @@ const App = () => (
               <Route path="/admin/importar-clientes" element={<ImportarClientes />} />
               <Route path="/admin/tabelas-preco" element={<TabelasPreco />} />
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
+              <Route path="/admin/campanhas" element={<Campanhas />} />
             </Route>
 
             {/* Rotas de vendedor — acessíveis por vendedor e admin */}
