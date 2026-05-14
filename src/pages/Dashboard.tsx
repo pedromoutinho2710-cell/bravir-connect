@@ -87,6 +87,15 @@ const MARCA_CORES: Record<string, string> = {
 
 const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
+const NIVEL_ORDEM: Record<string, number> = { "Bronze": 1, "Prata": 2, "Ouro": 3, "Diamante": 4 };
+
+function nivelMaior(a: string | null, b: string | null): string | null {
+  if (!a && !b) return null;
+  if (!a) return b;
+  if (!b) return a;
+  return (NIVEL_ORDEM[a] ?? 0) >= (NIVEL_ORDEM[b] ?? 0) ? a : b;
+}
+
 export default function Dashboard() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [periodoKpi, setPeriodoKpi] = useState<Periodo>("mes");
@@ -116,6 +125,8 @@ export default function Dashboard() {
     fatCampanha: number;
     nivel: string | null;
     metaVendedor: number | null;
+    categoriaInicial: string | null;
+    nivelExibido: string | null;
   }[]>([]);
 
   // Filtro de período customizado
@@ -339,13 +350,13 @@ export default function Dashboard() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: metasVendedorData } = await (supabase as any)
             .from("campanha_metas_vendedor")
-            .select("vendedor_id, meta_valor")
+            .select("vendedor_id, meta_valor, categoria")
             .eq("campanha_id", campanha.id);
 
-          const metasVendedorMap: Record<string, number> = {};
+          const metasVendedorMap: Record<string, { meta: number; categoria: string | null }> = {};
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ((metasVendedorData ?? []) as any[]).forEach((m: any) => {
-            metasVendedorMap[m.vendedor_id] = Number(m.meta_valor);
+            metasVendedorMap[m.vendedor_id] = { meta: Number(m.meta_valor), categoria: m.categoria ?? null };
           });
 
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -359,8 +370,9 @@ export default function Dashboard() {
               const fat = vendedorFatCamp[v.vendedor_id] ?? 0;
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const nivel = (niveisCamp.find((n: any) => fat >= Number(n.valor_minimo)) as any)?.nome ?? null;
-              const metaVendedor = metasVendedorMap[v.vendedor_id] ?? null;
-              return { vendedor_id: v.vendedor_id, nome: v.nome, fatCampanha: fat, nivel, metaVendedor };
+              const metaVendedor = metasVendedorMap[v.vendedor_id]?.meta ?? null;
+              const categoriaInicial = metasVendedorMap[v.vendedor_id]?.categoria ?? null;
+              return { vendedor_id: v.vendedor_id, nome: v.nome, fatCampanha: fat, nivel, metaVendedor, categoriaInicial, nivelExibido: nivelMaior(categoriaInicial, nivel) };
             })
             .sort((a, b) => b.fatCampanha - a.fatCampanha);
 
@@ -465,7 +477,9 @@ export default function Dashboard() {
     ? niveisOrdenados.reduce((acc: any, n: any) => (Number(n.valor_minimo) > Number(acc.valor_minimo) ? n : acc), niveisOrdenados[0])
     : null;
   const campanhaMetaMaxima = nivelMaisAlto ? Number(nivelMaisAlto.valor_minimo) : 0;
-  const campanhaPct = campanhaMetaMaxima > 0 ? Math.min((entradaCampanha / campanhaMetaMaxima) * 100, 100) : 0;
+  void campanhaMetaMaxima;
+  const metaTotalCampanha = rankingCampanha.reduce((s, r) => s + (r.metaVendedor ?? 0), 0);
+  const campanhaPct = metaTotalCampanha > 0 ? Math.min((entradaCampanha / metaTotalCampanha) * 100, 100) : 0;
   const campanhaDiasRestantes = campanhaAtiva
     ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
     : 0;
@@ -496,21 +510,6 @@ export default function Dashboard() {
     if (n.includes("prata")) return "bg-gray-100 text-gray-700 hover:bg-gray-100";
     if (n.includes("bronze")) return "bg-orange-100 text-orange-800 hover:bg-orange-100";
     return "bg-gray-100 text-gray-700 hover:bg-gray-100";
-  };
-
-  const statusVendedorCamp = (
-    fatCampanha: number,
-    metaVendedor: number | null,
-    totalDias: number,
-    diasPassados: number
-  ): "verde" | "amarelo" | "vermelho" | "neutro" => {
-    if (!metaVendedor || totalDias === 0 || diasPassados === 0) return "neutro";
-    const ritmoNecessario = metaVendedor / totalDias;
-    const ritmoAtual = fatCampanha / diasPassados;
-    const ratio = ritmoNecessario > 0 ? ritmoAtual / ritmoNecessario : 1;
-    if (ratio >= 1) return "verde";
-    if (ratio >= 0.9) return "amarelo";
-    return "vermelho";
   };
 
   const maxFatMensal = Math.max(...fatMensal.map((m) => m.valor), 1);
@@ -715,7 +714,7 @@ export default function Dashboard() {
             <div className="space-y-2">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">
-                  Meta: {formatBRL(campanhaMetaMaxima)} → Entrada: {formatBRL(entradaCampanha)} · {campanhaPct.toFixed(1)}% da meta
+                  Meta: {formatBRL(metaTotalCampanha)} → Entrada: {formatBRL(entradaCampanha)} · {campanhaPct.toFixed(1)}% da meta
                 </span>
                 <span className="text-muted-foreground">{campanhaDiasRestantes} dias restantes</span>
               </div>
@@ -735,44 +734,117 @@ export default function Dashboard() {
                   <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
                     Desempenho por vendedor
                   </p>
-                  <div className="space-y-1.5">
+                  <div>
                     {rankingCampanha.map((r, idx) => {
-                      const status = statusVendedorCamp(r.fatCampanha, r.metaVendedor, campanhaTotalDias, campanhaDiasPassados);
-                      const pctAtingimento = r.metaVendedor && r.metaVendedor > 0
-                        ? Math.min((r.fatCampanha / r.metaVendedor) * 100, 100)
+                      const diasRestantes = campanhaTotalDias - campanhaDiasPassados;
+                      const metaVendedor = r.metaVendedor;
+                      const fatCampanha = r.fatCampanha;
+                      const pctAtingimento = metaVendedor && metaVendedor > 0
+                        ? Math.min((fatCampanha / metaVendedor) * 100, 100)
                         : 0;
-                      const barWidth = pctAtingimento;
-                      const statusColor =
-                        status === "verde" ? "#22c55e" :
-                        status === "amarelo" ? "#eab308" :
-                        status === "vermelho" ? "#ef4444" : "#d1d5db";
+                      const pctEsperado = campanhaTotalDias > 0
+                        ? (campanhaDiasPassados / campanhaTotalDias) * 100
+                        : 0;
+                      const ritmoNecessario = metaVendedor && campanhaTotalDias > 0
+                        ? metaVendedor / campanhaTotalDias
+                        : null;
+                      const ritmoAtual = campanhaDiasPassados > 0
+                        ? fatCampanha / campanhaDiasPassados
+                        : 0;
+                      const status = !metaVendedor ? "sem_meta"
+                        : ritmoNecessario !== null && ritmoAtual >= ritmoNecessario ? "verde"
+                        : ritmoNecessario !== null && ritmoAtual >= ritmoNecessario * 0.9 ? "amarelo"
+                        : "vermelho";
+                      const statusLabel = status === "verde" ? "Em linha"
+                        : status === "amarelo" ? "Próximo"
+                        : status === "vermelho" ? "Abaixo"
+                        : "Sem meta";
+                      const statusBadgeClass = status === "verde" ? "bg-green-100 text-green-800"
+                        : status === "amarelo" ? "bg-yellow-100 text-yellow-800"
+                        : status === "vermelho" ? "bg-red-100 text-red-800"
+                        : "bg-gray-100 text-gray-600";
+                      const barColor = status === "verde" ? "#22c55e"
+                        : status === "amarelo" ? "#eab308"
+                        : status === "vermelho" ? "#ef4444"
+                        : "#d1d5db";
+                      const metaPorDia = metaVendedor && campanhaTotalDias > 0
+                        ? metaVendedor / campanhaTotalDias
+                        : null;
+                      const metaAtingida = metaVendedor != null && fatCampanha >= metaVendedor;
+                      const necessarioPorDia = metaVendedor != null && diasRestantes > 0
+                        ? (metaVendedor - fatCampanha) / diasRestantes
+                        : null;
+                      const diffPct = pctAtingimento - pctEsperado;
+                      const iniciais = r.nome.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
 
                       return (
-                        <div key={r.vendedor_id} className="flex items-center gap-2 text-sm">
-                          <span className="w-5 text-muted-foreground text-right shrink-0 font-medium">{idx + 1}</span>
-                          <span className="flex-1 min-w-0 truncate">{r.nome}</span>
-                          <span className="font-medium shrink-0 tabular-nums">{formatBRL(r.fatCampanha)}</span>
-                          {/* Barra inline */}
-                          <div className="h-1 rounded-full bg-muted shrink-0 overflow-hidden" style={{ width: 80 }}>
-                            <div
-                              className="h-1 rounded-full"
-                              style={{ width: `${barWidth}%`, backgroundColor: statusColor }}
-                            />
+                        <div
+                          key={r.vendedor_id}
+                          className={`py-4 ${idx < rankingCampanha.length - 1 ? "border-b" : ""}`}
+                        >
+                          {/* Header */}
+                          <div className="flex items-center gap-2 mb-3">
+                            <div className="w-8 h-8 rounded-full bg-[#1A6B3A] text-white flex items-center justify-center text-xs font-bold shrink-0">
+                              {iniciais}
+                            </div>
+                            <span className="flex-1 font-medium text-sm">{r.nome}</span>
+                            <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${statusBadgeClass}`}>
+                              {statusLabel}
+                            </span>
+                            {r.nivelExibido && (
+                              <Badge className={`${nivelBadgeClass(r.nivelExibido)} text-xs`}>{r.nivelExibido}</Badge>
+                            )}
                           </div>
-                          <span className="text-muted-foreground shrink-0 tabular-nums" style={{ width: 36, textAlign: "right" }}>
-                            {r.metaVendedor ? `${pctAtingimento.toFixed(0)}%` : "—"}
-                          </span>
-                          {/* Status dot */}
-                          <span
-                            className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: statusColor }}
-                            title={status}
-                          />
-                          {/* Nível badge */}
-                          {r.nivel ? (
-                            <Badge className={`${nivelBadgeClass(r.nivel)} shrink-0 text-xs`}>{r.nivel}</Badge>
-                          ) : (
-                            <span className="shrink-0" style={{ width: 56 }} />
+
+                          {/* 4 metric cards */}
+                          <div className="grid grid-cols-4 gap-2 mb-3">
+                            <div className="rounded-md border p-2 text-center">
+                              <div className="text-xs text-muted-foreground mb-1">Meta</div>
+                              <div className="text-xs font-medium">
+                                {metaVendedor ? formatBRL(metaVendedor) : "Sem meta"}
+                              </div>
+                            </div>
+                            <div className="rounded-md border p-2 text-center">
+                              <div className="text-xs text-muted-foreground mb-1">Realizado</div>
+                              <div className={`text-xs font-medium ${status === "verde" ? "text-green-600" : status === "vermelho" ? "text-red-600" : ""}`}>
+                                {formatBRL(fatCampanha)}
+                              </div>
+                            </div>
+                            <div className="rounded-md border p-2 text-center">
+                              <div className="text-xs text-muted-foreground mb-1">Meta/dia</div>
+                              <div className="text-xs font-medium">
+                                {metaPorDia != null ? `${formatBRL(metaPorDia)}/dia` : "—"}
+                              </div>
+                            </div>
+                            <div className="rounded-md border p-2 text-center">
+                              <div className="text-xs text-muted-foreground mb-1">Nec. p/ fechar</div>
+                              <div className={`text-xs font-medium ${metaAtingida ? "text-green-600" : ""}`}>
+                                {metaAtingida
+                                  ? "Meta atingida!"
+                                  : necessarioPorDia != null
+                                  ? `${formatBRL(necessarioPorDia)}/dia`
+                                  : "—"}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Progress bar */}
+                          {metaVendedor != null && (
+                            <div>
+                              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                                <span>{pctAtingimento.toFixed(1)}%</span>
+                                <span>
+                                  Deveria estar em {pctEsperado.toFixed(1)}%{" "}
+                                  · {diffPct >= 0 ? "+" : ""}{diffPct.toFixed(1)}% {diffPct >= 0 ? "acima" : "abaixo"}
+                                </span>
+                              </div>
+                              <div className="h-2 w-full rounded-full bg-muted">
+                                <div
+                                  className="h-2 rounded-full transition-all"
+                                  style={{ width: `${pctAtingimento}%`, backgroundColor: barColor }}
+                                />
+                              </div>
+                            </div>
                           )}
                         </div>
                       );
