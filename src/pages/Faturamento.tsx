@@ -1915,7 +1915,7 @@ export default function Faturamento() {
                               </td>
                               <td className="text-center px-2 py-2">{i.cx_embarque}</td>
                               <td className="text-center px-2 py-2">{i.quantidade}</td>
-                              <td className="text-center px-2 py-2">{(i.preco_bruto > 0 ? (1 - i.preco_final / i.preco_bruto) * 100 : 0).toFixed(2)}%</td>
+                              <td className="text-center px-2 py-2">{(i.desconto_perfil * 100).toFixed(0)}%</td>
                               <td className="text-center px-2 py-2">{i.desconto_comercial.toFixed(1)}%</td>
                               <td className="text-center px-2 py-2">{i.desconto_trade.toFixed(1)}%</td>
                               <td className="text-right px-3 py-2">{formatBRL(i.preco_bruto)}</td>
