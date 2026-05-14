@@ -110,6 +110,7 @@ export default function Dashboard() {
   const [entradaCampanha, setEntradaCampanha] = useState(0);
   const [entradaMarca, setEntradaMarca] = useState<Record<string, number>>({});
   const [fatMensal, setFatMensal] = useState<{ mes: string; valor: number }[]>([]);
+  const [rankingCampanha, setRankingCampanha] = useState<{ vendedor_id: string; nome: string; fatCampanha: number; nivel: string | null }[]>([]);
 
   useEffect(() => {
     setLoading(true);
@@ -241,6 +242,7 @@ export default function Dashboard() {
           setEntradaCampanha(entrada);
         } else {
           setEntradaCampanha(0);
+          setRankingCampanha([]);
         }
 
         // Ranking vendedores — todos, sem slice
@@ -275,6 +277,66 @@ export default function Dashboard() {
           }))
           .sort((a, b) => b.faturamento - a.faturamento);
         setRanking(rankingList);
+
+        // Ranking campanha por vendedor
+        if (campanha) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: campanhaProdutosData } = await (supabase as any)
+            .from("campanha_produtos")
+            .select("tipo, produto_id, marca")
+            .eq("campanha_id", campanha.id);
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const marcasCampanha = new Set<string>(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ((campanhaProdutosData ?? []) as any[]).filter((cp: any) => cp.tipo === "marca").map((cp: any) => cp.marca as string)
+          );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const produtosCampanha = new Set<string>(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ((campanhaProdutosData ?? []) as any[]).filter((cp: any) => cp.tipo === "produto").map((cp: any) => cp.produto_id as string)
+          );
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: pedCampDetalhe } = await (supabase as any)
+            .from("pedidos")
+            .select("vendedor_id, itens_pedido(total_item, produto_id, produto:produtos(marca))")
+            .gte("data_pedido", campanha.data_inicio)
+            .lte("data_pedido", campanha.data_fim)
+            .not("status", "in", '("cancelado","devolvido","rascunho")');
+
+          const vendedorFatCamp: Record<string, number> = {};
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ((pedCampDetalhe ?? []) as any[]).forEach((p: any) => {
+            if (!p.vendedor_id) return;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (p.itens_pedido ?? []).forEach((item: any) => {
+              const marca = item.produto?.marca as string | undefined;
+              const prodId = item.produto_id as string | undefined;
+              if ((marca && marcasCampanha.has(marca)) || (prodId && produtosCampanha.has(prodId))) {
+                if (!vendedorFatCamp[p.vendedor_id]) vendedorFatCamp[p.vendedor_id] = 0;
+                vendedorFatCamp[p.vendedor_id] += Number(item.total_item);
+              }
+            });
+          });
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const niveisCamp = [...((campanha.campanha_niveis ?? []) as any[])].sort(
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (a: any, b: any) => Number(b.valor_minimo) - Number(a.valor_minimo)
+          );
+
+          const rankingCampList = rankingList
+            .map((v) => {
+              const fat = vendedorFatCamp[v.vendedor_id] ?? 0;
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const nivel = (niveisCamp.find((n: any) => fat >= Number(n.valor_minimo)) as any)?.nome ?? null;
+              return { vendedor_id: v.vendedor_id, nome: v.nome, fatCampanha: fat, nivel };
+            })
+            .sort((a, b) => b.fatCampanha - a.fatCampanha);
+
+          setRankingCampanha(rankingCampList);
+        }
 
         // Top SKUs por quantidade e por valor — todos, sem slice
         const skuAgg: Record<string, { quantidade: number; valor: number }> = {};
@@ -390,10 +452,34 @@ export default function Dashboard() {
     return "bg-red-100 text-red-800";
   };
 
+  const nivelBadgeClass = (nivel: string) => {
+    const n = nivel.toLowerCase();
+    if (n.includes("diamante")) return "bg-purple-100 text-purple-800 hover:bg-purple-100";
+    if (n.includes("ouro")) return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
+    if (n.includes("prata")) return "bg-gray-100 text-gray-700 hover:bg-gray-100";
+    if (n.includes("bronze")) return "bg-orange-100 text-orange-800 hover:bg-orange-100";
+    return "bg-gray-100 text-gray-700 hover:bg-gray-100";
+  };
+
   const maxFatMensal = Math.max(...fatMensal.map((m) => m.valor), 1);
 
   // Pipeline card bar scale
   const maxKpi = Math.max(kpis.preFaturado, kpis.lancados, kpis.aguardandoFaturamento, kpis.problemas, 1);
+
+  // Donut chart — entrada por marca
+  const totalGeralMarca = Object.values(entradaMarca).reduce((s, v) => s + v, 0);
+  const donutCircumference = 2 * Math.PI * 70;
+  const marcasSorted = Object.entries(entradaMarca).sort(([, a], [, b]) => b - a);
+  const donutSlices = (() => {
+    let cum = 0;
+    return marcasSorted.map(([marca, valor]) => {
+      const pct = totalGeralMarca > 0 ? valor / totalGeralMarca : 0;
+      const dash = pct * donutCircumference;
+      const offset = -(cum * donutCircumference);
+      cum += pct;
+      return { marca, valor, pct, dash, offset };
+    });
+  })();
 
   // Keep existing derived values used elsewhere
   void metaPct;
@@ -552,6 +638,45 @@ export default function Dashboard() {
         </Card>
       )}
 
+      {/* Seção 3b — Ranking campanha vendedores */}
+      {campanhaAtiva !== null && rankingCampanha.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">
+              Desempenho na campanha — {campanhaAtiva.nome}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">#</TableHead>
+                    <TableHead>Vendedor</TableHead>
+                    <TableHead className="text-right">Faturamento campanha</TableHead>
+                    <TableHead>Nível</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rankingCampanha.map((r, idx) => (
+                    <TableRow key={r.vendedor_id}>
+                      <TableCell className="font-bold">{idx + 1}</TableCell>
+                      <TableCell className="text-sm">{r.nome}</TableCell>
+                      <TableCell className="text-right text-sm font-medium">{formatBRL(r.fatCampanha)}</TableCell>
+                      <TableCell>
+                        {r.nivel ? (
+                          <Badge className={nivelBadgeClass(r.nivel)}>{r.nivel}</Badge>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Seção 4 — KPIs */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-lg border p-4 bg-yellow-50 border-yellow-300">
@@ -579,6 +704,43 @@ export default function Dashboard() {
             <CardTitle className="text-sm font-medium">Entrada por marca</CardTitle>
           </CardHeader>
           <CardContent>
+            {/* Donut + legenda */}
+            <div className="flex flex-col sm:flex-row gap-6 items-center mb-6">
+              {/* Gráfico de rosca */}
+              <div className="shrink-0">
+                <svg viewBox="0 0 160 160" className="w-40 h-40">
+                  <circle cx="80" cy="80" r="70" fill="none" stroke="#e5e7eb" strokeWidth="28" />
+                  {donutSlices.map(({ marca, dash, offset }) => (
+                    <circle
+                      key={marca}
+                      cx="80" cy="80" r="70"
+                      fill="none"
+                      stroke={MARCA_CORES[marca] ?? "#888780"}
+                      strokeWidth="28"
+                      strokeDasharray={`${dash} ${donutCircumference - dash}`}
+                      strokeDashoffset={offset}
+                      transform="rotate(-90 80 80)"
+                    />
+                  ))}
+                  <text x="80" y="75" textAnchor="middle" fontSize="9" fill="#6b7280">Total</text>
+                  <text x="80" y="90" textAnchor="middle" fontSize="10" fontWeight="600" fill="#1f2937">
+                    {formatBRL(totalGeralMarca)}
+                  </text>
+                </svg>
+              </div>
+              {/* Legenda */}
+              <div className="flex flex-col gap-2 flex-1">
+                {donutSlices.map(({ marca, valor, pct }) => (
+                  <div key={marca} className="flex items-center gap-2 text-sm">
+                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: MARCA_CORES[marca] ?? "#888780" }} />
+                    <span className="font-medium flex-1">{marca}</span>
+                    <span className="text-muted-foreground">{formatBRL(valor)}</span>
+                    <span className="text-muted-foreground w-12 text-right">{(pct * 100).toFixed(1)}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            {/* Barras horizontais */}
             <div className="space-y-3">
               {(() => {
                 const maxValor = Math.max(...Object.values(entradaMarca));
@@ -681,27 +843,29 @@ export default function Dashboard() {
             {ranking.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
             ) : (
-              <div className="rounded-md border overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-10">#</TableHead>
-                      <TableHead>Nome</TableHead>
-                      <TableHead className="text-right">Faturamento</TableHead>
-                      <TableHead className="text-right">Pedidos</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {ranking.map((r, idx) => (
-                      <TableRow key={r.vendedor_id}>
-                        <TableCell className="font-bold">{idx + 1}</TableCell>
-                        <TableCell className="text-sm">{r.nome}</TableCell>
-                        <TableCell className="text-right text-sm font-medium">{formatBRL(r.faturamento)}</TableCell>
-                        <TableCell className="text-right text-sm">{r.numPedidos}</TableCell>
+              <div className="max-h-[500px] overflow-y-auto">
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-10">#</TableHead>
+                        <TableHead>Nome</TableHead>
+                        <TableHead className="text-right">Faturamento</TableHead>
+                        <TableHead className="text-right">Pedidos</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {ranking.map((r, idx) => (
+                        <TableRow key={r.vendedor_id}>
+                          <TableCell className="font-bold">{idx + 1}</TableCell>
+                          <TableCell className="text-sm">{r.nome}</TableCell>
+                          <TableCell className="text-right text-sm font-medium">{formatBRL(r.faturamento)}</TableCell>
+                          <TableCell className="text-right text-sm">{r.numPedidos}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
               </div>
             )}
           </CardContent>
@@ -723,31 +887,33 @@ export default function Dashboard() {
                 {topSkus.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
                 ) : (
-                  <div className="rounded-md border overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-10">#</TableHead>
-                          <TableHead>Código</TableHead>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>Marca</TableHead>
-                          <TableHead className="text-right">Qtd</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {topSkus.map((s, idx) => (
-                          <TableRow key={s.produto_id}>
-                            <TableCell className="font-bold">{idx + 1}</TableCell>
-                            <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
-                            <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="text-xs">{s.marca}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right text-sm font-medium">{s.quantidade}</TableCell>
+                  <div className="max-h-[500px] overflow-y-auto">
+                    <div className="rounded-md border overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10">#</TableHead>
+                            <TableHead>Código</TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead>Marca</TableHead>
+                            <TableHead className="text-right">Qtd</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {topSkus.map((s, idx) => (
+                            <TableRow key={s.produto_id}>
+                              <TableCell className="font-bold">{idx + 1}</TableCell>
+                              <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
+                              <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">{s.marca}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right text-sm font-medium">{s.quantidade}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 )}
               </TabsContent>
@@ -756,31 +922,33 @@ export default function Dashboard() {
                 {topSkusValor.length === 0 ? (
                   <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
                 ) : (
-                  <div className="rounded-md border overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead className="w-10">#</TableHead>
-                          <TableHead>Código</TableHead>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>Marca</TableHead>
-                          <TableHead className="text-right">Valor</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {topSkusValor.map((s, idx) => (
-                          <TableRow key={s.produto_id}>
-                            <TableCell className="font-bold">{idx + 1}</TableCell>
-                            <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
-                            <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="text-xs">{s.marca}</Badge>
-                            </TableCell>
-                            <TableCell className="text-right text-sm font-medium">{formatBRL(s.valor)}</TableCell>
+                  <div className="max-h-[500px] overflow-y-auto">
+                    <div className="rounded-md border overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="w-10">#</TableHead>
+                            <TableHead>Código</TableHead>
+                            <TableHead>Nome</TableHead>
+                            <TableHead>Marca</TableHead>
+                            <TableHead className="text-right">Valor</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {topSkusValor.map((s, idx) => (
+                            <TableRow key={s.produto_id}>
+                              <TableCell className="font-bold">{idx + 1}</TableCell>
+                              <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
+                              <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="text-xs">{s.marca}</Badge>
+                              </TableCell>
+                              <TableCell className="text-right text-sm font-medium">{formatBRL(s.valor)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                 )}
               </TabsContent>
