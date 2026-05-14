@@ -33,6 +33,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -42,6 +49,7 @@ import {
   Trash2,
   X,
   Megaphone,
+  Check,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -63,6 +71,15 @@ type Nivel = {
   ordem: number;
 };
 
+type MetaVendedor = {
+  id?: string;
+  vendedor_id: string;
+  nome: string;
+  meta_valor: number;
+  realizado?: number;
+  nivel_atual?: string | null;
+};
+
 type Campanha = {
   id: string;
   nome: string;
@@ -75,6 +92,7 @@ type Campanha = {
   niveis: Nivel[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   campanha_produtos: any[];
+  metasVendedor: MetaVendedor[];
 };
 
 type FormNivel = {
@@ -125,17 +143,20 @@ const formVazio = (): FormData => ({
 // ─── Fetch ────────────────────────────────────────────────────────────────────
 
 async function fetchCampanhas(): Promise<Campanha[]> {
-  const [campanhasRes, niveisRes, cpRes] = await Promise.all([
+  const [campanhasRes, niveisRes, cpRes, metasRes] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.from("campanhas") as any).select("*").order("created_at", { ascending: false }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.from("campanha_niveis") as any).select("*").order("ordem", { ascending: true }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.from("campanha_produtos") as any).select("*"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("campanha_metas_vendedor") as any).select("*"),
   ]);
   if (campanhasRes.error) throw campanhasRes.error;
   if (niveisRes.error) throw niveisRes.error;
   if (cpRes.error) throw cpRes.error;
+  if (metasRes.error) throw metasRes.error;
 
   const niveisMap: Record<string, Nivel[]> = {};
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -144,7 +165,6 @@ async function fetchCampanhas(): Promise<Campanha[]> {
     niveisMap[n.campanha_id].push(n as Nivel);
   });
 
-  // Fetch product details for all produto_ids referenced in campanha_produtos
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cpData: any[] = cpRes.data ?? [];
   const produtoIds = cpData
@@ -175,11 +195,40 @@ async function fetchCampanhas(): Promise<Campanha[]> {
     });
   });
 
+  // Build metas vendedor map
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const metasData: any[] = metasRes.data ?? [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const vendedorIds = [...new Set(metasData.map((m: any) => m.vendedor_id))] as string[];
+
+  const profilesMap: Record<string, string> = {};
+  if (vendedorIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: profiles } = await (supabase.from("profiles") as any)
+      .select("id, full_name")
+      .in("id", vendedorIds);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (profiles ?? []).forEach((p: any) => { profilesMap[p.id] = p.full_name ?? p.id; });
+  }
+
+  const metasMap: Record<string, MetaVendedor[]> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  metasData.forEach((m: any) => {
+    if (!metasMap[m.campanha_id]) metasMap[m.campanha_id] = [];
+    metasMap[m.campanha_id].push({
+      id: m.id,
+      vendedor_id: m.vendedor_id,
+      nome: profilesMap[m.vendedor_id] ?? m.vendedor_id,
+      meta_valor: m.meta_valor,
+    });
+  });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (campanhasRes.data ?? []).map((c: any) => ({
     ...c,
     niveis: niveisMap[c.id] ?? [],
     campanha_produtos: cpMap[c.id] ?? [],
+    metasVendedor: metasMap[c.id] ?? [],
   }));
 }
 
@@ -194,6 +243,38 @@ function fmtDate(d: string | null): string {
 function fmtBRL(v: number | null): string {
   if (v === null || v === undefined) return "—";
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+
+function calcDias(dataInicio: string | null, dataFim: string | null) {
+  if (!dataInicio || !dataFim) return { total: 0, passados: 0, restantes: 0 };
+  const inicio = new Date(dataInicio);
+  const fim = new Date(dataFim);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const total = Math.max(0, Math.ceil((fim.getTime() - inicio.getTime()) / 86400000));
+  const passados = Math.min(total, Math.max(0, Math.ceil((hoje.getTime() - inicio.getTime()) / 86400000)));
+  return { total, passados, restantes: total - passados };
+}
+
+function calcNivel(realizado: number | undefined, niveis: Nivel[]): string | null {
+  if (realizado === undefined || niveis.length === 0) return null;
+  const atingidos = niveis.filter((n) => realizado >= n.valor_minimo);
+  if (atingidos.length === 0) return null;
+  return atingidos.sort((a, b) => b.valor_minimo - a.valor_minimo)[0].nome;
+}
+
+function calcStatus(
+  realizado: number | undefined,
+  metaValor: number,
+  dias: { total: number; passados: number }
+): "verde" | "amarelo" | "vermelho" | "neutro" {
+  if (realizado === undefined || dias.total === 0 || dias.passados === 0) return "neutro";
+  const ritmoNecessario = metaValor / dias.total;
+  const ritmoAtual = realizado / dias.passados;
+  const ratio = ritmoNecessario > 0 ? ritmoAtual / ritmoNecessario : 1;
+  if (ratio >= 0.95) return "verde";
+  if (ratio >= 0.90) return "amarelo";
+  return "vermelho";
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -213,11 +294,37 @@ export default function Campanhas() {
   const [buscando, setBuscando] = useState(false);
   const timerBusca = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Query ──────────────────────────────────────────────────────────────────
+  // Metas por vendedor
+  const [metaInputs, setMetaInputs] = useState<Record<string, { vendedorId: string; metaValor: string }>>({});
+  const [vendedorSelecionado, setVendedorSelecionado] = useState<Record<string, string>>({});
+  const [editandoMeta, setEditandoMeta] = useState<Record<string, string | null>>({});
+
+  // ── Query campanhas ────────────────────────────────────────────────────────
 
   const { data: campanhas = [], isLoading } = useQuery<Campanha[]>({
     queryKey: ["campanhas"],
     queryFn: fetchCampanhas,
+  });
+
+  // ── Query vendedores ───────────────────────────────────────────────────────
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: vendedores = [] } = useQuery<any[]>({
+    queryKey: ["vendedores-lista"],
+    queryFn: async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: roles } = await (supabase.from("user_roles") as any)
+        .select("user_id")
+        .eq("role", "vendedor");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ids = (roles ?? []).map((r: any) => r.user_id) as string[];
+      if (ids.length === 0) return [];
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: profiles } = await (supabase.from("profiles") as any)
+        .select("id, full_name")
+        .in("id", ids);
+      return profiles ?? [];
+    },
   });
 
   // ── Toggle ativa ──────────────────────────────────────────────────────────
@@ -245,6 +352,11 @@ export default function Campanhas() {
   const excluir = useMutation({
     mutationFn: async (id: string) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: eMetas } = await (supabase.from("campanha_metas_vendedor") as any)
+        .delete()
+        .eq("campanha_id", id);
+      if (eMetas) throw eMetas;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: eNiveis } = await (supabase.from("campanha_niveis") as any)
         .delete()
         .eq("campanha_id", id);
@@ -265,6 +377,54 @@ export default function Campanhas() {
     onError: (e: Error) => toast.error("Erro ao excluir: " + e.message),
   });
 
+  // ── Metas vendedor mutations ───────────────────────────────────────────────
+
+  const addMetaVendedor = useMutation({
+    mutationFn: async ({
+      campanhaId,
+      vendedorId,
+      metaValor,
+    }: {
+      campanhaId: string;
+      vendedorId: string;
+      metaValor: number;
+    }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("campanha_metas_vendedor") as any).insert({
+        campanha_id: campanhaId,
+        vendedor_id: vendedorId,
+        meta_valor: metaValor,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["campanhas"] }),
+    onError: (e: Error) => toast.error("Erro ao adicionar meta: " + e.message),
+  });
+
+  const removeMetaVendedor = useMutation({
+    mutationFn: async (id: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("campanha_metas_vendedor") as any)
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["campanhas"] }),
+    onError: (e: Error) => toast.error("Erro ao remover meta: " + e.message),
+  });
+
+  const updateMetaVendedor = useMutation({
+    mutationFn: async ({ id, metaValor }: { id: string; metaValor: number }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("campanha_metas_vendedor") as any)
+        .update({ meta_valor: metaValor })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["campanhas"] }),
+    onError: (e: Error) => toast.error("Erro ao atualizar meta: " + e.message),
+  });
+
   // ── Salvar (criar/editar) ─────────────────────────────────────────────────
 
   async function salvar() {
@@ -277,7 +437,6 @@ export default function Campanhas() {
       return;
     }
 
-    // Derive marcas array from produtos for backward compat
     const marcasDerivadas = form.produtos
       .filter((p) => p.tipo === "marca")
       .map((p) => p.marca!);
@@ -336,7 +495,6 @@ export default function Campanhas() {
         if (eNiveis) throw eNiveis;
       }
 
-      // Recriar campanha_produtos
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: eProdDelete } = await (supabase.from("campanha_produtos") as any)
         .delete()
@@ -649,6 +807,214 @@ export default function Campanhas() {
                   </div>
                 </div>
               )}
+
+              {/* Metas por vendedor */}
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-muted-foreground">Metas por vendedor</p>
+
+                {/* Row de adicionar */}
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={vendedorSelecionado[c.id] ?? ""}
+                    onValueChange={(v) =>
+                      setVendedorSelecionado((prev) => ({ ...prev, [c.id]: v }))
+                    }
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Selecionar vendedor..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                      {vendedores
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        .filter((v: any) => !c.metasVendedor.some((m) => m.vendedor_id === v.id))
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        .map((v: any) => (
+                          <SelectItem key={v.id} value={v.id}>
+                            {v.full_name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    min={0}
+                    className="w-36"
+                    placeholder="Meta R$"
+                    value={metaInputs[c.id]?.metaValor ?? ""}
+                    onChange={(e) =>
+                      setMetaInputs((prev) => ({
+                        ...prev,
+                        [c.id]: {
+                          vendedorId: vendedorSelecionado[c.id] ?? "",
+                          metaValor: e.target.value,
+                        },
+                      }))
+                    }
+                  />
+                  <Button
+                    size="sm"
+                    disabled={
+                      !vendedorSelecionado[c.id] ||
+                      !metaInputs[c.id]?.metaValor ||
+                      addMetaVendedor.isPending
+                    }
+                    onClick={() => {
+                      const vid = vendedorSelecionado[c.id];
+                      const val = Number(metaInputs[c.id]?.metaValor);
+                      if (!vid || !val) return;
+                      addMetaVendedor.mutate(
+                        { campanhaId: c.id, vendedorId: vid, metaValor: val },
+                        {
+                          onSuccess: () => {
+                            setVendedorSelecionado((prev) => ({ ...prev, [c.id]: "" }));
+                            setMetaInputs((prev) => ({
+                              ...prev,
+                              [c.id]: { vendedorId: "", metaValor: "" },
+                            }));
+                          },
+                        }
+                      );
+                    }}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    Adicionar
+                  </Button>
+                </div>
+
+                {/* Tabela de metas */}
+                {c.metasVendedor.length > 0 && (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Vendedor</TableHead>
+                        <TableHead>Meta</TableHead>
+                        <TableHead>Realizado</TableHead>
+                        <TableHead>Nível atual</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead className="w-20"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {c.metasVendedor.map((m) => {
+                        const dias = calcDias(c.data_inicio, c.data_fim);
+                        const status = calcStatus(m.realizado, m.meta_valor, dias);
+                        const nivel = calcNivel(m.realizado, c.niveis);
+                        const isEditing =
+                          m.id !== undefined && editandoMeta[m.id] !== undefined && editandoMeta[m.id] !== null;
+
+                        return (
+                          <TableRow key={m.id ?? m.vendedor_id}>
+                            <TableCell className="font-medium">{m.nome}</TableCell>
+                            <TableCell>
+                              {isEditing ? (
+                                <div className="flex items-center gap-1">
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    className="w-28 h-7 text-sm"
+                                    value={editandoMeta[m.id!] ?? ""}
+                                    onChange={(e) =>
+                                      setEditandoMeta((prev) => ({
+                                        ...prev,
+                                        [m.id!]: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-green-600 hover:text-green-700"
+                                    disabled={updateMetaVendedor.isPending}
+                                    onClick={() => {
+                                      const val = Number(editandoMeta[m.id!]);
+                                      if (!val) return;
+                                      updateMetaVendedor.mutate(
+                                        { id: m.id!, metaValor: val },
+                                        {
+                                          onSuccess: () =>
+                                            setEditandoMeta((prev) => ({
+                                              ...prev,
+                                              [m.id!]: null,
+                                            })),
+                                        }
+                                      );
+                                    }}
+                                  >
+                                    <Check className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={() =>
+                                      setEditandoMeta((prev) => ({ ...prev, [m.id!]: null }))
+                                    }
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span>{fmtBRL(m.meta_valor)}</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {m.realizado !== undefined ? fmtBRL(m.realizado) : "—"}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground">
+                              {nivel ?? "—"}
+                            </TableCell>
+                            <TableCell>
+                              {status === "neutro" && (
+                                <span className="inline-block w-2.5 h-2.5 rounded-full bg-gray-300" title="Sem dados" />
+                              )}
+                              {status === "verde" && (
+                                <span className="inline-block w-2.5 h-2.5 rounded-full bg-green-500" title="Em linha" />
+                              )}
+                              {status === "amarelo" && (
+                                <span className="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400" title="Próximo da meta" />
+                              )}
+                              {status === "vermelho" && (
+                                <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500" title="Abaixo da meta" />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                {!isEditing && (
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={() =>
+                                      setEditandoMeta((prev) => ({
+                                        ...prev,
+                                        [m.id!]: String(m.meta_valor),
+                                      }))
+                                    }
+                                  >
+                                    <Pencil className="h-3 w-3" />
+                                  </Button>
+                                )}
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-7 w-7 text-destructive hover:text-destructive"
+                                  disabled={removeMetaVendedor.isPending}
+                                  onClick={() => {
+                                    if (m.id) removeMetaVendedor.mutate(m.id);
+                                  }}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -894,7 +1260,7 @@ export default function Campanhas() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir campanha?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação é irreversível. Todos os níveis e produtos da campanha também serão excluídos.
+              Esta ação é irreversível. Todos os níveis, produtos e metas por vendedor da campanha também serão excluídos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
