@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, ArrowRight } from "lucide-react";
+import { Loader2, ArrowRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
 
@@ -129,6 +129,7 @@ export default function Dashboard() {
     nivelExibido: string | null;
   }[]>([]);
   const [metaTotalCampanha, setMetaTotalCampanha] = useState(0);
+  const [vendedorExpandido, setVendedorExpandido] = useState<string | null>(null);
 
   // Filtro de período customizado
   const [dataInicio, setDataInicio] = useState("");
@@ -766,87 +767,117 @@ export default function Dashboard() {
                         : status === "amarelo" ? "bg-yellow-100 text-yellow-800"
                         : status === "vermelho" ? "bg-red-100 text-red-800"
                         : "bg-gray-100 text-gray-600";
+                      const avatarClass = status === "verde" ? "bg-green-50 text-green-800"
+                        : status === "amarelo" ? "bg-yellow-50 text-yellow-800"
+                        : status === "vermelho" ? "bg-red-50 text-red-800"
+                        : "bg-muted text-muted-foreground";
                       const barColor = status === "verde" ? "#22c55e"
                         : status === "amarelo" ? "#eab308"
                         : status === "vermelho" ? "#ef4444"
                         : "#d1d5db";
-                      const metaPorDia = metaVendedor && campanhaTotalDias > 0
-                        ? metaVendedor / campanhaTotalDias
-                        : null;
                       const metaAtingida = metaVendedor != null && fatCampanha >= metaVendedor;
-                      const necessarioPorDia = metaVendedor != null && diasRestantes > 0
+                      const necessarioPorDia = metaVendedor != null && !metaAtingida && diasRestantes > 0
                         ? (metaVendedor - fatCampanha) / diasRestantes
                         : null;
                       const diffPct = pctAtingimento - pctEsperado;
                       const iniciais = r.nome.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+                      const expandido = vendedorExpandido === r.vendedor_id;
 
                       return (
                         <div
                           key={r.vendedor_id}
-                          className={`py-4 ${idx < rankingCampanha.length - 1 ? "border-b" : ""}`}
+                          className={idx < rankingCampanha.length - 1 ? "border-b" : ""}
                         >
-                          {/* Header */}
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="w-8 h-8 rounded-full bg-[#1A6B3A] text-white flex items-center justify-center text-xs font-bold shrink-0">
+                          {/* Linha resumida — clicável */}
+                          <button
+                            type="button"
+                            className="w-full flex items-center gap-2 py-3 text-left"
+                            onClick={() => setVendedorExpandido(expandido ? null : r.vendedor_id)}
+                          >
+                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avatarClass}`}>
                               {iniciais}
                             </div>
                             <span className="flex-1 font-medium text-sm">{r.nome}</span>
-                            <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${statusBadgeClass}`}>
+                            {/* Mini barra de progresso */}
+                            <div className="shrink-0 rounded-full bg-muted overflow-hidden" style={{ width: 80, height: 4 }}>
+                              <div
+                                className="h-full rounded-full"
+                                style={{ width: `${pctAtingimento}%`, backgroundColor: barColor }}
+                              />
+                            </div>
+                            {/* Percentual */}
+                            <span className="text-xs tabular-nums text-right shrink-0" style={{ width: 36 }}>
+                              {pctAtingimento.toFixed(0)}%
+                            </span>
+                            {/* Badge status */}
+                            <span className={`text-xs rounded-full px-2 py-0.5 font-medium shrink-0 ${statusBadgeClass}`}>
                               {statusLabel}
                             </span>
+                            {/* Badge nível */}
                             {r.nivelExibido && (
-                              <Badge className={`${nivelBadgeClass(r.nivelExibido)} text-xs`}>{r.nivelExibido}</Badge>
+                              <Badge className={`${nivelBadgeClass(r.nivelExibido)} text-xs shrink-0`}>{r.nivelExibido}</Badge>
                             )}
-                          </div>
+                            <ChevronDown
+                              className="h-4 w-4 text-muted-foreground shrink-0 transition-transform"
+                              style={{ transform: expandido ? "rotate(180deg)" : "rotate(0deg)" }}
+                            />
+                          </button>
 
-                          {/* 4 metric cards */}
-                          <div className="grid grid-cols-4 gap-2 mb-3">
-                            <div className="rounded-md border p-2 text-center">
-                              <div className="text-xs text-muted-foreground mb-1">Meta</div>
-                              <div className="text-xs font-medium">
-                                {metaVendedor ? formatBRL(metaVendedor) : "Sem meta"}
+                          {/* Detalhe expandido */}
+                          {expandido && (
+                            <div className="pb-4 space-y-3">
+                              {/* 4 metric cards */}
+                              <div className="grid grid-cols-4 gap-2">
+                                <div className="bg-muted rounded-md p-3">
+                                  <div className="text-xs text-muted-foreground mb-1">Meta</div>
+                                  <div className="text-sm font-medium">
+                                    {metaVendedor ? formatBRL(metaVendedor) : "Sem meta"}
+                                  </div>
+                                </div>
+                                <div className="bg-muted rounded-md p-3">
+                                  <div className="text-xs text-muted-foreground mb-1">Realizado</div>
+                                  <div className={`text-sm font-medium ${status === "verde" ? "text-green-600" : status === "vermelho" ? "text-red-600" : ""}`}>
+                                    {formatBRL(fatCampanha)}
+                                  </div>
+                                </div>
+                                <div className="bg-muted rounded-md p-3">
+                                  <div className="text-xs text-muted-foreground mb-1">Meta/dia necessária</div>
+                                  <div className="text-sm font-medium">
+                                    {metaVendedor && campanhaTotalDias > 0
+                                      ? `${formatBRL(metaVendedor / campanhaTotalDias)}/dia`
+                                      : "—"}
+                                  </div>
+                                </div>
+                                <div className="bg-muted rounded-md p-3">
+                                  <div className="text-xs text-muted-foreground mb-1">Nec. p/ fechar</div>
+                                  <div className={`text-sm font-medium ${metaAtingida ? "text-green-600" : ""}`}>
+                                    {metaAtingida
+                                      ? "Meta atingida!"
+                                      : necessarioPorDia != null
+                                      ? `${formatBRL(necessarioPorDia)}/dia`
+                                      : "—"}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
-                            <div className="rounded-md border p-2 text-center">
-                              <div className="text-xs text-muted-foreground mb-1">Realizado</div>
-                              <div className={`text-xs font-medium ${status === "verde" ? "text-green-600" : status === "vermelho" ? "text-red-600" : ""}`}>
-                                {formatBRL(fatCampanha)}
-                              </div>
-                            </div>
-                            <div className="rounded-md border p-2 text-center">
-                              <div className="text-xs text-muted-foreground mb-1">Meta/dia</div>
-                              <div className="text-xs font-medium">
-                                {metaPorDia != null ? `${formatBRL(metaPorDia)}/dia` : "—"}
-                              </div>
-                            </div>
-                            <div className="rounded-md border p-2 text-center">
-                              <div className="text-xs text-muted-foreground mb-1">Nec. p/ fechar</div>
-                              <div className={`text-xs font-medium ${metaAtingida ? "text-green-600" : ""}`}>
-                                {metaAtingida
-                                  ? "Meta atingida!"
-                                  : necessarioPorDia != null
-                                  ? `${formatBRL(necessarioPorDia)}/dia`
-                                  : "—"}
-                              </div>
-                            </div>
-                          </div>
 
-                          {/* Progress bar */}
-                          {metaVendedor != null && (
-                            <div>
-                              <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                                <span>{pctAtingimento.toFixed(1)}%</span>
-                                <span>
-                                  Deveria estar em {pctEsperado.toFixed(1)}%{" "}
-                                  · {diffPct >= 0 ? "+" : ""}{diffPct.toFixed(1)}% {diffPct >= 0 ? "acima" : "abaixo"}
-                                </span>
-                              </div>
-                              <div className="h-2 w-full rounded-full bg-muted">
-                                <div
-                                  className="h-2 rounded-full transition-all"
-                                  style={{ width: `${pctAtingimento}%`, backgroundColor: barColor }}
-                                />
-                              </div>
+                              {/* Barra de progresso full width */}
+                              {metaVendedor != null && (
+                                <div>
+                                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full transition-all"
+                                      style={{ width: `${pctAtingimento}%`, backgroundColor: barColor }}
+                                    />
+                                  </div>
+                                  <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
+                                    <span>{pctAtingimento.toFixed(1)}%</span>
+                                    <span>
+                                      Deveria estar em {Math.round(campanhaDiasPassados / Math.max(campanhaTotalDias, 1) * 100)}%
+                                      {" · "}{diffPct >= 0 ? "+" : ""}{diffPct.toFixed(1)}% {diffPct >= 0 ? "acima" : "abaixo"}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
