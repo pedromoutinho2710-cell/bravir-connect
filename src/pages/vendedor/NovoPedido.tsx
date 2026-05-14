@@ -149,7 +149,7 @@ export default function NovoPedido() {
     })();
   }, [hookLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const atingiuMinimo = totalGeral >= pedidoMinimo;
+  const atingiuMinimo = cliente.tipo === "Bonificação" || totalGeral >= pedidoMinimo;
   const progresso = pedidoMinimo > 0 ? Math.min(100, (totalGeral / pedidoMinimo) * 100) : 100;
   const progressoColor = progresso >= 100 ? "bg-green-500" : progresso >= 70 ? "bg-yellow-400" : "bg-red-500";
   const progressoTextColor = progresso >= 100 ? "text-green-700" : progresso >= 70 ? "text-yellow-700" : "text-red-600";
