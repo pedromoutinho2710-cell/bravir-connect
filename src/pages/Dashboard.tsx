@@ -128,6 +128,7 @@ export default function Dashboard() {
     categoriaInicial: string | null;
     nivelExibido: string | null;
   }[]>([]);
+  const [metaTotalCampanha, setMetaTotalCampanha] = useState(0);
 
   // Filtro de período customizado
   const [dataInicio, setDataInicio] = useState("");
@@ -353,6 +354,9 @@ export default function Dashboard() {
             .select("vendedor_id, meta_valor, categoria")
             .eq("campanha_id", campanha.id);
 
+          const metaTotalCampanha = (metasVendedorData ?? []).reduce((s: number, m: any) => s + Number(m.meta_valor), 0);
+          setMetaTotalCampanha(metaTotalCampanha);
+
           const metasVendedorMap: Record<string, { meta: number; categoria: string | null }> = {};
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ((metasVendedorData ?? []) as any[]).forEach((m: any) => {
@@ -478,7 +482,6 @@ export default function Dashboard() {
     : null;
   const campanhaMetaMaxima = nivelMaisAlto ? Number(nivelMaisAlto.valor_minimo) : 0;
   void campanhaMetaMaxima;
-  const metaTotalCampanha = rankingCampanha.reduce((s, r) => s + (r.metaVendedor ?? 0), 0);
   const campanhaPct = metaTotalCampanha > 0 ? Math.min((entradaCampanha / metaTotalCampanha) * 100, 100) : 0;
   const campanhaDiasRestantes = campanhaAtiva
     ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
