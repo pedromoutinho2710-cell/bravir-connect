@@ -76,6 +76,7 @@ type MetaVendedor = {
   vendedor_id: string;
   nome: string;
   meta_valor: number;
+  categoria?: string | null;
   realizado?: number;
   nivel_atual?: string | null;
 };
@@ -220,6 +221,7 @@ async function fetchCampanhas(): Promise<Campanha[]> {
       vendedor_id: m.vendedor_id,
       nome: profilesMap[m.vendedor_id] ?? m.vendedor_id,
       meta_valor: m.meta_valor,
+      categoria: m.categoria ?? null,
     });
   });
 
@@ -297,7 +299,9 @@ export default function Campanhas() {
   // Metas por vendedor
   const [metaInputs, setMetaInputs] = useState<Record<string, { vendedorId: string; metaValor: string }>>({});
   const [vendedorSelecionado, setVendedorSelecionado] = useState<Record<string, string>>({});
+  const [categoriasSelecionadas, setCategoriasSelecionadas] = useState<Record<string, string>>({});
   const [editandoMeta, setEditandoMeta] = useState<Record<string, string | null>>({});
+  const [editandoCat, setEditandoCat] = useState<Record<string, string | null>>({});
 
   // ── Query campanhas ────────────────────────────────────────────────────────
 
@@ -384,16 +388,19 @@ export default function Campanhas() {
       campanhaId,
       vendedorId,
       metaValor,
+      categoria,
     }: {
       campanhaId: string;
       vendedorId: string;
       metaValor: number;
+      categoria: string | null;
     }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from("campanha_metas_vendedor") as any).insert({
         campanha_id: campanhaId,
         vendedor_id: vendedorId,
         meta_valor: metaValor,
+        categoria,
       });
       if (error) throw error;
     },
@@ -414,10 +421,10 @@ export default function Campanhas() {
   });
 
   const updateMetaVendedor = useMutation({
-    mutationFn: async ({ id, metaValor }: { id: string; metaValor: number }) => {
+    mutationFn: async ({ id, metaValor, categoria }: { id: string; metaValor: number; categoria?: string | null }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from("campanha_metas_vendedor") as any)
-        .update({ meta_valor: metaValor })
+        .update({ meta_valor: metaValor, categoria: categoria ?? null })
         .eq("id", id);
       if (error) throw error;
     },
@@ -852,19 +859,37 @@ export default function Campanhas() {
                       }))
                     }
                   />
+                  <Select
+                    value={categoriasSelecionadas[c.id] ?? ""}
+                    onValueChange={(v) =>
+                      setCategoriasSelecionadas((prev) => ({ ...prev, [c.id]: v }))
+                    }
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue placeholder="Categoria..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Bronze">Bronze</SelectItem>
+                      <SelectItem value="Prata">Prata</SelectItem>
+                      <SelectItem value="Ouro">Ouro</SelectItem>
+                      <SelectItem value="Diamante">Diamante</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <Button
                     size="sm"
                     disabled={
                       !vendedorSelecionado[c.id] ||
                       !metaInputs[c.id]?.metaValor ||
+                      !categoriasSelecionadas[c.id] ||
                       addMetaVendedor.isPending
                     }
                     onClick={() => {
                       const vid = vendedorSelecionado[c.id];
                       const val = Number(metaInputs[c.id]?.metaValor);
+                      const cat = categoriasSelecionadas[c.id] ?? null;
                       if (!vid || !val) return;
                       addMetaVendedor.mutate(
-                        { campanhaId: c.id, vendedorId: vid, metaValor: val },
+                        { campanhaId: c.id, vendedorId: vid, metaValor: val, categoria: cat },
                         {
                           onSuccess: () => {
                             setVendedorSelecionado((prev) => ({ ...prev, [c.id]: "" }));
@@ -872,6 +897,7 @@ export default function Campanhas() {
                               ...prev,
                               [c.id]: { vendedorId: "", metaValor: "" },
                             }));
+                            setCategoriasSelecionadas((prev) => ({ ...prev, [c.id]: "" }));
                           },
                         }
                       );
@@ -889,6 +915,7 @@ export default function Campanhas() {
                       <TableRow>
                         <TableHead>Vendedor</TableHead>
                         <TableHead>Meta</TableHead>
+                        <TableHead>Categoria inicial</TableHead>
                         <TableHead>Realizado</TableHead>
                         <TableHead>Nível atual</TableHead>
                         <TableHead>Status</TableHead>
@@ -921,6 +948,22 @@ export default function Campanhas() {
                                       }))
                                     }
                                   />
+                                  <Select
+                                    value={editandoCat[m.id!] ?? ""}
+                                    onValueChange={(v) =>
+                                      setEditandoCat((prev) => ({ ...prev, [m.id!]: v }))
+                                    }
+                                  >
+                                    <SelectTrigger className="w-28 h-7 text-sm">
+                                      <SelectValue placeholder="Categoria..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="Bronze">Bronze</SelectItem>
+                                      <SelectItem value="Prata">Prata</SelectItem>
+                                      <SelectItem value="Ouro">Ouro</SelectItem>
+                                      <SelectItem value="Diamante">Diamante</SelectItem>
+                                    </SelectContent>
+                                  </Select>
                                   <Button
                                     size="icon"
                                     variant="ghost"
@@ -930,13 +973,12 @@ export default function Campanhas() {
                                       const val = Number(editandoMeta[m.id!]);
                                       if (!val) return;
                                       updateMetaVendedor.mutate(
-                                        { id: m.id!, metaValor: val },
+                                        { id: m.id!, metaValor: val, categoria: editandoCat[m.id!] ?? m.categoria },
                                         {
-                                          onSuccess: () =>
-                                            setEditandoMeta((prev) => ({
-                                              ...prev,
-                                              [m.id!]: null,
-                                            })),
+                                          onSuccess: () => {
+                                            setEditandoMeta((prev) => ({ ...prev, [m.id!]: null }));
+                                            setEditandoCat((prev) => ({ ...prev, [m.id!]: null }));
+                                          },
                                         }
                                       );
                                     }}
@@ -947,15 +989,31 @@ export default function Campanhas() {
                                     size="icon"
                                     variant="ghost"
                                     className="h-7 w-7"
-                                    onClick={() =>
-                                      setEditandoMeta((prev) => ({ ...prev, [m.id!]: null }))
-                                    }
+                                    onClick={() => {
+                                      setEditandoMeta((prev) => ({ ...prev, [m.id!]: null }));
+                                      setEditandoCat((prev) => ({ ...prev, [m.id!]: null }));
+                                    }}
                                   >
                                     <X className="h-3 w-3" />
                                   </Button>
                                 </div>
                               ) : (
                                 <span>{fmtBRL(m.meta_valor)}</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {m.categoria ? (
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                  m.categoria === "Diamante" ? "bg-purple-100 text-purple-800" :
+                                  m.categoria === "Ouro" ? "bg-yellow-100 text-yellow-800" :
+                                  m.categoria === "Prata" ? "bg-gray-100 text-gray-700" :
+                                  m.categoria === "Bronze" ? "bg-orange-100 text-orange-800" :
+                                  "bg-gray-100 text-gray-700"
+                                }`}>
+                                  {m.categoria}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
                               )}
                             </TableCell>
                             <TableCell className="text-muted-foreground">
@@ -985,12 +1043,16 @@ export default function Campanhas() {
                                     size="icon"
                                     variant="ghost"
                                     className="h-7 w-7"
-                                    onClick={() =>
+                                    onClick={() => {
                                       setEditandoMeta((prev) => ({
                                         ...prev,
                                         [m.id!]: String(m.meta_valor),
-                                      }))
-                                    }
+                                      }));
+                                      setEditandoCat((prev) => ({
+                                        ...prev,
+                                        [m.id!]: m.categoria ?? "",
+                                      }));
+                                    }}
                                   >
                                     <Pencil className="h-3 w-3" />
                                   </Button>
