@@ -110,11 +110,26 @@ export default function Dashboard() {
   const [entradaCampanha, setEntradaCampanha] = useState(0);
   const [entradaMarca, setEntradaMarca] = useState<Record<string, number>>({});
   const [fatMensal, setFatMensal] = useState<{ mes: string; valor: number }[]>([]);
-  const [rankingCampanha, setRankingCampanha] = useState<{ vendedor_id: string; nome: string; fatCampanha: number; nivel: string | null }[]>([]);
+  const [rankingCampanha, setRankingCampanha] = useState<{
+    vendedor_id: string;
+    nome: string;
+    fatCampanha: number;
+    nivel: string | null;
+    metaVendedor: number | null;
+  }[]>([]);
+
+  // Filtro de período customizado
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
 
   useEffect(() => {
     setLoading(true);
-    const { dataInicio, dataFim } = getDateRange(periodo);
+
+    // Determine effective date range
+    const { dataInicio: periodoInicio, dataFim: periodoFim } = getDateRange(periodo);
+    const effectiveInicio = (dataInicio && dataFim) ? dataInicio : periodoInicio;
+    const effectiveFim = (dataInicio && dataFim) ? dataFim : periodoFim;
+
     const now = new Date();
     const mesAtual = now.getMonth() + 1;
     const anoAtual = now.getFullYear();
@@ -141,8 +156,8 @@ export default function Dashboard() {
           supabase
             .from("pedidos")
             .select("id, vendedor_id, status, data_pedido, itens_pedido(total_item, produto_id, quantidade)")
-            .gte("data_pedido", dataInicio)
-            .lte("data_pedido", dataFim)
+            .gte("data_pedido", effectiveInicio)
+            .lte("data_pedido", effectiveFim)
             .not("status", "in", '("rascunho")'),
           // Meta total da empresa do mês atual
           supabase
@@ -320,6 +335,19 @@ export default function Dashboard() {
             });
           });
 
+          // Metas individuais por vendedor
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: metasVendedorData } = await (supabase as any)
+            .from("campanha_metas_vendedor")
+            .select("vendedor_id, meta_valor")
+            .eq("campanha_id", campanha.id);
+
+          const metasVendedorMap: Record<string, number> = {};
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ((metasVendedorData ?? []) as any[]).forEach((m: any) => {
+            metasVendedorMap[m.vendedor_id] = Number(m.meta_valor);
+          });
+
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const niveisCamp = [...((campanha.campanha_niveis ?? []) as any[])].sort(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -331,7 +359,8 @@ export default function Dashboard() {
               const fat = vendedorFatCamp[v.vendedor_id] ?? 0;
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const nivel = (niveisCamp.find((n: any) => fat >= Number(n.valor_minimo)) as any)?.nome ?? null;
-              return { vendedor_id: v.vendedor_id, nome: v.nome, fatCampanha: fat, nivel };
+              const metaVendedor = metasVendedorMap[v.vendedor_id] ?? null;
+              return { vendedor_id: v.vendedor_id, nome: v.nome, fatCampanha: fat, nivel, metaVendedor };
             })
             .sort((a, b) => b.fatCampanha - a.fatCampanha);
 
@@ -418,13 +447,13 @@ export default function Dashboard() {
         toast.error("Erro ao carregar dashboard");
       }
     })().finally(() => setLoading(false));
-  }, [periodo, periodoKpi]);
+  }, [periodo, periodoKpi, dataInicio, dataFim]);
 
   const metaPct = metaTotal > 0 ? Math.min((fatMesAtual / metaTotal) * 100, 100) : 0;
   const previsaoMes = fatMesAtual + pipelineTotal;
   const previsaoPct = metaTotal > 0 ? Math.min((previsaoMes / metaTotal) * 100, 100) : 0;
 
-  // Campanha: nível mais alto (maior valor_minimo), progresso e dias restantes
+  // Campanha: nível mais alto, progresso e dias
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const niveisOrdenados: any[] = campanhaAtiva
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -439,6 +468,14 @@ export default function Dashboard() {
   const campanhaPct = campanhaMetaMaxima > 0 ? Math.min((entradaCampanha / campanhaMetaMaxima) * 100, 100) : 0;
   const campanhaDiasRestantes = campanhaAtiva
     ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : 0;
+
+  // Dias campanha para cálculo de status por vendedor
+  const campanhaTotalDias = campanhaAtiva?.data_inicio && campanhaAtiva?.data_fim
+    ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - new Date(campanhaAtiva.data_inicio).getTime()) / 86400000))
+    : 0;
+  const campanhaDiasPassados = campanhaAtiva?.data_inicio
+    ? Math.min(campanhaTotalDias, Math.max(0, Math.ceil((Date.now() - new Date(campanhaAtiva.data_inicio).getTime()) / 86400000)))
     : 0;
 
   // Fluxo de metas
@@ -459,6 +496,21 @@ export default function Dashboard() {
     if (n.includes("prata")) return "bg-gray-100 text-gray-700 hover:bg-gray-100";
     if (n.includes("bronze")) return "bg-orange-100 text-orange-800 hover:bg-orange-100";
     return "bg-gray-100 text-gray-700 hover:bg-gray-100";
+  };
+
+  const statusVendedorCamp = (
+    fatCampanha: number,
+    metaVendedor: number | null,
+    totalDias: number,
+    diasPassados: number
+  ): "verde" | "amarelo" | "vermelho" | "neutro" => {
+    if (!metaVendedor || totalDias === 0 || diasPassados === 0) return "neutro";
+    const ritmoNecessario = metaVendedor / totalDias;
+    const ritmoAtual = fatCampanha / diasPassados;
+    const ratio = ritmoNecessario > 0 ? ritmoAtual / ritmoNecessario : 1;
+    if (ratio >= 1) return "verde";
+    if (ratio >= 0.9) return "amarelo";
+    return "vermelho";
   };
 
   const maxFatMensal = Math.max(...fatMensal.map((m) => m.valor), 1);
@@ -497,23 +549,63 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
       {/* Seção 1 — Cabeçalho */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#1A6B3A]">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Visão geral do negócio</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {PERIODOS.map(({ key, label }) => (
             <Button
               key={key}
-              variant={periodo === key ? "default" : "outline"}
+              variant={periodo === key && !dataInicio ? "default" : "outline"}
               size="sm"
-              onClick={() => { setPeriodo(key); setPeriodoKpi(key); }}
-              style={periodo === key ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
+              onClick={() => {
+                setPeriodo(key);
+                setPeriodoKpi(key);
+                setDataInicio("");
+                setDataFim("");
+              }}
+              style={periodo === key && !dataInicio ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
             >
               {label}
             </Button>
           ))}
+
+          {/* Separador */}
+          <div className="border-l h-6 mx-1" />
+
+          {/* Filtro customizado */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-muted-foreground">De:</span>
+            <input
+              type="date"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+              className="text-xs border rounded px-2 py-1 h-8 bg-background"
+            />
+            <span className="text-xs text-muted-foreground">Até:</span>
+            <input
+              type="date"
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
+              className="text-xs border rounded px-2 py-1 h-8 bg-background"
+            />
+            <Button
+              size="sm"
+              variant={dataInicio && dataFim ? "default" : "outline"}
+              style={dataInicio && dataFim ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
+              onClick={() => {
+                // dates are already in state; this button confirms intentionally
+                if (dataInicio && dataFim) {
+                  setDataInicio(dataInicio);
+                  setDataFim(dataFim);
+                }
+              }}
+            >
+              Aplicar
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -634,45 +726,61 @@ export default function Dashboard() {
                 />
               </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Seção 3b — Ranking campanha vendedores */}
-      {campanhaAtiva !== null && rankingCampanha.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">
-              Desempenho na campanha — {campanhaAtiva.nome}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-10">#</TableHead>
-                    <TableHead>Vendedor</TableHead>
-                    <TableHead className="text-right">Faturamento campanha</TableHead>
-                    <TableHead>Nível</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rankingCampanha.map((r, idx) => (
-                    <TableRow key={r.vendedor_id}>
-                      <TableCell className="font-bold">{idx + 1}</TableCell>
-                      <TableCell className="text-sm">{r.nome}</TableCell>
-                      <TableCell className="text-right text-sm font-medium">{formatBRL(r.fatCampanha)}</TableCell>
-                      <TableCell>
-                        {r.nivel ? (
-                          <Badge className={nivelBadgeClass(r.nivel)}>{r.nivel}</Badge>
-                        ) : null}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
+            {/* Desempenho por vendedor */}
+            {rankingCampanha.length > 0 && (
+              <>
+                <div className="border-t" />
+                <div className="space-y-3">
+                  <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                    Desempenho por vendedor
+                  </p>
+                  <div className="space-y-1.5">
+                    {rankingCampanha.map((r, idx) => {
+                      const status = statusVendedorCamp(r.fatCampanha, r.metaVendedor, campanhaTotalDias, campanhaDiasPassados);
+                      const pctAtingimento = r.metaVendedor && r.metaVendedor > 0
+                        ? Math.min((r.fatCampanha / r.metaVendedor) * 100, 100)
+                        : 0;
+                      const barWidth = pctAtingimento;
+                      const statusColor =
+                        status === "verde" ? "#22c55e" :
+                        status === "amarelo" ? "#eab308" :
+                        status === "vermelho" ? "#ef4444" : "#d1d5db";
+
+                      return (
+                        <div key={r.vendedor_id} className="flex items-center gap-2 text-sm">
+                          <span className="w-5 text-muted-foreground text-right shrink-0 font-medium">{idx + 1}</span>
+                          <span className="flex-1 min-w-0 truncate">{r.nome}</span>
+                          <span className="font-medium shrink-0 tabular-nums">{formatBRL(r.fatCampanha)}</span>
+                          {/* Barra inline */}
+                          <div className="h-1 rounded-full bg-muted shrink-0 overflow-hidden" style={{ width: 80 }}>
+                            <div
+                              className="h-1 rounded-full"
+                              style={{ width: `${barWidth}%`, backgroundColor: statusColor }}
+                            />
+                          </div>
+                          <span className="text-muted-foreground shrink-0 tabular-nums" style={{ width: 36, textAlign: "right" }}>
+                            {r.metaVendedor ? `${pctAtingimento.toFixed(0)}%` : "—"}
+                          </span>
+                          {/* Status dot */}
+                          <span
+                            className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: statusColor }}
+                            title={status}
+                          />
+                          {/* Nível badge */}
+                          {r.nivel ? (
+                            <Badge className={`${nivelBadgeClass(r.nivel)} shrink-0 text-xs`}>{r.nivel}</Badge>
+                          ) : (
+                            <span className="shrink-0" style={{ width: 56 }} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       )}
@@ -704,66 +812,69 @@ export default function Dashboard() {
             <CardTitle className="text-sm font-medium">Entrada por marca</CardTitle>
           </CardHeader>
           <CardContent>
-            {/* Donut + legenda */}
-            <div className="flex flex-col sm:flex-row gap-6 items-center mb-6">
-              {/* Gráfico de rosca */}
-              <div className="shrink-0">
-                <svg viewBox="0 0 160 160" className="w-40 h-40">
-                  <circle cx="80" cy="80" r="70" fill="none" stroke="#e5e7eb" strokeWidth="28" />
+            <div className="flex gap-6 items-center">
+              {/* Donut fixo 200x200 */}
+              <div className="relative shrink-0" style={{ width: 200, height: 200 }}>
+                <svg width="200" height="200" style={{ display: "block" }}>
+                  <circle cx="100" cy="100" r="70" fill="none" stroke="#e5e7eb" strokeWidth="38" />
                   {donutSlices.map(({ marca, dash, offset }) => (
                     <circle
                       key={marca}
-                      cx="80" cy="80" r="70"
+                      cx="100" cy="100" r="70"
                       fill="none"
                       stroke={MARCA_CORES[marca] ?? "#888780"}
-                      strokeWidth="28"
+                      strokeWidth="38"
                       strokeDasharray={`${dash} ${donutCircumference - dash}`}
                       strokeDashoffset={offset}
-                      transform="rotate(-90 80 80)"
+                      transform="rotate(-90 100 100)"
                     />
                   ))}
-                  <text x="80" y="75" textAnchor="middle" fontSize="9" fill="#6b7280">Total</text>
-                  <text x="80" y="90" textAnchor="middle" fontSize="10" fontWeight="600" fill="#1f2937">
-                    {formatBRL(totalGeralMarca)}
-                  </text>
                 </svg>
+                {/* Centro: Total + valor */}
+                <div
+                  className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none"
+                >
+                  <span className="text-xs text-muted-foreground leading-tight">Total</span>
+                  <span className="text-sm font-semibold leading-tight">{formatBRL(totalGeralMarca)}</span>
+                </div>
               </div>
-              {/* Legenda */}
-              <div className="flex flex-col gap-2 flex-1">
-                {donutSlices.map(({ marca, valor, pct }) => (
-                  <div key={marca} className="flex items-center gap-2 text-sm">
-                    <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: MARCA_CORES[marca] ?? "#888780" }} />
-                    <span className="font-medium flex-1">{marca}</span>
-                    <span className="text-muted-foreground">{formatBRL(valor)}</span>
-                    <span className="text-muted-foreground w-12 text-right">{(pct * 100).toFixed(1)}%</span>
+
+              {/* Legenda compacta à direita */}
+              <div className="flex flex-col flex-1" style={{ gap: 4 }}>
+                {donutSlices.map(({ marca, valor, pct }, i) => (
+                  <div
+                    key={marca}
+                    className="flex items-center gap-2 text-sm"
+                    style={{
+                      paddingBottom: 4,
+                      borderBottom: i < donutSlices.length - 1 ? "0.5px solid #e5e7eb" : undefined,
+                    }}
+                  >
+                    <span
+                      className="shrink-0"
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: 2,
+                        backgroundColor: MARCA_CORES[marca] ?? "#888780",
+                      }}
+                    />
+                    <span className="flex-1 min-w-0 truncate">{marca}</span>
+                    <span
+                      className="text-muted-foreground shrink-0 tabular-nums"
+                      style={{ width: 44, textAlign: "right" }}
+                    >
+                      {(pct * 100).toFixed(1)}%
+                    </span>
+                    <span
+                      className="shrink-0 tabular-nums"
+                      style={{ fontWeight: 500, width: 88, textAlign: "right" }}
+                    >
+                      {formatBRL(valor)}
+                    </span>
                   </div>
                 ))}
               </div>
-            </div>
-            {/* Barras horizontais */}
-            <div className="space-y-3">
-              {(() => {
-                const maxValor = Math.max(...Object.values(entradaMarca));
-                return Object.entries(entradaMarca)
-                  .sort(([, a], [, b]) => b - a)
-                  .map(([marca, valor]) => (
-                    <div key={marca} className="space-y-1">
-                      <div className="flex justify-between text-sm">
-                        <span className="font-medium">{marca}</span>
-                        <span className="text-muted-foreground">{formatBRL(valor)}</span>
-                      </div>
-                      <div className="h-2 w-full rounded-full bg-muted">
-                        <div
-                          className="h-2 rounded-full"
-                          style={{
-                            width: `${maxValor > 0 ? (valor / maxValor) * 100 : 0}%`,
-                            backgroundColor: MARCA_CORES[marca] ?? "#888780",
-                          }}
-                        />
-                      </div>
-                    </div>
-                  ));
-              })()}
             </div>
           </CardContent>
         </Card>
