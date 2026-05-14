@@ -3,9 +3,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { formatBRL } from "@/lib/format";
 import { toast } from "sonner";
-import { Loader2, Save } from "lucide-react";
+import { Loader2, Save, Trash2 } from "lucide-react";
 
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -25,6 +26,7 @@ export default function Metas() {
   const [faturado, setFaturado] = useState<FaturadoMap>({});
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState<string | null>(null);
+  const [excluindoVendedor, setExcluindoVendedor] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -86,6 +88,20 @@ export default function Metas() {
       [vendedorId]: { ...(prev[vendedorId] ?? {}), [mes]: valor },
     }));
   };
+
+  async function excluirVendedor(vendedorId: string) {
+    const { error } = await supabase
+      .from("metas")
+      .delete()
+      .eq("vendedor_id", vendedorId)
+      .eq("ano", ANO);
+    if (error) { toast.error("Erro ao excluir: " + error.message); return; }
+    setVendedores(prev => prev.filter(v => v.id !== vendedorId));
+    setMetas(prev => { const n = {...prev}; delete n[vendedorId]; return n; });
+    setFaturado(prev => { const n = {...prev}; delete n[vendedorId]; return n; });
+    toast.success("Vendedor removido das metas.");
+    setExcluindoVendedor(null);
+  }
 
   const salvarVendedor = async (vendedorId: string) => {
     setSalvando(vendedorId);
@@ -159,12 +175,22 @@ export default function Metas() {
                   </div>
                 )}
               </div>
-              <Button size="sm" variant="outline" onClick={() => salvarVendedor(v.id)} disabled={salvando === v.id}>
-                {salvando === v.id
-                  ? <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                  : <Save className="h-4 w-4 mr-1" />}
-                Salvar
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => salvarVendedor(v.id)} disabled={salvando === v.id}>
+                  {salvando === v.id
+                    ? <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                    : <Save className="h-4 w-4 mr-1" />}
+                  Salvar
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => setExcluindoVendedor(v.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
@@ -212,6 +238,26 @@ export default function Metas() {
           </Card>
         );
       })}
+      <AlertDialog open={!!excluindoVendedor} onOpenChange={(o) => { if (!o) setExcluindoVendedor(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover vendedor das metas?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso vai apagar todas as metas de {vendedores.find(v => v.id === excluindoVendedor)?.nome} no ano {ANO}.{" "}
+              O vendedor continuará no sistema, apenas sairá desta lista e da meta geral.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => { if (excluindoVendedor) excluirVendedor(excluindoVendedor); }}
+            >
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
