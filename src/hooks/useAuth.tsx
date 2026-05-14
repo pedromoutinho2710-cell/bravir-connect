@@ -75,19 +75,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession);
       setUser(newSession?.user ?? null);
-      if (newSession?.user) {
-        setRoleLoaded(false);
-        setRole(getRoleFromUser(newSession.user));
-        fetchRole(newSession.user).finally(() => setRoleLoaded(true));
-        fetchFullName(newSession.user);
-      } else {
+
+      if (event === "SIGNED_OUT") {
         setRole(null);
         setFullName(null);
         setRoleLoaded(true);
+        return;
       }
+
+      if (event === "SIGNED_IN") {
+        if (newSession?.user) {
+          setRoleLoaded(false);
+          setRole(getRoleFromUser(newSession.user));
+          fetchRole(newSession.user).finally(() => setRoleLoaded(true));
+          fetchFullName(newSession.user);
+        }
+        return;
+      }
+
+      // TOKEN_REFRESHED, USER_UPDATED e outros: apenas atualiza session/user,
+      // não reseta role nem roleLoaded para evitar remontagem desnecessária.
     });
 
     supabase.auth.getSession().then(async ({ data: { session: existing } }) => {

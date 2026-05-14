@@ -160,6 +160,29 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
     }, 500);
   }, [cliente, itens, pedidoId, loading, representanteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Effect 4 — Save imediato ao sair/trocar de aba
+  useEffect(() => {
+    const saveNow = () => {
+      if (loading || pedidoEnviadoRef.current) return;
+      const payload = isGestora
+        ? { cliente, itens, pedidoId, vigenciaId, representanteId }
+        : { cliente, itens, pedidoId, vigenciaId };
+      localStorage.setItem(rascunhoKey, JSON.stringify(payload));
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") saveNow();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("beforeunload", saveNow);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("beforeunload", saveNow);
+    };
+  }, [cliente, itens, pedidoId, vigenciaId, representanteId, loading]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const camposObrigatoriosOk = !!(
     cliente.cond_pagamento.trim() &&
     cliente.codigo_cliente.trim() &&
