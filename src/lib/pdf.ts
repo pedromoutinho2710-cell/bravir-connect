@@ -23,7 +23,7 @@ export type PdfData = {
   cluster: string;
   tabela_preco: string;
   cond_pagamento?: string;
-  ordem_compra?: string;
+  ordem_compra?: string | null;
   agendamento: boolean;
   observacoes?: string;
   itens: PdfItem[];
@@ -269,7 +269,7 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
   yL = field(xL, yL, cL, "DATA PEDIDO:", dataPedido);
   yL = field(xL, yL, cL, "PEDIDO:", pedidoTipo);
   yL = field(xL, yL, cL, "No PEDIDO:", String(d.numero_pedido));
-  if (d.ordem_compra) yL = field(xL, yL, cL, "ORDEM DE COMPRA:", d.ordem_compra);
+  if (d.ordem_compra != null && d.ordem_compra !== "") yL = field(xL, yL, cL, "ORDEM DE COMPRA:", d.ordem_compra);
 
   // ══════════════════════════════════════════════════════════════════════════
   // COLUNA CENTRAL
