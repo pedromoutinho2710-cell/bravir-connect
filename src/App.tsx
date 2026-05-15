@@ -66,6 +66,7 @@ const App = () => (
             <Route path="/site/candidatura" element={<SiteCandidatura />} />
             <Route path="/evento" element={<EventoFormulario />} />
             <Route path="/evento/qr" element={<EventoQR />} />
+            <Route path="/evento-qr" element={<EventoQR />} />
 
             {/* Rotas exclusivas do admin */}
             <Route element={<ProtectedRoute allow={["admin"]}><AppLayout /></ProtectedRoute>}>
