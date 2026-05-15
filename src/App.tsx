@@ -38,6 +38,7 @@ import SiteLanding from "./pages/site/SiteLanding";
 import SiteCandidatura from "./pages/site/SiteCandidatura";
 import EventoFormulario from "./pages/EventoFormulario";
 import EventoQR from "./pages/EventoQR";
+import LeadsEvento from "./pages/gestora/LeadsEvento";
 import DashboardGestora from "./pages/gestora/DashboardGestora";
 import GestaoTime from "./pages/gestora/GestaoTime";
 import CadastrarClienteGestora from "./pages/gestora/CadastrarClienteGestora";
@@ -117,6 +118,7 @@ const App = () => (
               <Route path="/gestora/cadastrar-cliente" element={<CadastrarClienteGestora />} />
               <Route path="/gestora/novo-pedido" element={<NovoPedidoGestora />} />
               <Route path="/gestora/pedidos" element={<PedidosGestora />} />
+              <Route path="/gestora/leads-evento" element={<LeadsEvento />} />
             </Route>
 
             {/* Gestora Faturamento */}

@@ -16,6 +16,7 @@ import {
   Settings,
   ClipboardCheck,
   History,
+  UserCheck,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -68,6 +69,7 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
       { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
       { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
+      { title: "Leads Evento", url: "/gestora/leads-evento", icon: UserCheck },
     ],
   },
   {
@@ -109,6 +111,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Clientes", url: "/gestora/clientes", icon: Users },
     { title: "Cadastrar Cliente", url: "/gestora/cadastrar-cliente", icon: UserPlus },
     { title: "Gestão do Time", url: "/gestora/time", icon: UserCog },
+    { title: "Leads Evento", url: "/gestora/leads-evento", icon: UserCheck },
   ],
   gestora_faturamento: [
     { title: "Histórico Faturamento", url: "/gestora/historico-faturamento", icon: History },

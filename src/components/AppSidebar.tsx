@@ -52,6 +52,7 @@ export function AppSidebar() {
   const { role, user, signOut } = useAuth();
   const { pathname } = useLocation();
   const [semPerfilCount, setSemPerfilCount] = useState(0);
+  const [leadsNovosCount, setLeadsNovosCount] = useState(0);
 
   useEffect(() => {
     if (role !== "faturamento" && role !== "admin") return;
@@ -62,29 +63,56 @@ export function AppSidebar() {
       .then(({ count }) => setSemPerfilCount(count ?? 0));
   }, [role]);
 
+  useEffect(() => {
+    if (role !== "gestora" && role !== "admin") return;
+    (supabase as any)
+      .from("leads_evento")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "novo")
+      .then(({ count }: { count: number | null }) => setLeadsNovosCount(count ?? 0));
+  }, [role]);
+
   const faturamentoItems: Item[] = BASE_FATURAMENTO_ITEMS.map((item) =>
     item.url === "/faturamento/clientes" && semPerfilCount > 0
       ? { ...item, badge: semPerfilCount }
       : item
   );
 
+  const gestoraItems: Item[] = (FLAT_MENU_STATIC["gestora"] ?? []).map((item) =>
+    item.url === "/gestora/leads-evento" && leadsNovosCount > 0
+      ? { ...item, badge: leadsNovosCount }
+      : item
+  );
+
   const getFlatMenu = (): Item[] => {
     if (role === "faturamento") return faturamentoItems;
+    if (role === "gestora") return gestoraItems;
     return FLAT_MENU_STATIC[role as AppRole] ?? [];
   };
 
-  const adminSections: Section[] = ADMIN_SECTIONS.map((section) =>
-    section.label === "Pré-faturamento"
-      ? {
-          ...section,
-          items: section.items.map((item) =>
-            item.url === "/faturamento/clientes" && semPerfilCount > 0
-              ? { ...item, badge: semPerfilCount }
-              : item
-          ),
-        }
-      : section
-  );
+  const adminSections: Section[] = ADMIN_SECTIONS.map((section) => {
+    if (section.label === "Pré-faturamento") {
+      return {
+        ...section,
+        items: section.items.map((item) =>
+          item.url === "/faturamento/clientes" && semPerfilCount > 0
+            ? { ...item, badge: semPerfilCount }
+            : item
+        ),
+      };
+    }
+    if (section.label === "Gestora") {
+      return {
+        ...section,
+        items: section.items.map((item) =>
+          item.url === "/gestora/leads-evento" && leadsNovosCount > 0
+            ? { ...item, badge: leadsNovosCount }
+            : item
+        ),
+      };
+    }
+    return section;
+  });
 
   return (
     <Sidebar collapsible="icon">
