@@ -200,7 +200,7 @@ async function fetchCampanhas(): Promise<Campanha[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const metasData: any[] = metasRes.data ?? [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const vendedorIds = [...new Set(metasData.map((m: any) => m.vendedor_id))] as string[];
+  const vendedorIds = [...new Set(metasData.map((m: any) => m.vendedor_id).filter(Boolean))] as string[];
 
   const profilesMap: Record<string, string> = {};
   if (vendedorIds.length > 0) {
