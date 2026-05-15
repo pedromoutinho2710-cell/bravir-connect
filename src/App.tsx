@@ -36,6 +36,7 @@ import DashboardLogistica from "./pages/logistica/DashboardLogistica";
 import FilaLogistica from "./pages/logistica/FilaLogistica";
 import SiteLanding from "./pages/site/SiteLanding";
 import SiteCandidatura from "./pages/site/SiteCandidatura";
+import EventoFormulario from "./pages/EventoFormulario";
 import DashboardGestora from "./pages/gestora/DashboardGestora";
 import GestaoTime from "./pages/gestora/GestaoTime";
 import CadastrarClienteGestora from "./pages/gestora/CadastrarClienteGestora";
@@ -61,6 +62,7 @@ const App = () => (
             {/* Rotas públicas — sem autenticação */}
             <Route path="/site" element={<SiteLanding />} />
             <Route path="/site/candidatura" element={<SiteCandidatura />} />
+            <Route path="/evento" element={<EventoFormulario />} />
 
             {/* Rotas exclusivas do admin */}
             <Route element={<ProtectedRoute allow={["admin"]}><AppLayout /></ProtectedRoute>}>
