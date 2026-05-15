@@ -917,6 +917,7 @@ export default function Faturamento() {
       <p>Cidade/UF: ${p.cidade ?? "—"} - ${p.uf ?? "—"}</p>
       <p>Cond. Pagamento: ${p.cond_pagamento ?? "—"} | Cluster: ${p.cluster ?? "—"} | Agendamento: ${p.agendamento ? "Sim" : "Não"}</p>
       ${p.comprador ? `<p>Comprador: ${p.comprador}</p>` : ""}
+      ${p.ordem_compra ? `<p><strong>Ordem de Compra:</strong> ${p.ordem_compra}</p>` : ""}
       ${p.email_xml ? `<p>Email XML/Boleto: ${p.email_xml}</p>` : ""}
       ${p.rua ? `<p>Endereço: ${[p.rua, p.numero_endereco, p.bairro].filter(Boolean).join(", ")}</p>` : ""}
       ${p.telefone ? `<p>Telefone: ${p.telefone}</p>` : ""}
