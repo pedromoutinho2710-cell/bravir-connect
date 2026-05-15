@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +54,8 @@ const TIPO_BUTTON_CLASS: Record<Tipo, string> = {
   bug: "border-red-400 bg-red-50 text-red-700",
 };
 
+const RASCUNHO_KEY = "solicitacao_rascunho";
+
 export default function NovaSolicitacao() {
   const [tipo, setTipo] = useState<Tipo | null>(null);
   const [tela, setTela] = useState<string | null>(null);
@@ -62,6 +64,27 @@ export default function NovaSolicitacao() {
   const [motivo, setMotivo] = useState("");
   const [prioridade, setPrioridade] = useState<Prioridade>("normal");
   const [saving, setSaving] = useState(false);
+
+  // Restore draft on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RASCUNHO_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (draft.tipo) setTipo(draft.tipo);
+      if (draft.tela) setTela(draft.tela);
+      if (draft.descricao) setDescricao(draft.descricao);
+      if (draft.motivo) setMotivo(draft.motivo);
+      if (draft.prioridade) setPrioridade(draft.prioridade);
+    } catch {
+      // ignore malformed draft
+    }
+  }, []);
+
+  // Autosave draft on every field change
+  useEffect(() => {
+    localStorage.setItem(RASCUNHO_KEY, JSON.stringify({ tipo, tela, descricao, motivo, prioridade }));
+  }, [tipo, tela, descricao, motivo, prioridade]);
 
   const telaFinal = tela === "Outra" ? (outraTela.trim() || null) : tela;
 
@@ -89,6 +112,7 @@ export default function NovaSolicitacao() {
       });
       if (error) throw error;
 
+      localStorage.removeItem(RASCUNHO_KEY);
       toast.success("Solicitação salva com sucesso!");
       setTipo(null);
       setTela(null);
