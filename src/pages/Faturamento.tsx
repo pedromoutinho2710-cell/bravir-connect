@@ -53,6 +53,7 @@ type PedidoFat = {
   aceita_saldo_cliente: boolean;
   negativado_cliente: boolean;
   email_xml: string | null;
+  ordem_compra: string | null;
   rua: string | null;
   numero_endereco: string | null;
   bairro: string | null;
@@ -366,7 +367,7 @@ export default function Faturamento() {
         .from("pedidos")
         .select(`
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
-          cond_pagamento, observacoes, responsavel_id, motivo, vendedor_id,
+          cond_pagamento, observacoes, ordem_compra, responsavel_id, motivo, vendedor_id,
           cliente_id, perfil_cliente, tabela_preco, agendamento,
           clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, aceita_saldo, negativado, email, rua, numero, bairro, telefone),
           itens_pedido(
@@ -421,6 +422,7 @@ export default function Faturamento() {
           aceita_saldo_cliente: cl?.aceita_saldo ?? false,
           negativado_cliente: cl?.negativado ?? false,
           email_xml: cl?.email ?? null,
+          ordem_compra: p.ordem_compra ?? null,
           rua: cl?.rua ?? null,
           numero_endereco: cl?.numero ?? null,
           bairro: cl?.bairro ?? null,
@@ -951,6 +953,7 @@ export default function Faturamento() {
       agendamento: p.agendamento,
       tabela_preco: p.tabela_preco,
       observacoes: p.observacoes,
+      ordem_compra: p.ordem_compra,
       email_xml: p.email_xml,
       vendedor: profiles[p.vendedor_id] ?? "—",
       itens: p.itens.map((i) => ({

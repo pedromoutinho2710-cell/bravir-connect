@@ -253,10 +253,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
     const cliente_id = await garantirCliente();
     if (!cliente_id) return null;
 
-    const obsCompletas = [
-      cliente.ordem_compra ? `OC: ${cliente.ordem_compra}` : "",
-      cliente.observacoes,
-    ].filter(Boolean).join("\n") || null;
+    const obsCompletas = cliente.observacoes || null;
 
     let id = pedidoId;
     if (id) {
@@ -268,6 +265,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         cond_pagamento: cliente.cond_pagamento || null,
         agendamento: cliente.agendamento,
         observacoes: obsCompletas,
+        ordem_compra: cliente.ordem_compra || null,
         vigencia_id: vigenciaId || null,
         status,
       };
@@ -289,6 +287,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
           cond_pagamento: cliente.cond_pagamento || null,
           agendamento: cliente.agendamento,
           observacoes: obsCompletas,
+          ordem_compra: cliente.ordem_compra || null,
           vigencia_id: vigenciaId || null,
           status,
         })
@@ -500,6 +499,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
       cluster: cliente.cluster,
       tabela_preco: cliente.tabela_preco,
       cond_pagamento: cliente.cond_pagamento,
+      ordem_compra: cliente.ordem_compra || undefined,
       agendamento: cliente.agendamento,
       observacoes: cliente.observacoes,
       itens: itensPdf,
