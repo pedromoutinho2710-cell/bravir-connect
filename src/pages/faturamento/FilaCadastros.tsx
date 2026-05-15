@@ -66,6 +66,7 @@ type Vendedor = { id: string; nome: string };
 const STATUS_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
   pendente: { label: "Pendente", variant: "secondary" },
   pendente_sankhya: { label: "Enviado p/ faturamento", variant: "default" },
+  pendente_cadastro: { label: "Aguardando faturamento", variant: "secondary" },
   reprovado: { label: "Reprovado", variant: "destructive" },
 };
 
@@ -103,7 +104,7 @@ export default function FilaCadastros() {
     setLoading(true);
     const { data } = await (supabase.from("cadastros_pendentes") as any)
       .select("*")
-      .in("status", ["pendente", "pendente_sankhya"])
+      .in("status", ["pendente", "pendente_sankhya", "pendente_cadastro", "devolvido"])
       .order("created_at", { ascending: false });
     setCadastros((data ?? []) as Cadastro[]);
     setLoading(false);
