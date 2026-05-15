@@ -364,20 +364,29 @@ export default function Dashboard() {
             metasVendedorMap[m.vendedor_id] = { meta: Number(m.meta_valor), categoria: m.categoria ?? null };
           });
 
+          // Buscar profiles de vendedores com meta que não estão no profileMap
+          const metaVendedorIds = (metasVendedorData ?? []).map((m: any) => m.vendedor_id as string);
+          const idsParaBuscar = metaVendedorIds.filter((id: string) => !profileMap[id]);
+          if (idsParaBuscar.length > 0) {
+            const { data: extraProfiles } = await supabase.from("profiles").select("id, full_name, email").in("id", idsParaBuscar);
+            (extraProfiles ?? []).forEach((p) => { profileMap[p.id] = p.full_name || p.email; });
+          }
+
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const niveisCamp = [...((campanha.campanha_niveis ?? []) as any[])].sort(
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (a: any, b: any) => Number(b.valor_minimo) - Number(a.valor_minimo)
           );
 
-          const rankingCampList = rankingList
-            .map((v) => {
-              const fat = vendedorFatCamp[v.vendedor_id] ?? 0;
+          const rankingCampList = metaVendedorIds
+            .map((vendedor_id: string) => {
+              const fat = vendedorFatCamp[vendedor_id] ?? 0;
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               const nivel = (niveisCamp.find((n: any) => fat >= Number(n.valor_minimo)) as any)?.nome ?? null;
-              const metaVendedor = metasVendedorMap[v.vendedor_id]?.meta ?? null;
-              const categoriaInicial = metasVendedorMap[v.vendedor_id]?.categoria ?? null;
-              return { vendedor_id: v.vendedor_id, nome: v.nome, fatCampanha: fat, nivel, metaVendedor, categoriaInicial, nivelExibido: nivelMaior(categoriaInicial, nivel) };
+              const metaVendedor = metasVendedorMap[vendedor_id]?.meta ?? null;
+              const categoriaInicial = metasVendedorMap[vendedor_id]?.categoria ?? null;
+              const nome = profileMap[vendedor_id] ?? vendedor_id;
+              return { vendedor_id, nome, fatCampanha: fat, nivel, metaVendedor, categoriaInicial, nivelExibido: nivelMaior(categoriaInicial, nivel) };
             })
             .sort((a, b) => b.fatCampanha - a.fatCampanha);
 
