@@ -37,6 +37,7 @@ import FilaLogistica from "./pages/logistica/FilaLogistica";
 import SiteLanding from "./pages/site/SiteLanding";
 import SiteCandidatura from "./pages/site/SiteCandidatura";
 import EventoFormulario from "./pages/EventoFormulario";
+import EventoQR from "./pages/EventoQR";
 import DashboardGestora from "./pages/gestora/DashboardGestora";
 import GestaoTime from "./pages/gestora/GestaoTime";
 import CadastrarClienteGestora from "./pages/gestora/CadastrarClienteGestora";
@@ -63,6 +64,7 @@ const App = () => (
             <Route path="/site" element={<SiteLanding />} />
             <Route path="/site/candidatura" element={<SiteCandidatura />} />
             <Route path="/evento" element={<EventoFormulario />} />
+            <Route path="/evento/qr" element={<EventoQR />} />
 
             {/* Rotas exclusivas do admin */}
             <Route element={<ProtectedRoute allow={["admin"]}><AppLayout /></ProtectedRoute>}>
