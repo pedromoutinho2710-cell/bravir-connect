@@ -61,10 +61,10 @@ const PRODUTOS: Record<Marca, string[]> = {
 };
 
 const AREAS_ATUACAO = [
-  { id: "revendedor", label: "Revendedor" },
-  { id: "atacadista", label: "Atacadista" },
-  { id: "loja_varejo", label: "Loja varejo" },
-  { id: "marketplace", label: "Marketplace" },
+  { id: "atacado", label: "Atacado", desc: "Venda em grande volume", extra: { type: "text", label: "Quantos vendedores você tem?", placeholder: "Ex: 5 vendedores", field: "qtd_vendedores_atacado" } },
+  { id: "distribuidor", label: "Distribuidor", desc: "Distribui para revendas", extra: { type: "text", label: "Quantos vendedores você tem?", placeholder: "Ex: 12 vendedores", field: "qtd_vendedores_distribuidor" } },
+  { id: "varejo", label: "Varejo", desc: "Venda direta ao consumidor", extra: { type: "text", label: "Quantas lojas você tem?", placeholder: "Ex: 3 lojas", field: "qtd_lojas" } },
+  { id: "loja_online", label: "Loja online", desc: "E-commerce ou marketplace", extra: { type: "text", label: "Site ou link do marketplace", placeholder: "Ex: loja.com.br ou amazon.com.br/loja", field: "link_loja_online" } },
 ];
 
 function formatCNPJ(v: string): string {
@@ -86,6 +86,7 @@ function formatPhone(v: string): string {
 
 const schema = z.object({
   razao_social: z.string().min(2, "Obrigatório"),
+  nome_fantasia: z.string().optional(),
   cnpj: z.string().min(18, "CNPJ inválido"),
   contato_nome: z.string().min(2, "Obrigatório"),
   telefone: z.string().min(14, "WhatsApp inválido"),
@@ -102,6 +103,7 @@ const GREEN = "#1a6b3a";
 export default function EventoFormulario() {
   const [areas, setAreas] = useState<string[]>([]);
   const [areasError, setAreasError] = useState(false);
+  const [extrasAtuacao, setExtrasAtuacao] = useState<Record<string, string>>({});
   const [marcaSelecionada, setMarcaSelecionada] = useState<Marca>("Bravir");
   const [produtosSelecionados, setProdutosSelecionados] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
@@ -119,9 +121,20 @@ export default function EventoFormulario() {
 
   function toggleArea(id: string) {
     setAreasError(false);
+    const isRemoving = areas.includes(id);
     setAreas((prev) =>
-      prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
+      isRemoving ? prev.filter((a) => a !== id) : [...prev, id]
     );
+    if (isRemoving) {
+      const area = AREAS_ATUACAO.find((a) => a.id === id);
+      if (area) {
+        setExtrasAtuacao((prev) => {
+          const next = { ...prev };
+          delete next[area.extra.field];
+          return next;
+        });
+      }
+    }
   }
 
   function toggleProduto(nome: string) {
@@ -152,8 +165,15 @@ export default function EventoFormulario() {
       ),
     ];
 
+    let obs = data.observacoes || "";
+    if (extrasAtuacao["qtd_vendedores_atacado"]) obs += `\nVendedores (atacado): ${extrasAtuacao["qtd_vendedores_atacado"]}`;
+    if (extrasAtuacao["qtd_vendedores_distribuidor"]) obs += `\nVendedores (distribuidor): ${extrasAtuacao["qtd_vendedores_distribuidor"]}`;
+    if (extrasAtuacao["qtd_lojas"]) obs += `\nNúmero de lojas: ${extrasAtuacao["qtd_lojas"]}`;
+    if (extrasAtuacao["link_loja_online"]) obs += `\nLoja online: ${extrasAtuacao["link_loja_online"]}`;
+
     const { error } = await (supabase as any).from("leads_evento").insert({
       razao_social: data.razao_social,
+      nome_fantasia: data.nome_fantasia || null,
       cnpj: data.cnpj,
       contato_nome: data.contato_nome,
       telefone: data.telefone,
@@ -163,7 +183,7 @@ export default function EventoFormulario() {
       areas_atuacao: areas,
       marcas_interesse: marcasInteresse.length > 0 ? marcasInteresse : null,
       produtos_interesse: produtosSelecionados.length > 0 ? produtosSelecionados : null,
-      observacoes: data.observacoes || null,
+      observacoes: obs || null,
       origem: "formulario",
       status: "novo",
     });
@@ -181,6 +201,7 @@ export default function EventoFormulario() {
   function handleReset() {
     setSubmitted(false);
     setAreas([]);
+    setExtrasAtuacao({});
     setProdutosSelecionados([]);
     setAreasError(false);
     setSubmitError(null);
@@ -356,6 +377,20 @@ export default function EventoFormulario() {
                     )}
                   </div>
 
+                  {/* Nome fantasia */}
+                  <div className="sm:col-span-2">
+                    <Label htmlFor="nome_fantasia">
+                      Nome fantasia{" "}
+                      <span className="text-gray-400 font-normal">(opcional)</span>
+                    </Label>
+                    <Input
+                      id="nome_fantasia"
+                      {...register("nome_fantasia")}
+                      className="mt-1"
+                      placeholder="Como sua empresa é conhecida"
+                    />
+                  </div>
+
                   {/* CNPJ */}
                   <div>
                     <Label htmlFor="cnpj">CNPJ *</Label>
@@ -478,31 +513,59 @@ export default function EventoFormulario() {
                   Área de atuação *
                 </h2>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {AREAS_ATUACAO.map((area) => {
                     const checked = areas.includes(area.id);
                     return (
-                      <label
+                      <div
                         key={area.id}
                         className={cn(
-                          "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all select-none",
+                          "rounded-lg border transition-all",
                           checked
-                            ? "bg-green-50 border-2"
-                            : "border-gray-200 hover:border-gray-300 hover:bg-gray-50"
+                            ? "bg-green-50"
+                            : "border-gray-200 hover:border-gray-300"
                         )}
-                        style={checked ? { borderColor: GREEN } : {}}
+                        style={checked ? { borderColor: GREEN, borderWidth: "2px" } : { borderWidth: "1px" }}
                       >
-                        <Checkbox
-                          id={area.id}
-                          checked={checked}
-                          onCheckedChange={() => toggleArea(area.id)}
-                          className="shrink-0"
-                          style={checked ? { backgroundColor: GREEN, borderColor: GREEN } : {}}
-                        />
-                        <span className="text-sm font-medium text-gray-700">
-                          {area.label}
-                        </span>
-                      </label>
+                        <label className="flex items-start gap-3 p-3 cursor-pointer select-none">
+                          <Checkbox
+                            id={area.id}
+                            checked={checked}
+                            onCheckedChange={() => toggleArea(area.id)}
+                            className="shrink-0 mt-0.5"
+                            style={checked ? { backgroundColor: GREEN, borderColor: GREEN } : {}}
+                          />
+                          <div className="flex flex-col">
+                            <span className="text-sm font-medium text-gray-800">
+                              {area.label}
+                            </span>
+                            <span className="text-xs text-gray-400">{area.desc}</span>
+                          </div>
+                        </label>
+
+                        {checked && (
+                          <div className="px-3 pb-3">
+                            <Label
+                              htmlFor={`extra-${area.id}`}
+                              className="text-xs text-gray-600"
+                            >
+                              {area.extra.label}
+                            </Label>
+                            <Input
+                              id={`extra-${area.id}`}
+                              value={extrasAtuacao[area.extra.field] ?? ""}
+                              onChange={(e) =>
+                                setExtrasAtuacao((prev) => ({
+                                  ...prev,
+                                  [area.extra.field]: e.target.value,
+                                }))
+                              }
+                              className="mt-1 h-8 text-sm"
+                              placeholder={area.extra.placeholder}
+                            />
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
