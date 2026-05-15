@@ -12,6 +12,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
 import { MARCAS } from "@/lib/constants";
 import { Loader2, Search, CalendarClock, CheckCircle2, Plus, UserMinus } from "lucide-react";
@@ -250,7 +251,7 @@ export default function MeusClientes() {
         .from("cadastros_pendentes")
         .select("id, nome_cliente, razao_social, cnpj, status, motivo_reprovacao, created_at")
         .eq("vendedor_id", user.id)
-        .in("status", ["pendente_sankhya", "devolvido"])
+        .in("status", ["pendente_cadastro", "pendente_sankhya", "devolvido"])
         .order("created_at", { ascending: false });
       setCadastrosPendentes((cadastrosRes.data ?? []) as CadastroPendente[]);
     })().finally(() => setLoading(false));
@@ -359,6 +360,10 @@ export default function MeusClientes() {
     );
   }
 
+  const badgeCount = cadastrosPendentes.filter(
+    (c) => c.status === "pendente_cadastro" || c.status === "devolvido"
+  ).length;
+
   return (
     <div className="space-y-6">
       <div>
@@ -366,177 +371,201 @@ export default function MeusClientes() {
         <p className="text-sm text-muted-foreground">Portfólio com curva ABC, frequência e cobertura de marcas</p>
       </div>
 
-      {cadastrosPendentes.length > 0 && (
-        <div className="space-y-2">
-          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+      <Tabs defaultValue="carteira">
+        <TabsList>
+          <TabsTrigger value="carteira">Carteira ativa</TabsTrigger>
+          <TabsTrigger value="cadastros" className="gap-2">
             Cadastros enviados
-          </h2>
-          {cadastrosPendentes.map((c) => (
-            <div
-              key={c.id}
-              className={`rounded-md border px-4 py-3 flex items-start justify-between gap-3 ${
-                c.status === "devolvido"
-                  ? "border-red-300 bg-red-50"
-                  : "border-yellow-300 bg-yellow-50"
-              }`}
-            >
-              <div className="space-y-1 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium text-sm">
-                    {c.nome_cliente ?? c.razao_social ?? "Sem nome"}
-                  </span>
-                  {c.status === "devolvido" ? (
-                    <span className="inline-flex items-center rounded-full border border-red-300 bg-red-100 text-red-800 px-2 py-0.5 text-xs font-medium">
-                      Devolvido
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center rounded-full border border-yellow-300 bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs font-medium">
-                      Aguardando faturamento
-                    </span>
+            {badgeCount > 0 && (
+              <span className="inline-flex items-center justify-center rounded-full bg-red-500 text-white text-xs font-bold h-5 min-w-5 px-1">
+                {badgeCount}
+              </span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="carteira" className="space-y-4 mt-4">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Buscar por nome ou CNPJ..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+              />
+            </div>
+            <Select value={ordem} onValueChange={(v) => setOrdem(v as OrdemCampo)}>
+              <SelectTrigger className="w-full sm:w-56">
+                <SelectValue placeholder="Ordenar por" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ltv">LTV (maior primeiro)</SelectItem>
+                <SelectItem value="num_pedidos">Pedidos (maior primeiro)</SelectItem>
+                <SelectItem value="ticket_medio">Ticket médio (maior primeiro)</SelectItem>
+                <SelectItem value="razao_social">Nome (A–Z)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {clientesFiltrados.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                {busca ? "Nenhum cliente encontrado para esta busca" : "Nenhum cliente encontrado"}
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12">#</TableHead>
+                    <TableHead className="w-10">ABC</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Canal</TableHead>
+                    <TableHead>CNPJ</TableHead>
+                    <TableHead className="text-right">LTV</TableHead>
+                    <TableHead className="text-right">Pedidos</TableHead>
+                    <TableHead className="text-right">Ticket médio</TableHead>
+                    <TableHead>Ciclo médio</TableHead>
+                    <TableHead>Próxima compra</TableHead>
+                    <TableHead>Marcas</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {clientesFiltrados.map((c) => {
+                    const vencida = c.proxima_compra && c.proxima_compra < hoje;
+                    const proximaStr = c.proxima_compra
+                      ? c.proxima_compra.toLocaleDateString("pt-BR")
+                      : "—";
+                    const inativo30 = !c.ultima_compra || (hoje.getTime() - new Date(c.ultima_compra).getTime()) / DIA_MS >= 30;
+                    return (
+                      <TableRow
+                        key={c.cliente_id}
+                        className={`cursor-pointer ${inativo30 ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-muted/50"}`}
+                        onClick={() => abrirSheet(c)}
+                      >
+                        <TableCell className="font-mono text-muted-foreground text-sm">{c.rank}</TableCell>
+                        <TableCell>{abcBadge(c.abc)}</TableCell>
+                        <TableCell className="font-medium">{c.razao_social}</TableCell>
+                        <TableCell>
+                          {c.canal ? (
+                            <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300 text-xs">
+                              {c.canal}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground font-mono">
+                          {c.cnpj ? formatCNPJ(c.cnpj) : "—"}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">{formatBRL(c.ltv)}</TableCell>
+                        <TableCell className="text-right text-sm">{c.num_pedidos}</TableCell>
+                        <TableCell className="text-right text-sm">{formatBRL(c.ticket_medio)}</TableCell>
+                        <TableCell className="text-sm">
+                          {c.ciclo_medio != null
+                            ? `${Math.round(c.ciclo_medio)} dias`
+                            : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {c.proxima_compra ? (
+                            <span className={`flex items-center gap-1 text-sm ${vencida ? "text-red-600 font-medium" : "text-foreground"}`}>
+                              {vencida && <CalendarClock className="h-3 w-3" />}
+                              {proximaStr}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {MARCAS.map((marca) => {
+                              const tem = c.marcas_compradas.includes(marca);
+                              return (
+                                <Badge
+                                  key={marca}
+                                  variant="outline"
+                                  className={`text-xs ${tem ? "border-green-400 bg-green-50 text-green-700" : "border-red-300 bg-red-50 text-red-600"}`}
+                                >
+                                  {marca}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="cadastros" className="space-y-2 mt-4">
+          {cadastrosPendentes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum cadastro enviado ainda.</p>
+          ) : (
+            cadastrosPendentes.map((c) => {
+              const isDevolvido = c.status === "devolvido";
+              const isAprovado = c.status === "pendente_sankhya";
+              const cardClass = isDevolvido
+                ? "border-red-300 bg-red-50"
+                : isAprovado
+                ? "border-green-300 bg-green-50"
+                : "border-yellow-300 bg-yellow-50";
+              return (
+                <div
+                  key={c.id}
+                  className={`rounded-md border px-4 py-3 flex items-start justify-between gap-3 ${cardClass}`}
+                >
+                  <div className="space-y-1 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-medium text-sm">
+                        {c.nome_cliente ?? c.razao_social ?? "Sem nome"}
+                      </span>
+                      {isDevolvido && (
+                        <span className="inline-flex items-center rounded-full border border-red-300 bg-red-100 text-red-800 px-2 py-0.5 text-xs font-medium">
+                          Devolvido para correção
+                        </span>
+                      )}
+                      {isAprovado && (
+                        <span className="inline-flex items-center rounded-full border border-green-300 bg-green-100 text-green-800 px-2 py-0.5 text-xs font-medium">
+                          Aprovado — na carteira
+                        </span>
+                      )}
+                      {!isDevolvido && !isAprovado && (
+                        <span className="inline-flex items-center rounded-full border border-yellow-300 bg-yellow-100 text-yellow-800 px-2 py-0.5 text-xs font-medium">
+                          Aguardando faturamento
+                        </span>
+                      )}
+                    </div>
+                    {c.cnpj && (
+                      <div className="text-xs text-muted-foreground">{formatCNPJ(c.cnpj)}</div>
+                    )}
+                    {isDevolvido && c.motivo_reprovacao && (
+                      <div className="mt-1 rounded border border-red-200 bg-red-100 px-2 py-1 text-xs text-red-700">
+                        <span className="font-medium">Motivo:</span> {c.motivo_reprovacao}
+                      </div>
+                    )}
+                  </div>
+                  {isDevolvido && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="shrink-0 border-red-300 text-red-700 hover:bg-red-100"
+                      onClick={() => navigate(`/cadastrar-cliente?corrigir=${c.id}`)}
+                    >
+                      Corrigir cadastro
+                    </Button>
                   )}
                 </div>
-                {c.cnpj && (
-                  <div className="text-xs text-muted-foreground">
-                    {formatCNPJ(c.cnpj)}
-                  </div>
-                )}
-                {c.status === "devolvido" && c.motivo_reprovacao && (
-                  <div className="text-xs text-red-700 font-medium mt-1">
-                    Motivo: {c.motivo_reprovacao}
-                  </div>
-                )}
-              </div>
-              {c.status === "devolvido" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0 border-red-300 text-red-700 hover:bg-red-100"
-                  onClick={() => navigate(`/cadastrar-cliente?corrigir=${c.id}`)}
-                >
-                  Corrigir cadastro
-                </Button>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            placeholder="Buscar por nome ou CNPJ..."
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-          />
-        </div>
-        <Select value={ordem} onValueChange={(v) => setOrdem(v as OrdemCampo)}>
-          <SelectTrigger className="w-full sm:w-56">
-            <SelectValue placeholder="Ordenar por" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ltv">LTV (maior primeiro)</SelectItem>
-            <SelectItem value="num_pedidos">Pedidos (maior primeiro)</SelectItem>
-            <SelectItem value="ticket_medio">Ticket médio (maior primeiro)</SelectItem>
-            <SelectItem value="razao_social">Nome (A–Z)</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {clientesFiltrados.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            {busca ? "Nenhum cliente encontrado para esta busca" : "Nenhum cliente encontrado"}
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12">#</TableHead>
-                <TableHead className="w-10">ABC</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Canal</TableHead>
-                <TableHead>CNPJ</TableHead>
-                <TableHead className="text-right">LTV</TableHead>
-                <TableHead className="text-right">Pedidos</TableHead>
-                <TableHead className="text-right">Ticket médio</TableHead>
-                <TableHead>Ciclo médio</TableHead>
-                <TableHead>Próxima compra</TableHead>
-                <TableHead>Marcas</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {clientesFiltrados.map((c) => {
-                const vencida = c.proxima_compra && c.proxima_compra < hoje;
-                const proximaStr = c.proxima_compra
-                  ? c.proxima_compra.toLocaleDateString("pt-BR")
-                  : "—";
-                const inativo30 = !c.ultima_compra || (hoje.getTime() - new Date(c.ultima_compra).getTime()) / DIA_MS >= 30;
-                return (
-                  <TableRow
-                    key={c.cliente_id}
-                    className={`cursor-pointer ${inativo30 ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-muted/50"}`}
-                    onClick={() => abrirSheet(c)}
-                  >
-                    <TableCell className="font-mono text-muted-foreground text-sm">{c.rank}</TableCell>
-                    <TableCell>{abcBadge(c.abc)}</TableCell>
-                    <TableCell className="font-medium">{c.razao_social}</TableCell>
-                    <TableCell>
-                      {c.canal ? (
-                        <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300 text-xs">
-                          {c.canal}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground font-mono">
-                      {c.cnpj ? formatCNPJ(c.cnpj) : "—"}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold">{formatBRL(c.ltv)}</TableCell>
-                    <TableCell className="text-right text-sm">{c.num_pedidos}</TableCell>
-                    <TableCell className="text-right text-sm">{formatBRL(c.ticket_medio)}</TableCell>
-                    <TableCell className="text-sm">
-                      {c.ciclo_medio != null
-                        ? `${Math.round(c.ciclo_medio)} dias`
-                        : "—"}
-                    </TableCell>
-                    <TableCell>
-                      {c.proxima_compra ? (
-                        <span className={`flex items-center gap-1 text-sm ${vencida ? "text-red-600 font-medium" : "text-foreground"}`}>
-                          {vencida && <CalendarClock className="h-3 w-3" />}
-                          {proximaStr}
-                        </span>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {MARCAS.map((marca) => {
-                          const tem = c.marcas_compradas.includes(marca);
-                          return (
-                            <Badge
-                              key={marca}
-                              variant="outline"
-                              className={`text-xs ${tem ? "border-green-400 bg-green-50 text-green-700" : "border-red-300 bg-red-50 text-red-600"}`}
-                            >
-                              {marca}
-                            </Badge>
-                          );
-                        })}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+              );
+            })
+          )}
+        </TabsContent>
+      </Tabs>
 
       {/* Sheet: detalhe do cliente */}
       <Sheet open={!!sheetCliente} onOpenChange={(o) => !o && setSheetCliente(null)}>
