@@ -17,6 +17,7 @@ import {
   ClipboardCheck,
   History,
   UserCheck,
+  PlusSquare,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -82,6 +83,8 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Tabelas de Preço", url: "/admin/tabelas-preco", icon: Tag },
       { title: "Campanhas", url: "/admin/campanhas", icon: Megaphone },
       { title: "Configurações", url: "/admin/configuracoes", icon: Settings },
+      { title: "Solicitações", url: "/admin/solicitacoes", icon: ClipboardList },
+      { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
     ],
   },
 ];

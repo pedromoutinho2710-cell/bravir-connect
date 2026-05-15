@@ -26,6 +26,8 @@ import FilaCadastros from "./pages/faturamento/FilaCadastros";
 import EditarPedido from "./pages/faturamento/EditarPedido";
 import EditarPedidoFaturamento from "@/pages/faturamento/EditarPedidoFaturamento";
 import PedidosAdmin from "./pages/admin/PedidosAdmin";
+import Solicitacoes from "./pages/admin/Solicitacoes";
+import NovaSolicitacao from "./pages/NovaSolicitacao";
 import ClientesAdmin from "./pages/admin/ClientesAdmin";
 import ImportarClientes from "./pages/admin/ImportarClientes";
 import ClienteDetalhe from "./pages/ClienteDetalhe";
@@ -80,6 +82,8 @@ const App = () => (
               <Route path="/admin/tabelas-preco" element={<TabelasPreco />} />
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
               <Route path="/admin/campanhas" element={<Campanhas />} />
+              <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
+              <Route path="/solicitacao" element={<NovaSolicitacao />} />
             </Route>
 
             {/* Rotas de vendedor — acessíveis por vendedor e admin */}
