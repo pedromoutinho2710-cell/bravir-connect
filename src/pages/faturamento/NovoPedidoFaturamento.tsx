@@ -12,7 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Search, Trash2 } from "lucide-react";
+import { MARCAS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
 
 type Produto = { id: string; nome: string; codigo_jiva: string; marca: string };
 type ItemPedido = {
@@ -58,7 +60,7 @@ export default function NovoPedidoFaturamento() {
   // ── Produtos ────────────────────────────────────────────────────
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtoBusca, setProdutoBusca] = useState("");
-  const [produtosSugeridos, setProdutosSugeridos] = useState<Produto[]>([]);
+  const [filtroMarca, setFiltroMarca] = useState<string>("Todas");
   const [itens, setItens] = useState<ItemPedido[]>([]);
 
   const [salvando, setSalvando] = useState(false);
@@ -133,16 +135,21 @@ export default function NovoPedidoFaturamento() {
     setClientesSugeridos([]);
   }
 
-  // Filtra sugestões de produtos localmente
-  useEffect(() => {
-    if (produtoBusca.trim().length < 2) { setProdutosSugeridos([]); return; }
-    const busca = produtoBusca.toLowerCase();
-    setProdutosSugeridos(
-      produtos
-        .filter((p) => p.nome.toLowerCase().includes(busca) || p.codigo_jiva.toLowerCase().includes(busca))
-        .slice(0, 10)
-    );
-  }, [produtoBusca, produtos]);
+  const produtosFiltrados = useMemo(() => {
+    const q = produtoBusca.trim().toLowerCase();
+    return produtos.filter((p) => {
+      if (filtroMarca !== "Todas" && p.marca !== filtroMarca) return false;
+      if (!q) return true;
+      return p.nome.toLowerCase().includes(q) || p.codigo_jiva.toLowerCase().includes(q);
+    });
+  }, [produtos, produtoBusca, filtroMarca]);
+
+  const produtosPorMarca = useMemo(() =>
+    produtosFiltrados.reduce<Record<string, Produto[]>>((acc, p) => {
+      (acc[p.marca] ||= []).push(p);
+      return acc;
+    }, {}),
+  [produtosFiltrados]);
 
   const totalGeral = useMemo(() => itens.reduce((s, i) => s + i.total, 0), [itens]);
 
@@ -415,84 +422,123 @@ export default function NovoPedidoFaturamento() {
         </div>
 
         {/* ── Coluna direita: produtos ── */}
-        <Card>
+        <Card className="bg-[#F0FDF4] border-green-200">
           <CardHeader className="pb-3">
             <CardTitle className="text-base">Produtos</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="relative">
-              <Input
-                placeholder="Buscar produto por nome ou código…"
-                value={produtoBusca}
-                onChange={(e) => setProdutoBusca(e.target.value)}
-              />
-              {produtosSugeridos.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md max-h-56 overflow-y-auto">
-                  {produtosSugeridos.map((p) => (
-                    <button key={p.id} type="button"
-                      className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center justify-between"
-                      onClick={() => adicionarProduto(p)}>
-                      <span>
-                        <span className="font-mono text-xs text-muted-foreground mr-2">{p.codigo_jiva}</span>
-                        {p.nome}
-                      </span>
-                      <Plus className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                    </button>
-                  ))}
-                </div>
-              )}
+            {/* Busca + filtro marca */}
+            <div className="flex flex-col gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={produtoBusca}
+                  onChange={(e) => setProdutoBusca(e.target.value)}
+                  placeholder="Buscar por SKU ou nome…"
+                  className="pl-9"
+                />
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {(["Todas", ...MARCAS] as const).map((m) => (
+                  <button key={m} type="button" onClick={() => setFiltroMarca(m)}
+                    className={cn(
+                      "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                      filtroMarca === m
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background hover:bg-muted"
+                    )}>
+                    {m}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {itens.length > 0 ? (
+            {/* Lista scrollável de produtos */}
+            <div className="space-y-4 max-h-80 overflow-y-auto rounded-md border p-3 bg-muted/20">
+              {Object.keys(produtosPorMarca).length === 0 && (
+                <div className="text-center text-sm text-muted-foreground py-6">Nenhum produto encontrado</div>
+              )}
+              {Object.entries(produtosPorMarca).map(([marca, lista]) => (
+                <div key={marca}>
+                  <div className="mb-2 text-xs font-bold uppercase tracking-wider text-primary">{marca}</div>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {lista.map((p) => {
+                      const ja = itens.some((i) => i.produto_id === p.id);
+                      return (
+                        <div key={p.id}
+                          className="flex items-center justify-between gap-2 rounded-md border bg-card p-2 text-sm">
+                          <div className="min-w-0">
+                            <div className="font-mono text-xs text-muted-foreground">{p.codigo_jiva}</div>
+                            <div className="truncate text-xs">{p.nome}</div>
+                          </div>
+                          <Button type="button" size="sm"
+                            variant={ja ? "secondary" : "default"}
+                            disabled={ja}
+                            onClick={() => adicionarProduto(p)}>
+                            <Plus className="h-3 w-3" />
+                            {ja ? "Adicionado" : "Adicionar"}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabela de itens adicionados */}
+            {itens.length > 0 && (
               <div className="rounded-md border overflow-x-auto">
                 <Table>
                   <TableHeader>
-                    <TableRow>
-                      <TableHead>Produto</TableHead>
-                      <TableHead className="w-20">Qtd</TableHead>
-                      <TableHead className="w-28">Preço unit.</TableHead>
-                      <TableHead className="w-20">Desc %</TableHead>
-                      <TableHead className="w-28 text-right">Total</TableHead>
-                      <TableHead className="w-10"></TableHead>
+                    <TableRow style={{ backgroundColor: "#1a5c38" }} className="hover:bg-[#1a5c38]">
+                      <TableHead className="text-white text-[11px] font-semibold py-2">Produto</TableHead>
+                      <TableHead className="text-white text-[11px] font-semibold py-2 w-20">Qtd</TableHead>
+                      <TableHead className="text-white text-[11px] font-semibold py-2 w-28">Preço unit.</TableHead>
+                      <TableHead className="text-white text-[11px] font-semibold py-2 w-20">Desc %</TableHead>
+                      <TableHead className="text-white text-[11px] font-semibold py-2 w-28 text-right">Total</TableHead>
+                      <TableHead className="text-white w-10 py-2"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {itens.map((it, idx) => (
-                      <TableRow key={it.produto_id}>
-                        <TableCell className="text-xs">{it.nome}</TableCell>
-                        <TableCell>
+                      <TableRow key={it.produto_id}
+                        style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f8faf9" }}
+                        className="hover:bg-green-50/70">
+                        <TableCell className="py-2">
+                          <div className="text-xs font-medium">{it.nome}</div>
+                        </TableCell>
+                        <TableCell className="py-2">
                           <Input type="number" min={1} value={it.quantidade}
-                            className="h-7 w-16 text-sm"
+                            className="h-7 w-16 text-xs"
                             onChange={(e) => atualizarItem(idx, "quantidade", Number(e.target.value) || 1)} />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="py-2">
                           <Input type="number" min={0} step="0.01" value={it.preco_unitario}
-                            className="h-7 w-24 text-sm"
+                            className="h-7 w-24 text-xs"
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => atualizarItem(idx, "preco_unitario", Number(e.target.value) || 0)} />
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="py-2">
                           <Input type="number" min={0} max={100} value={it.desconto}
-                            className="h-7 w-16 text-sm"
+                            className="h-7 w-16 text-xs"
+                            onFocus={(e) => e.target.select()}
                             onChange={(e) => atualizarItem(idx, "desconto", Math.min(100, Number(e.target.value) || 0))} />
                         </TableCell>
-                        <TableCell className="text-right font-medium text-sm text-green-700">
+                        <TableCell className="text-right font-bold text-sm py-2" style={{ color: "#1a5c38" }}>
                           {formatBRL(it.total)}
                         </TableCell>
-                        <TableCell>
-                          <Button type="button" size="sm" variant="ghost"
-                            className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                        <TableCell className="py-2">
+                          <button type="button"
+                            className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
                             onClick={() => removerItem(idx)}>
                             <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                          </button>
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
-              </div>
-            ) : (
-              <div className="flex h-32 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
-                Nenhum produto adicionado
               </div>
             )}
           </CardContent>
