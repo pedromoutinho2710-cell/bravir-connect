@@ -126,7 +126,7 @@ export default function LeadsEvento() {
       .from("clientes")
       .insert({
         razao_social: dialogLead.razao_social || dialogLead.contato_nome || "Sem nome",
-        cnpj: dialogLead.cnpj ?? null,
+        cnpj: dialogLead.cnpj ?? "00.000.000/0000-00",
         comprador: dialogLead.contato_nome ?? null,
         telefone: dialogLead.telefone ?? null,
         email: dialogLead.email ?? null,
@@ -134,12 +134,19 @@ export default function LeadsEvento() {
         uf: dialogLead.uf ?? null,
         vendedor_id: vendedorId,
         status: "ativo",
-        canal: dialogLead.areas_atuacao?.[0] ?? null,
+        canal: dialogLead.areas_atuacao?.[0] ?? "direto",
       })
       .select("id")
       .single();
 
-    if (clienteError || !clienteData) {
+    if (clienteError) {
+      console.error("Erro clientes:", JSON.stringify(clienteError));
+      toast.error("Erro ao cadastrar cliente.");
+      setDirecting(false);
+      return;
+    }
+
+    if (!clienteData) {
       toast.error("Erro ao cadastrar cliente.");
       setDirecting(false);
       return;
