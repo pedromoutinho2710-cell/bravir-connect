@@ -8,7 +8,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, ArrowRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, formatDate } from "@/lib/format";
+import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 
 type Periodo = "hoje" | "semana" | "mes" | "ano";
 
@@ -68,6 +69,26 @@ function getDateRange(periodo: Periodo): { dataInicio: string; dataFim: string }
   const end = new Date(today.getFullYear(), 11, 31);
   return { dataInicio: fmt(start), dataFim: fmt(end) };
 }
+
+type DrillCardKey = "recebidos" | "lancados" | "aguardandoFaturamento" | "faturado" | "problemas";
+
+type PedidoDrillRow = {
+  id: string;
+  numero_pedido: number;
+  data_pedido: string;
+  status: string;
+  vendedor_id: string;
+  razao_social: string;
+  total: number;
+};
+
+const DRILL_CARD_LABEL: Record<DrillCardKey, string> = {
+  recebidos: "Pedidos Recebidos",
+  lancados: "Pedidos Lançados",
+  aguardandoFaturamento: "Aguardando Faturamento",
+  faturado: "Faturado",
+  problemas: "Problemas",
+};
 
 type KPIs = {
   recebidos: number;
@@ -165,6 +186,12 @@ export default function Dashboard() {
   // Filtro de período customizado
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
+
+  // Drill-down dos cards
+  const [cardAberto, setCardAberto] = useState<DrillCardKey | null>(null);
+  const [drillPedidos, setDrillPedidos] = useState<PedidoDrillRow[]>([]);
+  const [drillLoading, setDrillLoading] = useState(false);
+  const [drillProfiles, setDrillProfiles] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setLoading(true);
@@ -581,6 +608,68 @@ export default function Dashboard() {
   void previsaoMes;
   void previsaoPct;
 
+  async function carregarDrill(card: DrillCardKey) {
+    const { inicio, fim } = getPeriodoCards(periodoCards, customCardInicio, customCardFim);
+    if (periodoCards === "custom" && (!customCardInicio || !customCardFim)) return;
+    setDrillLoading(true);
+    setDrillPedidos([]);
+
+    let query = supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .from("pedidos") as any;
+
+    query = query
+      .select("id, numero_pedido, data_pedido, status, vendedor_id, clientes(razao_social), itens_pedido(total_item)")
+      .gte("data_pedido", inicio)
+      .lte("data_pedido", fim)
+      .order("data_pedido", { ascending: false });
+
+    if (card === "recebidos") query = query.not("status", "in", '("rascunho","cancelado")');
+    else if (card === "lancados") query = query.eq("status", "no_sankhya");
+    else if (card === "aguardandoFaturamento") query = query.eq("status", "no_sankhya");
+    else if (card === "faturado") query = query.eq("status", "faturado");
+    else if (card === "problemas") query = query.in("status", ["com_problema", "devolvido", "cancelado"]);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await query as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rows: PedidoDrillRow[] = ((data ?? []) as any[]).map((p: any) => ({
+      id: p.id,
+      numero_pedido: p.numero_pedido,
+      data_pedido: p.data_pedido,
+      status: p.status,
+      vendedor_id: p.vendedor_id,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      razao_social: (p.clientes as any)?.razao_social ?? "—",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      total: ((p.itens_pedido ?? []) as any[]).reduce((s: number, i: any) => s + Number(i.total_item ?? 0), 0),
+    }));
+    setDrillPedidos(rows);
+
+    const vendedorIds = [...new Set(rows.map((r) => r.vendedor_id).filter(Boolean))];
+    if (vendedorIds.length > 0) {
+      const { data: profilesData } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", vendedorIds);
+      const map: Record<string, string> = {};
+      (profilesData ?? []).forEach((p) => { map[p.id] = p.full_name ?? p.email; });
+      setDrillProfiles(map);
+    }
+
+    setDrillLoading(false);
+  }
+
+  function handleCardClick(card: DrillCardKey) {
+    if (cardAberto === card) {
+      setCardAberto(null);
+      setDrillPedidos([]);
+    } else {
+      setCardAberto(card);
+      carregarDrill(card);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -970,27 +1059,81 @@ export default function Dashboard() {
 
       {/* Seção 4 — KPIs */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="rounded-lg border p-4 bg-orange-50 border-orange-300">
-          <div className="text-sm font-medium text-orange-800">Pedidos Recebidos</div>
-          <div className="text-3xl font-bold mt-1 text-orange-900">{kpis.recebidos}</div>
-        </div>
-        <div className="rounded-lg border p-4 bg-purple-50 border-purple-300">
-          <div className="text-sm font-medium text-purple-800">Pedidos Lançados</div>
-          <div className="text-3xl font-bold mt-1 text-purple-900">{kpis.lancados}</div>
-        </div>
-        <div className="rounded-lg border p-4 bg-blue-50 border-blue-300">
-          <div className="text-sm font-medium text-blue-800">Aguardando Faturamento</div>
-          <div className="text-3xl font-bold mt-1 text-blue-900">{kpis.aguardandoFaturamento}</div>
-        </div>
-        <div className="rounded-lg border p-4 bg-green-50 border-green-300">
-          <div className="text-sm font-medium text-green-800">Faturado</div>
-          <div className="text-3xl font-bold mt-1 text-green-900">{kpis.faturado}</div>
-        </div>
-        <div className="rounded-lg border p-4 bg-red-50 border-red-300">
-          <div className="text-sm font-medium text-red-800">Problemas</div>
-          <div className="text-3xl font-bold mt-1 text-red-900">{kpis.problemas}</div>
-        </div>
+        {(
+          [
+            { key: "recebidos" as DrillCardKey, label: "Pedidos Recebidos", value: kpis.recebidos, bg: "bg-orange-50", border: "border-orange-300", text: "text-orange-800", textBig: "text-orange-900" },
+            { key: "lancados" as DrillCardKey, label: "Pedidos Lançados", value: kpis.lancados, bg: "bg-purple-50", border: "border-purple-300", text: "text-purple-800", textBig: "text-purple-900" },
+            { key: "aguardandoFaturamento" as DrillCardKey, label: "Aguardando Faturamento", value: kpis.aguardandoFaturamento, bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-800", textBig: "text-blue-900" },
+            { key: "faturado" as DrillCardKey, label: "Faturado", value: kpis.faturado, bg: "bg-green-50", border: "border-green-300", text: "text-green-800", textBig: "text-green-900" },
+            { key: "problemas" as DrillCardKey, label: "Problemas", value: kpis.problemas, bg: "bg-red-50", border: "border-red-300", text: "text-red-800", textBig: "text-red-900" },
+          ]
+        ).map(({ key, label, value, bg, border, text, textBig }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => handleCardClick(key)}
+            className={`rounded-lg border p-4 text-left transition-all hover:shadow-md focus:outline-none ${bg} ${border} ${cardAberto === key ? "ring-2 ring-offset-1 ring-current shadow-md" : ""}`}
+          >
+            <div className={`text-sm font-medium ${text}`}>{label}</div>
+            <div className={`text-3xl font-bold mt-1 ${textBig}`}>{value}</div>
+          </button>
+        ))}
       </div>
+
+      {/* Drill-down dos cards */}
+      {cardAberto && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-sm">
+              {DRILL_CARD_LABEL[cardAberto]}
+              {drillLoading ? " — carregando…" : ` — ${drillPedidos.length} pedido(s)`}
+            </h3>
+            <Button size="sm" variant="ghost" onClick={() => { setCardAberto(null); setDrillPedidos([]); }}>
+              Fechar
+            </Button>
+          </div>
+          <div className="rounded-md border overflow-x-auto">
+            {drillLoading ? (
+              <div className="flex h-24 items-center justify-center">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            ) : drillPedidos.length === 0 ? (
+              <div className="flex h-24 items-center justify-center text-sm text-muted-foreground">
+                Nenhum pedido neste período
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-20">#</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Vendedor</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {drillPedidos.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-mono font-semibold text-sm">#{p.numero_pedido}</TableCell>
+                      <TableCell className="text-sm">{formatDate(p.data_pedido)}</TableCell>
+                      <TableCell className="text-sm font-medium">{p.razao_social}</TableCell>
+                      <TableCell className="text-sm">{drillProfiles[p.vendedor_id] ?? "—"}</TableCell>
+                      <TableCell className="text-right font-bold text-sm text-green-700">{formatBRL(p.total)}</TableCell>
+                      <TableCell>
+                        <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_COLOR[p.status] ?? "bg-gray-100 text-gray-800 border-gray-300"}`}>
+                          {STATUS_LABEL[p.status] ?? p.status}
+                        </span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Seção 5 — Entrada por marca */}
       {Object.keys(entradaMarca).length > 0 && (
