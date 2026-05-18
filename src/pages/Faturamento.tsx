@@ -1259,8 +1259,6 @@ export default function Faturamento() {
       return acc + Number(item.preco_final) * qtd;
     }, 0);
 
-    console.log("DEBUG totalNovoPedido:", totalNovoPedido, "| preco_final samples:", itensSemEstoque.map(i => i.preco_final));
-
     const { data: novoPedido, error: errNovo } = await supabase
       .from("pedidos")
       .insert({
@@ -1316,8 +1314,6 @@ export default function Faturamento() {
       const qtd = qtdSankhya[item.id] ?? 0;
       return sum + Number(item.preco_final) * qtd;
     }, 0);
-
-    console.log("DEBUG totalOriginal:", totalOriginal, "| preco_final samples:", itens.map(i => i.preco_final));
 
     await supabase
       .from("pedidos")
@@ -1421,12 +1417,12 @@ export default function Faturamento() {
                   produto_id: item.produto_id,
                   nome: item.produtos?.nome ?? "Produto",
                   codigo: item.produtos?.codigo_jiva ?? "",
-                  quantidade: item.quantidade,
-                  preco_final: item.preco_final ?? 0,
-                  preco_unitario_bruto: item.preco_unitario_bruto ?? 0,
-                  desconto_perfil: item.desconto_perfil ?? 0,
-                  desconto_comercial: item.desconto_comercial ?? 0,
-                  desconto_trade: item.desconto_trade ?? 0,
+                  quantidade: Number(item.quantidade),
+                  preco_final: Number(item.preco_final),
+                  preco_unitario_bruto: Number(item.preco_unitario_bruto),
+                  desconto_perfil: Number(item.desconto_perfil ?? 0),
+                  desconto_comercial: Number(item.desconto_comercial ?? 0),
+                  desconto_trade: Number(item.desconto_trade ?? 0),
                 })),
               });
             })}
