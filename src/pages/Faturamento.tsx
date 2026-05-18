@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
 import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy, FileDown } from "lucide-react";
 import ImportarPedidoDialog from "@/components/faturamento/ImportarPedidoDialog";
+import DashboardFaturamento from "@/pages/faturamento/DashboardFaturamento";
 import { MARCAS } from "@/lib/constants";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { formatDistanceToNow } from "date-fns";
@@ -88,7 +89,7 @@ type ExcelItemRaw = {
 };
 
 const STATUS_TERMINAL = new Set(["faturado", "devolvido", "cancelado"]);
-const STATUS_ACTIVE = new Set(["pendente_sankhya", "no_sankhya", "parcialmente_faturado", "com_problema", "em_faturamento"]);
+const STATUS_ACTIVE = new Set(["pendente_sankhya", "no_sankhya", "parcialmente_faturado", "com_problema", "em_faturamento", "sem_estoque"]);
 
 function tempoAguardando(dt: string | null): string | null {
   if (!dt) return null;
@@ -184,52 +185,63 @@ function SaldoPendente({ itens }: { itens: ExcelItemRaw[] }) {
 
 // ── Filtros de status por aba ─────────────────────────────────────
 const FILTROS_STATUS_ABA: Record<string, { value: string; label: string }[]> = {
-  recebidos: [
+  em_aberto: [
     { value: "todos", label: "Todos" },
     { value: "na_fila", label: "Na fila" },
     { value: "com_problema", label: "Com problema" },
   ],
-  a_lancar: [],
-  lancados: [
+  assumidos: [],
+  cadastrados_sankhya: [
     { value: "todos", label: "Todos" },
     { value: "no_sankhya", label: "No Sankhya" },
-    { value: "parcialmente_faturado", label: "Parc. faturado" },
+    { value: "parcialmente_faturado", label: "No Sankhya" },
   ],
-  pendencias: [],
+  sem_estoque: [],
   faturado: [],
+  dashboard: [],
 };
 
 // ── Abas ──────────────────────────────────────────────────────────
 const ABAS = [
   {
-    key: "recebidos",
-    label: "Pedidos Recebidos",
-    status: ["pendente_sankhya", "devolvido", "cancelado"],
-    descricao: "Pedidos na fila e pedidos com problema",
+    key: "em_aberto",
+    label: "Em Aberto",
+    status: ["pendente_sankhya", "devolvido", "cancelado", "com_problema"],
+    descricao: "Pedidos na fila aguardando assumir",
+    activeClass: "data-[state=active]:bg-yellow-50 data-[state=active]:border-yellow-300 data-[state=active]:text-yellow-800",
+    badgeClass: "bg-yellow-100 text-yellow-800",
   },
   {
-    key: "a_lancar",
-    label: "A Lançar",
+    key: "assumidos",
+    label: "Assumidos",
     status: ["pendente_sankhya"],
     descricao: "Pedidos assumidos ainda não cadastrados no Sankhya",
+    activeClass: "data-[state=active]:bg-purple-50 data-[state=active]:border-purple-300 data-[state=active]:text-purple-800",
+    badgeClass: "bg-purple-100 text-purple-800",
   },
   {
-    key: "lancados",
-    label: "Pedidos Lançados",
+    key: "cadastrados_sankhya",
+    label: "Cadastrados no Sankhya",
     status: ["no_sankhya", "parcialmente_faturado"],
     descricao: "Pedidos cadastrados no Sankhya",
+    activeClass: "data-[state=active]:bg-teal-50 data-[state=active]:border-teal-300 data-[state=active]:text-teal-800",
+    badgeClass: "bg-teal-100 text-teal-800",
   },
   {
-    key: "pendencias",
-    label: "Pendências",
-    status: ["parcialmente_faturado", "com_problema", "no_sankhya", "sem_estoque"],
-    descricao: "Pedidos com saldo parado, sem estoque ou com problema",
+    key: "sem_estoque",
+    label: "Sem Estoque",
+    status: ["sem_estoque"],
+    descricao: "Pedidos aguardando reposição de estoque",
+    activeClass: "data-[state=active]:bg-red-50 data-[state=active]:border-red-300 data-[state=active]:text-red-800",
+    badgeClass: "bg-red-100 text-red-800",
   },
   {
     key: "faturado",
     label: "Faturado",
     status: ["faturado"],
     descricao: "Pedidos efetivamente faturados",
+    activeClass: "data-[state=active]:bg-green-50 data-[state=active]:border-green-300 data-[state=active]:text-green-800",
+    badgeClass: "bg-green-100 text-green-800",
   },
 ];
 
@@ -245,7 +257,7 @@ export default function Faturamento() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [atualizando, setAtualizando] = useState<string | null>(null);
   // Abas e filtros globais
-  const [abaAtiva, setAbaAtiva] = useState("recebidos");
+  const [abaAtiva, setAbaAtiva] = useState("em_aberto");
   const [filtroStatusAba, setFiltroStatusAba] = useState("todos");
   const [filtroNumeroGlobal, setFiltroNumeroGlobal] = useState("");
   const [filtroVendedorGlobal, setFiltroVendedorGlobal] = useState("todos");
@@ -518,25 +530,17 @@ export default function Faturamento() {
 
     let lista = pedidos.filter((p) => aba.status.includes(p.status));
 
-    if (abaAtiva === "recebidos") {
+    if (abaAtiva === "em_aberto") {
       lista = lista.filter((p) =>
         (p.status === "pendente_sankhya" && !p.responsavel_id) ||
         p.status === "devolvido" ||
-        p.status === "cancelado"
+        p.status === "cancelado" ||
+        p.status === "com_problema"
       );
     }
-    if (abaAtiva === "a_lancar") {
+    if (abaAtiva === "assumidos") {
       lista = lista.filter((p) =>
         p.status === "pendente_sankhya" && !!p.responsavel_id
-      );
-    }
-    if (abaAtiva === "pendencias") {
-      lista = lista.filter((p) =>
-        p.status === "parcialmente_faturado" ||
-        p.status === "com_problema" ||
-        p.status === "sem_estoque" ||
-        (p.status === "no_sankhya" &&
-          p.itens.every((i) => i.qtd_faturada === 0))
       );
     }
 
@@ -559,7 +563,7 @@ export default function Faturamento() {
         );
       } else if (filtroStatusAba === "com_problema") {
         lista = lista.filter((p) =>
-          p.status === "devolvido" || p.status === "cancelado"
+          p.status === "devolvido" || p.status === "cancelado" || p.status === "com_problema"
         );
       } else {
         lista = lista.filter((p) => p.status === filtroStatusAba);
@@ -632,7 +636,7 @@ export default function Faturamento() {
         "assumiu",
         "Pedido liberado de volta para a fila"
       );
-      toast.success("Pedido liberado — voltou para Pedidos Recebidos");
+      toast.success("Pedido liberado — voltou para Em Aberto");
     }
   };
 
@@ -747,7 +751,7 @@ export default function Faturamento() {
     );
 
     const todosCompletos = faturarDialog.itens.every((item) => (totalFaturadoMap[item.id] ?? 0) >= item.quantidade);
-    const novoStatus = todosCompletos ? "faturado" : "parcialmente_faturado";
+    const novoStatus = todosCompletos ? "no_sankhya" : "parcialmente_faturado";
 
     const { error: updErr } = await supabase
       .from("pedidos")
@@ -877,7 +881,7 @@ export default function Faturamento() {
     const todosCompletos = prodFatDialog.itens.every((i) => (prodFatQtds[i.id] ?? 0) >= i.quantidade);
     const algumParcial = prodFatDialog.itens.some((i) => (prodFatQtds[i.id] ?? 0) > 0);
     let novoStatus = prodFatDialog.status;
-    if (todosCompletos) novoStatus = "faturado";
+    if (todosCompletos) novoStatus = "no_sankhya";
     else if (algumParcial) novoStatus = "parcialmente_faturado";
     if (novoStatus !== prodFatDialog.status) {
       await supabase.from("pedidos").update({
@@ -1250,7 +1254,7 @@ export default function Faturamento() {
         )}
 
         {/* Sem Estoque */}
-        {(abaAtiva === "recebidos" || abaAtiva === "a_lancar") && !STATUS_TERMINAL.has(p.status) && (
+        {(abaAtiva === "em_aberto" || abaAtiva === "assumidos") && !STATUS_TERMINAL.has(p.status) && (
           <Button
             size="sm"
             variant="outline"
@@ -1372,61 +1376,29 @@ export default function Faturamento() {
         onImportado={carregar}
       />
 
-      {/* KPIs */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <div className="rounded-lg border p-4 bg-yellow-50 border-yellow-300">
-          <div className="text-sm font-medium text-yellow-800">Pedidos Recebidos</div>
-          <div className="text-3xl font-bold mt-1 text-yellow-900">{kpis.preFaturado}</div>
-          <div className="text-xs text-yellow-700 mt-1">Pedidos recebidos no mês</div>
-        </div>
-        <div className="rounded-lg border p-4 bg-purple-50 border-purple-300">
-          <div className="text-sm font-medium text-purple-800">Pedidos Lançados</div>
-          <div className="text-3xl font-bold mt-1 text-purple-900">{kpis.lancados}</div>
-          <div className="text-xs text-purple-700 mt-1">Cadastrados no Sankhya</div>
-        </div>
-        <div className="rounded-lg border p-4 bg-blue-50 border-blue-300">
-          <div className="text-sm font-medium text-blue-800">Aguardando Faturamento</div>
-          <div className="text-3xl font-bold mt-1 text-blue-900">{kpis.aguardandoFaturamento}</div>
-          <div className="text-xs text-blue-700 mt-1">Enviados à logística</div>
-        </div>
-        <div className="rounded-lg border p-4 bg-green-50 border-green-300">
-          <div className="text-sm font-medium text-green-800">Faturado</div>
-          <div className="text-3xl font-bold mt-1 text-green-900">{kpis.faturado}</div>
-          <div className="text-xs text-green-700 mt-1">Efetivamente faturados</div>
-        </div>
-        <div className={`rounded-lg border p-4 ${kpis.problemas > 0 ? "bg-red-50 border-red-300" : "bg-gray-50 border-gray-200"}`}>
-          <div className={`text-sm font-medium ${kpis.problemas > 0 ? "text-red-800" : "text-gray-600"}`}>
-            Problemas
-          </div>
-          <div className={`text-3xl font-bold mt-1 ${kpis.problemas > 0 ? "text-red-900" : "text-gray-700"}`}>
-            {kpis.problemas}
-          </div>
-          <div className={`text-xs mt-1 ${kpis.problemas > 0 ? "text-red-700" : "text-gray-500"}`}>
-            Com problema
-          </div>
-        </div>
-      </div>
-
       <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); setFiltroStatusAba("todos"); }}>
-        <TabsList className="w-full grid grid-cols-5">
+        <TabsList className="w-full grid grid-cols-6">
           {ABAS.map((aba) => {
             const count = pedidos.filter((p) => {
               if (!aba.status.includes(p.status)) return false;
-              if (aba.key === "recebidos") return (p.status === "pendente_sankhya" && !p.responsavel_id) || p.status === "devolvido" || p.status === "cancelado";
-              if (aba.key === "a_lancar") return p.status === "pendente_sankhya" && !!p.responsavel_id;
+              if (aba.key === "em_aberto") return (p.status === "pendente_sankhya" && !p.responsavel_id) || p.status === "devolvido" || p.status === "cancelado" || p.status === "com_problema";
+              if (aba.key === "assumidos") return p.status === "pendente_sankhya" && !!p.responsavel_id;
               return true;
             }).length;
             return (
-              <TabsTrigger key={aba.key} value={aba.key} className="relative">
+              <TabsTrigger key={aba.key} value={aba.key} className={`relative ${aba.activeClass ?? ""}`}>
                 {aba.label}
                 {count > 0 && (
-                  <span className="ml-1.5 inline-flex items-center rounded-full bg-primary text-primary-foreground px-1.5 py-0.5 text-[10px] font-bold leading-none">
+                  <span className={`ml-1.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${abaAtiva === aba.key ? aba.badgeClass : "bg-primary text-primary-foreground"}`}>
                     {count}
                   </span>
                 )}
               </TabsTrigger>
             );
           })}
+          <TabsTrigger value="dashboard" className="relative data-[state=active]:bg-slate-50 data-[state=active]:border-slate-300 data-[state=active]:text-slate-800">
+            Dashboard
+          </TabsTrigger>
         </TabsList>
 
         {/* Filtros globais */}
@@ -1519,11 +1491,11 @@ export default function Faturamento() {
                               </div>
                             )}
                             <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
-                            {aba.key === "lancados" && (() => {
+                            {aba.key === "cadastrados_sankhya" && (() => {
                               const lancados = p.itens.filter((i) => i.qtd_faturada > 0).length;
                               return <div className="text-xs text-green-700 font-medium">{lancados} de {p.itens.length} itens lançados</div>;
                             })()}
-                            {aba.key === "pendencias" && (() => {
+                            {aba.key === "sem_estoque" && (() => {
                               const saldo = p.itens.filter((i) => i.qtd_faturada < i.quantidade).length;
                               return <div className="text-xs text-orange-600 font-medium">{saldo} {saldo === 1 ? "item" : "itens"} em saldo</div>;
                             })()}
@@ -1544,9 +1516,9 @@ export default function Faturamento() {
                             )}
                           </div>
                           <div className="text-right text-sm font-semibold text-green-700">
-                            {aba.key === "lancados"
+                            {aba.key === "cadastrados_sankhya"
                               ? formatBRL(p.itens.filter((i) => i.qtd_faturada > 0).reduce((s, i) => s + i.qtd_faturada * i.preco_final, 0))
-                              : aba.key === "pendencias"
+                              : aba.key === "sem_estoque"
                               ? formatBRL(p.itens.filter((i) => i.qtd_faturada < i.quantidade).reduce((s, i) => s + (i.quantidade - i.qtd_faturada) * i.preco_final, 0))
                               : formatBRL(p.total)}
                           </div>
@@ -1619,11 +1591,11 @@ export default function Faturamento() {
                                 <span className="inline-flex items-center rounded-full border border-red-300 bg-red-50 px-1.5 py-0.5 text-[10px] font-medium text-red-700">⚠ Neg.</span>
                               )}
                             </div>
-                            {aba.key === "lancados" && (() => {
+                            {aba.key === "cadastrados_sankhya" && (() => {
                               const lancados = p.itens.filter((i) => i.qtd_faturada > 0).length;
                               return <div className="text-xs text-green-700 font-medium">{lancados} de {p.itens.length} itens lançados</div>;
                             })()}
-                            {aba.key === "pendencias" && (() => {
+                            {aba.key === "sem_estoque" && (() => {
                               const saldo = p.itens.filter((i) => i.qtd_faturada < i.quantidade).length;
                               return <div className="text-xs text-orange-600 font-medium">{saldo} {saldo === 1 ? "item" : "itens"} em saldo</div>;
                             })()}
@@ -1649,9 +1621,9 @@ export default function Faturamento() {
                             </div>
                           </TableCell>
                           <TableCell className="text-right font-bold text-sm text-green-700">
-                            {aba.key === "lancados"
+                            {aba.key === "cadastrados_sankhya"
                               ? formatBRL(p.itens.filter((i) => i.qtd_faturada > 0).reduce((s, i) => s + i.qtd_faturada * i.preco_final, 0))
-                              : aba.key === "pendencias"
+                              : aba.key === "sem_estoque"
                               ? formatBRL(p.itens.filter((i) => i.qtd_faturada < i.quantidade).reduce((s, i) => s + (i.quantidade - i.qtd_faturada) * i.preco_final, 0))
                               : formatBRL(p.total)}
                           </TableCell>
@@ -1700,6 +1672,9 @@ export default function Faturamento() {
             )}
           </TabsContent>
         ))}
+        <TabsContent value="dashboard" className="mt-4">
+          <DashboardFaturamento />
+        </TabsContent>
       </Tabs>
 
       {/* Dialog: motivo (devolver / cancelar / com_problema) */}
