@@ -1289,6 +1289,15 @@ export default function Faturamento() {
       total_item: item.preco_final * (item.quantidade - (qtdSankhya[item.id] ?? 0)),
     }));
 
+    const totalNovoPedido = itensSemEstoqueParaInserir.reduce(
+      (sum, item) => sum + item.total_item, 0
+    );
+
+    await supabase
+      .from("pedidos")
+      .update({ total: totalNovoPedido } as any)
+      .eq("id", novoPedido.id);
+
     const { error: errItens } = await supabase.from("itens_pedido").insert(itensSemEstoqueParaInserir as any);
     if (errItens) { toast.error("Erro ao inserir itens no pedido sem estoque"); return; }
 
@@ -1304,10 +1313,16 @@ export default function Faturamento() {
       }
     }
 
+    const totalOriginal = itens.reduce((sum, item) => {
+      const qtd = qtdSankhya[item.id] ?? 0;
+      return sum + item.preco_final * qtd;
+    }, 0);
+
     await supabase
       .from("pedidos")
       .update({
         status: "no_sankhya",
+        total: totalOriginal,
         motivo: `Fracionado — pedido sem estoque gerado: #${(novoPedido as any).numero_pedido}`,
         status_atualizado_em: new Date().toISOString(),
       } as any)
@@ -2312,7 +2327,7 @@ export default function Faturamento() {
       </Dialog>
 
       {/* Dialog: fracionar pedido */}
-      <Dialog open={!!fracionarDialog} onOpenChange={(o) => !o && setFracionarDialog(null)}>
+      <Dialog open={!!fracionarDialog} onOpenChange={(o) => { if (!o) { setFracionarDialog(null); setQtdSankhya({}); } }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Fracionar pedido #{fracionarDialog?.numero}</DialogTitle>
