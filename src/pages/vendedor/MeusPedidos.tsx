@@ -263,6 +263,16 @@ export default function MeusPedidos() {
   ];
 
   function ProgressoEtapas({ status }: { status: string }) {
+    if (status === "sem_estoque") {
+      return (
+        <div className="flex items-center gap-1 mt-1.5">
+          <div className="h-2 w-2 rounded-full bg-amber-500" />
+          <span className="text-[10px] font-medium text-amber-700">
+            Pedido sem estoque
+          </span>
+        </div>
+      );
+    }
     const idx = ETAPAS.findIndex((e) => e.key === status);
     if (idx === -1) return null;
     return (

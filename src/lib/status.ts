@@ -13,6 +13,7 @@ export const STATUS_LABEL: Record<string, string> = {
   em_rota: "Em rota",
   entregue: "Entregue",
   revisao_necessaria: "Revisão necessária",
+  sem_estoque: "Pedido sem estoque",
 };
 
 export const STATUS_COLOR: Record<string, string> = {
@@ -30,4 +31,5 @@ export const STATUS_COLOR: Record<string, string> = {
   em_rota: "bg-gray-700 text-gray-100 border-gray-800",
   entregue: "bg-lime-100 text-lime-800 border-lime-300",
   revisao_necessaria: "bg-red-100 text-red-800 border-red-300",
+  sem_estoque: "bg-amber-100 text-amber-800 border-amber-300",
 };

@@ -222,7 +222,7 @@ const ABAS = [
   {
     key: "pendencias",
     label: "Pendências",
-    status: ["parcialmente_faturado", "com_problema", "no_sankhya"],
+    status: ["parcialmente_faturado", "com_problema", "no_sankhya", "sem_estoque"],
     descricao: "Pedidos com saldo parado, sem estoque ou com problema",
   },
   {
@@ -270,6 +270,10 @@ export default function Faturamento() {
   // Motivo dialog (devolver / cancelar / com_problema)
   const [motivoDialog, setMotivoDialog] = useState<{ type: "devolver" | "cancelar" | "com_problema"; id: string; numero: number } | null>(null);
   const [motivo, setMotivo] = useState("");
+
+  // Dialog sem estoque
+  const [semEstoqueDialog, setSemEstoqueDialog] = useState<{ id: string; numero: number } | null>(null);
+  const [motivoSemEstoque, setMotivoSemEstoque] = useState("");
 
   // Dialog detalhes
   const [detalhePedido, setDetalhePedido] = useState<PedidoFat | null>(null);
@@ -530,6 +534,7 @@ export default function Faturamento() {
       lista = lista.filter((p) =>
         p.status === "parcialmente_faturado" ||
         p.status === "com_problema" ||
+        p.status === "sem_estoque" ||
         (p.status === "no_sankhya" &&
           p.itens.every((i) => i.qtd_faturada === 0))
       );
@@ -816,6 +821,30 @@ export default function Faturamento() {
         : motivoDialog.type === "cancelar" ? "Pedido cancelado"
         : "Pedido marcado com problema"
       );
+    }
+  };
+
+  const confirmarSemEstoque = async () => {
+    if (!semEstoqueDialog || !motivoSemEstoque.trim()) {
+      toast.error("Informe o motivo");
+      return;
+    }
+    const pedido = pedidos.find((p) => p.id === semEstoqueDialog.id);
+    const ok = await atualizar(semEstoqueDialog.id, {
+      status: "sem_estoque",
+      motivo: motivoSemEstoque.trim(),
+    });
+    if (ok) {
+      await insertHistorico(
+        semEstoqueDialog.id,
+        pedido?.status ?? "",
+        "sem_estoque",
+        "marcou_sem_estoque",
+        motivoSemEstoque.trim()
+      );
+      toast.success(`Pedido #${semEstoqueDialog.numero} marcado como sem estoque`);
+      setSemEstoqueDialog(null);
+      setMotivoSemEstoque("");
     }
   };
 
@@ -1217,6 +1246,21 @@ export default function Faturamento() {
             onClick={(e) => abrirProdFat(p, e)} title="Faturamento por produto">
             <FileText className="h-3 w-3 mr-1" />
             Produtos
+          </Button>
+        )}
+
+        {/* Sem Estoque */}
+        {(abaAtiva === "recebidos" || abaAtiva === "a_lancar") && !STATUS_TERMINAL.has(p.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-amber-700 border-amber-300 hover:bg-amber-50"
+            onClick={wrap(() => {
+              setSemEstoqueDialog({ id: p.id, numero: p.numero_pedido });
+              setMotivoSemEstoque("");
+            })}
+          >
+            Sem Estoque
           </Button>
         )}
 
@@ -2073,6 +2117,44 @@ export default function Faturamento() {
             </div>
             <Button variant="outline" onClick={() => setDetalhePedido(null)}>
               Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: sem estoque */}
+      <Dialog open={!!semEstoqueDialog} onOpenChange={(o) => !o && setSemEstoqueDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              Pedido #{semEstoqueDialog?.numero} sem estoque
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              O pedido será marcado como{" "}
+              <strong className="text-amber-700">Pedido sem estoque</strong>{" "}
+              e irá para Pendências. Informe o motivo abaixo.
+            </p>
+            <Label>Motivo *</Label>
+            <Textarea
+              rows={4}
+              value={motivoSemEstoque}
+              onChange={(e) => setMotivoSemEstoque(e.target.value)}
+              placeholder="Descreva quais produtos estão sem estoque..."
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSemEstoqueDialog(null)}>
+              Voltar
+            </Button>
+            <Button
+              className="bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={confirmarSemEstoque}
+              disabled={!motivoSemEstoque.trim()}
+            >
+              Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
