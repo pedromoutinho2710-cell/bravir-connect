@@ -19,7 +19,7 @@ type PedidoRow = {
   total: number;
 };
 
-type CardKey = "recebidos" | "lancados" | "ag_faturamento" | "parc_faturado" | "faturado" | "problemas";
+type CardKey = "recebidos" | "ag_faturamento" | "parc_faturado" | "faturado" | "problemas";
 
 type CardDef = {
   key: CardKey;
@@ -40,15 +40,6 @@ const CARDS: CardDef[] = [
     textBig: "text-orange-900",
     textSub: "text-orange-700",
     border: "border-orange-200",
-  },
-  {
-    key: "lancados",
-    label: "Pedidos lançados",
-    sublabel: "Produção do faturamento",
-    cor: "bg-teal-50",
-    textBig: "text-teal-900",
-    textSub: "text-teal-700",
-    border: "border-teal-200",
   },
   {
     key: "ag_faturamento",
@@ -119,11 +110,9 @@ function getPeriodo(key: PeriodoKey, customInicio: string, customFim: string): {
 function filtrarCard(pedidos: PedidoRow[], cardKey: CardKey): PedidoRow[] {
   switch (cardKey) {
     case "recebidos":
-      return pedidos.filter((p) => p.status !== "rascunho" && p.status !== "cancelado" && p.status !== "pendente_sankhya");
-    case "lancados":
-      return pedidos.filter((p) => p.status === "no_sankhya");
+      return pedidos.filter((p) => p.status !== "rascunho" && p.status !== "cancelado");
     case "ag_faturamento":
-      return pedidos.filter((p) => p.status === "aguardando_faturamento");
+      return pedidos.filter((p) => p.status === "no_sankhya");
     case "parc_faturado":
       return pedidos.filter((p) => p.status === "sem_estoque");
     case "faturado":
@@ -196,7 +185,7 @@ export default function DashboardFaturamento() {
 
   const contagemPorCard = useMemo(() => {
     const result: Record<CardKey, number> = {
-      recebidos: 0, lancados: 0, ag_faturamento: 0,
+      recebidos: 0, ag_faturamento: 0,
       parc_faturado: 0, faturado: 0, problemas: 0,
     };
     for (const card of CARDS) {
