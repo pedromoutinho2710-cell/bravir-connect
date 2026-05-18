@@ -407,7 +407,7 @@ export default function Faturamento() {
           cliente_id, perfil_cliente, tabela_preco, agendamento, total,
           clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, aceita_saldo, negativado, email, rua, numero, bairro, telefone),
           itens_pedido(
-            id, total_item, quantidade, qtd_faturada, preco_unitario_bruto, preco_unitario_liquido,
+            id, produto_id, total_item, quantidade, qtd_faturada, preco_unitario_bruto, preco_unitario_liquido,
             desconto_perfil, desconto_comercial, desconto_trade,
             preco_apos_perfil, preco_apos_comercial, preco_final,
             produtos(nome, codigo_jiva, marca, cx_embarque, peso_unitario)
