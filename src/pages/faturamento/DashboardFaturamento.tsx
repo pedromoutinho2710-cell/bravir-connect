@@ -35,7 +35,7 @@ const CARDS: CardDef[] = [
   {
     key: "recebidos",
     label: "Pedidos recebidos",
-    sublabel: "Todos exceto rascunho e cancelado",
+    sublabel: "Todos exceto rascunho, cancelado e pendente",
     cor: "bg-orange-50",
     textBig: "text-orange-900",
     textSub: "text-orange-700",
@@ -61,8 +61,8 @@ const CARDS: CardDef[] = [
   },
   {
     key: "parc_faturado",
-    label: "No Sankhya",
-    sublabel: "Parcialmente faturados",
+    label: "Pedidos sem estoque",
+    sublabel: "Status sem_estoque",
     cor: "bg-yellow-50",
     textBig: "text-yellow-900",
     textSub: "text-yellow-700",
@@ -71,7 +71,7 @@ const CARDS: CardDef[] = [
   {
     key: "faturado",
     label: "Faturado",
-    sublabel: "Faturado + parcialmente faturado",
+    sublabel: "Faturado",
     cor: "bg-green-50",
     textBig: "text-green-900",
     textSub: "text-green-700",
@@ -119,15 +119,15 @@ function getPeriodo(key: PeriodoKey, customInicio: string, customFim: string): {
 function filtrarCard(pedidos: PedidoRow[], cardKey: CardKey): PedidoRow[] {
   switch (cardKey) {
     case "recebidos":
-      return pedidos.filter((p) => p.status !== "rascunho" && p.status !== "cancelado");
+      return pedidos.filter((p) => p.status !== "rascunho" && p.status !== "cancelado" && p.status !== "pendente_sankhya");
     case "lancados":
       return pedidos.filter((p) => p.status === "no_sankhya");
     case "ag_faturamento":
-      return pedidos.filter((p) => p.status === "no_sankhya");
+      return pedidos.filter((p) => p.status === "aguardando_faturamento");
     case "parc_faturado":
-      return pedidos.filter((p) => p.status === "parcialmente_faturado");
+      return pedidos.filter((p) => p.status === "sem_estoque");
     case "faturado":
-      return pedidos.filter((p) => p.status === "faturado" || p.status === "parcialmente_faturado");
+      return pedidos.filter((p) => p.status === "faturado");
     case "problemas":
       return pedidos.filter((p) => p.status === "com_problema" || p.status === "devolvido" || p.status === "cancelado");
     default:
