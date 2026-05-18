@@ -882,7 +882,23 @@ export default function Faturamento() {
   const excluirPedido = async () => {
     if (!excluirTarget) return;
     setExcluindo(true);
-    const { error } = await supabase.from("pedidos").delete().eq("id", excluirTarget.id);
+
+    const pedidoId = excluirTarget.id;
+
+    const { data: filhos } = await supabase
+      .from("pedidos")
+      .select("id")
+      .eq("pedido_origem_id", pedidoId);
+
+    if (filhos && filhos.length > 0) {
+      const filhoIds = filhos.map((f) => f.id);
+      await supabase.from("itens_pedido").delete().in("pedido_id", filhoIds);
+      await supabase.from("pedidos").delete().in("id", filhoIds);
+    }
+
+    await supabase.from("itens_pedido").delete().eq("pedido_id", pedidoId);
+    const { error } = await supabase.from("pedidos").delete().eq("id", pedidoId);
+
     setExcluindo(false);
     if (error) { toast.error("Erro ao excluir: " + error.message); return; }
     toast.success(`Pedido #${excluirTarget.numero_pedido} excluído`);
