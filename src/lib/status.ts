@@ -1,7 +1,7 @@
 export const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
   pendente_sankhya: "Pendente Sankhya",
-  no_sankhya: "Aguardando faturamento",
+  no_sankhya: "Cadastrado no Sankhya",
   faturado: "Faturado",
   parcialmente_faturado: "No Sankhya",
   com_problema: "Com problema",
