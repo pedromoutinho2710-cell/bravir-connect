@@ -70,7 +70,7 @@ function getDateRange(periodo: Periodo): { dataInicio: string; dataFim: string }
   return { dataInicio: fmt(start), dataFim: fmt(end) };
 }
 
-type DrillCardKey = "recebidos" | "lancados" | "aguardandoFaturamento" | "faturado" | "problemas";
+type DrillCardKey = "recebidos" | "agFaturamento" | "semEstoque" | "faturado" | "problemas";
 
 type PedidoDrillRow = {
   id: string;
@@ -83,17 +83,17 @@ type PedidoDrillRow = {
 };
 
 const DRILL_CARD_LABEL: Record<DrillCardKey, string> = {
-  recebidos: "Pedidos Recebidos",
-  lancados: "Pedidos Lançados",
-  aguardandoFaturamento: "Aguardando Faturamento",
+  recebidos: "Pedidos recebidos",
+  agFaturamento: "Ag. Faturamento",
+  semEstoque: "Pedidos sem estoque",
   faturado: "Faturado",
   problemas: "Problemas",
 };
 
 type KPIs = {
   recebidos: number;
-  lancados: number;
-  aguardandoFaturamento: number;
+  agFaturamento: number;
+  semEstoque: number;
   faturado: number;
   problemas: number;
 };
@@ -154,8 +154,8 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [kpis, setKpis] = useState<KPIs>({
     recebidos: 0,
-    lancados: 0,
-    aguardandoFaturamento: 0,
+    agFaturamento: 0,
+    semEstoque: 0,
     faturado: 0,
     problemas: 0,
   });
@@ -248,12 +248,12 @@ export default function Dashboard() {
             .from("pedidos")
             .select("id, itens_pedido(total_item)")
             .in("status", ["pendente_sankhya", "em_faturamento"]),
-          // KPI: Pedidos Recebidos (todos exceto rascunho e cancelado)
+          // KPI: Pedidos recebidos (todos exceto rascunho e cancelado)
           supabase.from("pedidos").select("id", { count: "exact", head: true }).not("status", "in", '("rascunho","cancelado")').gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
-          // KPI: Pedidos Lançados (no_sankhya)
+          // KPI: Ag. Faturamento (no_sankhya)
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "no_sankhya").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
-          // KPI: Aguardando Faturamento (no_sankhya)
-          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "no_sankhya").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
+          // KPI: Pedidos sem estoque (sem_estoque)
+          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "sem_estoque").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
           // KPI: Faturado
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "faturado").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
           // KPI: Problemas (com_problema + devolvido + cancelado)
@@ -278,8 +278,8 @@ export default function Dashboard() {
 
         setKpis({
           recebidos: preFatRes.count ?? 0,
-          lancados: lancadosRes.count ?? 0,
-          aguardandoFaturamento: aguardRes.count ?? 0,
+          agFaturamento: lancadosRes.count ?? 0,
+          semEstoque: aguardRes.count ?? 0,
           faturado: fatKpiRes.count ?? 0,
           problemas: probRes.count ?? 0,
         });
@@ -586,7 +586,7 @@ export default function Dashboard() {
   const maxFatMensal = Math.max(...fatMensal.map((m) => m.valor), 1);
 
   // Pipeline card bar scale
-  const maxKpi = Math.max(kpis.recebidos, kpis.lancados, kpis.aguardandoFaturamento, kpis.faturado, kpis.problemas, 1);
+  const maxKpi = Math.max(kpis.recebidos, kpis.agFaturamento, kpis.semEstoque, kpis.faturado, kpis.problemas, 1);
 
   // Donut chart — entrada por marca
   const totalGeralMarca = Object.values(entradaMarca).reduce((s, v) => s + v, 0);
@@ -625,8 +625,8 @@ export default function Dashboard() {
       .order("data_pedido", { ascending: false });
 
     if (card === "recebidos") query = query.not("status", "in", '("rascunho","cancelado")');
-    else if (card === "lancados") query = query.eq("status", "no_sankhya");
-    else if (card === "aguardandoFaturamento") query = query.eq("status", "no_sankhya");
+    else if (card === "agFaturamento") query = query.eq("status", "no_sankhya");
+    else if (card === "semEstoque") query = query.eq("status", "sem_estoque");
     else if (card === "faturado") query = query.eq("status", "faturado");
     else if (card === "problemas") query = query.in("status", ["com_problema", "devolvido", "cancelado"]);
 
@@ -1061,11 +1061,11 @@ export default function Dashboard() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {(
           [
-            { key: "recebidos" as DrillCardKey, label: "Pedidos Recebidos", value: kpis.recebidos, bg: "bg-orange-50", border: "border-orange-300", text: "text-orange-800", textBig: "text-orange-900" },
-            { key: "lancados" as DrillCardKey, label: "Pedidos Lançados", value: kpis.lancados, bg: "bg-purple-50", border: "border-purple-300", text: "text-purple-800", textBig: "text-purple-900" },
-            { key: "aguardandoFaturamento" as DrillCardKey, label: "Aguardando Faturamento", value: kpis.aguardandoFaturamento, bg: "bg-blue-50", border: "border-blue-300", text: "text-blue-800", textBig: "text-blue-900" },
-            { key: "faturado" as DrillCardKey, label: "Faturado", value: kpis.faturado, bg: "bg-green-50", border: "border-green-300", text: "text-green-800", textBig: "text-green-900" },
-            { key: "problemas" as DrillCardKey, label: "Problemas", value: kpis.problemas, bg: "bg-red-50", border: "border-red-300", text: "text-red-800", textBig: "text-red-900" },
+            { key: "recebidos" as DrillCardKey, label: "Pedidos recebidos", value: kpis.recebidos, bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-800", textBig: "text-orange-900" },
+            { key: "agFaturamento" as DrillCardKey, label: "Ag. Faturamento", value: kpis.agFaturamento, bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-800", textBig: "text-blue-900" },
+            { key: "semEstoque" as DrillCardKey, label: "Pedidos sem estoque", value: kpis.semEstoque, bg: "bg-yellow-50", border: "border-yellow-200", text: "text-yellow-800", textBig: "text-yellow-900" },
+            { key: "faturado" as DrillCardKey, label: "Faturado", value: kpis.faturado, bg: "bg-green-50", border: "border-green-200", text: "text-green-800", textBig: "text-green-900" },
+            { key: "problemas" as DrillCardKey, label: "Problemas", value: kpis.problemas, bg: "bg-red-50", border: "border-red-200", text: "text-red-800", textBig: "text-red-900" },
           ]
         ).map(({ key, label, value, bg, border, text, textBig }) => (
           <button
@@ -1248,8 +1248,8 @@ export default function Dashboard() {
             <div className="space-y-4">
               {[
                 { label: "Recebidos", value: kpis.recebidos, color: "#EA580C" },
-                { label: "Lançados", value: kpis.lancados, color: "#9333EA" },
-                { label: "Ag. Faturamento", value: kpis.aguardandoFaturamento, color: "#2563EB" },
+                { label: "Ag. Faturamento", value: kpis.agFaturamento, color: "#2563EB" },
+                { label: "Sem estoque", value: kpis.semEstoque, color: "#CA8A04" },
                 { label: "Faturado", value: kpis.faturado, color: "#16A34A" },
                 { label: "Problemas", value: kpis.problemas, color: "#DC2626" },
               ].map(({ label, value, color }) => (
