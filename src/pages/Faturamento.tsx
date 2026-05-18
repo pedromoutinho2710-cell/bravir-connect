@@ -1227,10 +1227,9 @@ export default function Faturamento() {
       (item) => (qtdSankhya[item.id] ?? 0) < item.quantidade
     );
 
-    const temDivisao = itens.some(
-      (item) =>
-        (qtdSankhya[item.id] ?? 0) > 0 &&
-        (qtdSankhya[item.id] ?? 0) < item.quantidade
+    const temItemNoSankhya = itens.some((item) => (qtdSankhya[item.id] ?? 0) > 0);
+    const temItemSemEstoque = itens.some(
+      (item) => item.quantidade - (qtdSankhya[item.id] ?? 0) > 0
     );
     const tudoSankhya = itens.every(
       (item) => (qtdSankhya[item.id] ?? 0) === item.quantidade
@@ -1239,9 +1238,18 @@ export default function Faturamento() {
       (item) => (qtdSankhya[item.id] ?? 0) === 0
     );
 
-    if (tudoSankhya) { toast.error("Use o botão Cadastrar no Sankhya"); return; }
-    if (tudoSemEstoque) { toast.error("Use o botão Sem Estoque"); return; }
-    if (!temDivisao) { toast.error("Pelo menos 1 item precisa ser dividido entre os dois lados"); return; }
+    if (tudoSankhya) {
+      toast.error("Use o botão Cadastrar no Sankhya");
+      return;
+    }
+    if (tudoSemEstoque) {
+      toast.error("Use o botão Sem Estoque");
+      return;
+    }
+    if (!temItemNoSankhya || !temItemSemEstoque) {
+      toast.error("Pelo menos 1 item precisa ir para cada lado");
+      return;
+    }
 
     const pedidoOriginal = pedidos.find((p) => p.id === fracionarDialog.id);
     if (!pedidoOriginal) return;
