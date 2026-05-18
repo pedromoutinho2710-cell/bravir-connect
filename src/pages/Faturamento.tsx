@@ -1259,6 +1259,15 @@ export default function Faturamento() {
       return acc + Number(item.preco_final) * qtd;
     }, 0);
 
+    const totalOriginal = itens.reduce((sum, item) => {
+      const qtd = qtdSankhya[item.id] ?? 0;
+      return sum + Number(item.preco_final) * qtd;
+    }, 0);
+
+    console.log("DEBUG fracionarDialog.itens:", fracionarDialog.itens);
+    console.log("DEBUG totalNovoPedido:", totalNovoPedido);
+    console.log("DEBUG totalOriginal:", totalOriginal);
+
     const { data: novoPedido, error: errNovo } = await supabase
       .from("pedidos")
       .insert({
@@ -1309,11 +1318,6 @@ export default function Faturamento() {
           .eq("id", item.id);
       }
     }
-
-    const totalOriginal = itens.reduce((sum, item) => {
-      const qtd = qtdSankhya[item.id] ?? 0;
-      return sum + Number(item.preco_final) * qtd;
-    }, 0);
 
     await supabase
       .from("pedidos")
@@ -1405,6 +1409,7 @@ export default function Faturamento() {
                 .select("id, produto_id, quantidade, qtd_faturada, preco_final, preco_unitario_bruto, desconto_perfil, desconto_comercial, desconto_trade, produtos(nome, codigo_jiva)")
                 .eq("pedido_id", p.id);
 
+              console.log("DEBUG itens raw do supabase:", itens);
               const qtdInicial: Record<string, number> = {};
               itens?.forEach((item) => { qtdInicial[item.id] = item.quantidade; });
               setQtdSankhya(qtdInicial);
