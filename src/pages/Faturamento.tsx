@@ -1560,60 +1560,64 @@ export default function Faturamento() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Filtros globais */}
-        <div className="flex flex-wrap gap-3 mt-4">
-          <Input
-            type="number"
-            min={1}
-            value={filtroNumeroGlobal}
-            onChange={(e) => setFiltroNumeroGlobal(e.target.value)}
-            placeholder="Nº do pedido"
-            className="w-36"
-          />
-          <Select value={filtroVendedorGlobal} onValueChange={setFiltroVendedorGlobal}>
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Vendedor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os vendedores</SelectItem>
-              {vendedores.map((v) => (
-                <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Input type="date" value={filtroDataInicio} onChange={(e) => setFiltroDataInicio(e.target.value)} className="w-40" title="De" />
-          <Input type="date" value={filtroDataFim} onChange={(e) => setFiltroDataFim(e.target.value)} className="w-40" title="Até" />
-          {(FILTROS_STATUS_ABA[abaAtiva]?.length ?? 0) > 0 && (
-            <div className="flex gap-1 flex-wrap">
-              {FILTROS_STATUS_ABA[abaAtiva].map((op) => (
-                <Button
-                  key={op.value}
-                  size="sm"
-                  variant={filtroStatusAba === op.value ? "default" : "outline"}
-                  onClick={() => setFiltroStatusAba(op.value)}
-                >
-                  {op.label}
-                </Button>
-              ))}
-            </div>
-          )}
-          <Button variant="ghost" size="sm" onClick={() => {
-            setFiltroDataInicio(iniciMes);
-            setFiltroDataFim("");
-            setFiltroNumeroGlobal("");
-            setFiltroVendedorGlobal("todos");
-            setFiltroStatusAba("todos");
-          }}>
-            Limpar filtros
-          </Button>
-        </div>
+        {/* Filtros globais — ocultos na aba Dashboard */}
+        {abaAtiva !== "dashboard" && (
+          <div className="flex flex-wrap gap-3 mt-4">
+            <Input
+              type="number"
+              min={1}
+              value={filtroNumeroGlobal}
+              onChange={(e) => setFiltroNumeroGlobal(e.target.value)}
+              placeholder="Nº do pedido"
+              className="w-36"
+            />
+            <Select value={filtroVendedorGlobal} onValueChange={setFiltroVendedorGlobal}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Vendedor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os vendedores</SelectItem>
+                {vendedores.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>{v.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input type="date" value={filtroDataInicio} onChange={(e) => setFiltroDataInicio(e.target.value)} className="w-40" title="De" />
+            <Input type="date" value={filtroDataFim} onChange={(e) => setFiltroDataFim(e.target.value)} className="w-40" title="Até" />
+            {(FILTROS_STATUS_ABA[abaAtiva]?.length ?? 0) > 0 && (
+              <div className="flex gap-1 flex-wrap">
+                {FILTROS_STATUS_ABA[abaAtiva].map((op) => (
+                  <Button
+                    key={op.value}
+                    size="sm"
+                    variant={filtroStatusAba === op.value ? "default" : "outline"}
+                    onClick={() => setFiltroStatusAba(op.value)}
+                  >
+                    {op.label}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => {
+              setFiltroDataInicio(iniciMes);
+              setFiltroDataFim("");
+              setFiltroNumeroGlobal("");
+              setFiltroVendedorGlobal("todos");
+              setFiltroStatusAba("todos");
+            }}>
+              Limpar filtros
+            </Button>
+          </div>
+        )}
 
-        {/* Descrição da aba */}
-        <p className="text-sm text-muted-foreground mt-2">
-          {ABAS.find((a) => a.key === abaAtiva)?.descricao}
-          {" · "}
-          <span className="font-medium">{pedidosFiltrados.length} pedido(s)</span>
-        </p>
+        {/* Descrição da aba — oculta no Dashboard */}
+        {abaAtiva !== "dashboard" && (
+          <p className="text-sm text-muted-foreground mt-2">
+            {ABAS.find((a) => a.key === abaAtiva)?.descricao}
+            {" · "}
+            <span className="font-medium">{pedidosFiltrados.length} pedido(s)</span>
+          </p>
+        )}
 
         {ABAS.map((aba) => (
           <TabsContent key={aba.key} value={aba.key} className="mt-4">
