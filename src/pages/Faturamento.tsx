@@ -12,11 +12,11 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy, FileDown } from "lucide-react";
+import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy, FileDown, Scissors } from "lucide-react";
 import ImportarPedidoDialog from "@/components/faturamento/ImportarPedidoDialog";
 import DashboardFaturamento from "@/pages/faturamento/DashboardFaturamento";
 import { MARCAS } from "@/lib/constants";
@@ -55,6 +55,7 @@ type PedidoFat = {
   negativado_cliente: boolean;
   email_xml: string | null;
   ordem_compra: string | null;
+  pedido_origem_id: string | null;
   rua: string | null;
   numero_endereco: string | null;
   bairro: string | null;
@@ -315,6 +316,25 @@ export default function Faturamento() {
   // Dialog importar pedido
   const [importarOpen, setImportarOpen] = useState(false);
 
+  // Dialog fracionar pedido
+  const [fracionarDialog, setFracionarDialog] = useState<{
+    id: string;
+    numero: number;
+    itens: Array<{
+      id: string;
+      produto_id: string;
+      nome: string;
+      codigo: string;
+      quantidade: number;
+      preco_final: number;
+      preco_unitario_bruto: number;
+      desconto_perfil: number;
+      desconto_comercial: number;
+      desconto_trade: number;
+    }>;
+  } | null>(null);
+  const [qtdSankhya, setQtdSankhya] = useState<Record<string, number>>({});
+
   const carregar = useCallback(() => setRefreshKey((k) => k + 1), []);
   usePullToRefresh(carregar);
 
@@ -383,7 +403,7 @@ export default function Faturamento() {
         .from("pedidos")
         .select(`
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
-          cond_pagamento, observacoes, ordem_compra, responsavel_id, motivo, vendedor_id,
+          cond_pagamento, observacoes, ordem_compra, pedido_origem_id, responsavel_id, motivo, vendedor_id,
           cliente_id, perfil_cliente, tabela_preco, agendamento,
           clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, aceita_saldo, negativado, email, rua, numero, bairro, telefone),
           itens_pedido(
@@ -439,6 +459,7 @@ export default function Faturamento() {
           negativado_cliente: cl?.negativado ?? false,
           email_xml: cl?.email ?? null,
           ordem_compra: p.ordem_compra ?? null,
+          pedido_origem_id: p.pedido_origem_id ?? null,
           rua: cl?.rua ?? null,
           numero_endereco: cl?.numero ?? null,
           bairro: cl?.bairro ?? null,
@@ -1197,6 +1218,99 @@ export default function Faturamento() {
     doc.save(`saldo-pedido-${p.numero_pedido}.pdf`);
   };
 
+  const confirmarFracionamento = async () => {
+    if (!fracionarDialog) return;
+
+    const itens = fracionarDialog.itens;
+
+    const itensSemEstoque = itens.filter(
+      (item) => (qtdSankhya[item.id] ?? 0) < item.quantidade
+    );
+
+    const temDivisao = itens.some(
+      (item) =>
+        (qtdSankhya[item.id] ?? 0) > 0 &&
+        (qtdSankhya[item.id] ?? 0) < item.quantidade
+    );
+    const tudoSankhya = itens.every(
+      (item) => (qtdSankhya[item.id] ?? 0) === item.quantidade
+    );
+    const tudoSemEstoque = itens.every(
+      (item) => (qtdSankhya[item.id] ?? 0) === 0
+    );
+
+    if (tudoSankhya) { toast.error("Use o botão Cadastrar no Sankhya"); return; }
+    if (tudoSemEstoque) { toast.error("Use o botão Sem Estoque"); return; }
+    if (!temDivisao) { toast.error("Pelo menos 1 item precisa ser dividido entre os dois lados"); return; }
+
+    const pedidoOriginal = pedidos.find((p) => p.id === fracionarDialog.id);
+    if (!pedidoOriginal) return;
+
+    const { data: novoPedido, error: errNovo } = await supabase
+      .from("pedidos")
+      .insert({
+        tipo: pedidoOriginal.tipo,
+        data_pedido: pedidoOriginal.data_pedido,
+        vendedor_id: pedidoOriginal.vendedor_id,
+        cliente_id: pedidoOriginal.cliente_id,
+        perfil_cliente: pedidoOriginal.cluster,
+        tabela_preco: pedidoOriginal.tabela_preco,
+        cond_pagamento: pedidoOriginal.cond_pagamento,
+        agendamento: pedidoOriginal.agendamento,
+        observacoes: pedidoOriginal.observacoes,
+        ordem_compra: pedidoOriginal.ordem_compra,
+        status: "sem_estoque",
+        motivo: `Fracionado do pedido #${fracionarDialog.numero}`,
+        pedido_origem_id: fracionarDialog.id,
+      } as any)
+      .select()
+      .single();
+
+    if (errNovo || !novoPedido) { toast.error("Erro ao criar pedido sem estoque"); return; }
+
+    const itensSemEstoqueParaInserir = itensSemEstoque.map((item) => ({
+      pedido_id: novoPedido.id,
+      produto_id: item.produto_id,
+      quantidade: item.quantidade - (qtdSankhya[item.id] ?? 0),
+      qtd_faturada: 0,
+      preco_final: item.preco_final,
+      preco_unitario_bruto: item.preco_unitario_bruto,
+      desconto_perfil: item.desconto_perfil,
+      desconto_comercial: item.desconto_comercial,
+      desconto_trade: item.desconto_trade,
+      total_item: item.preco_final * (item.quantidade - (qtdSankhya[item.id] ?? 0)),
+    }));
+
+    const { error: errItens } = await supabase.from("itens_pedido").insert(itensSemEstoqueParaInserir as any);
+    if (errItens) { toast.error("Erro ao inserir itens no pedido sem estoque"); return; }
+
+    for (const item of itens) {
+      const qtd = qtdSankhya[item.id] ?? 0;
+      if (qtd === 0) {
+        await supabase.from("itens_pedido").delete().eq("id", item.id);
+      } else if (qtd < item.quantidade) {
+        await supabase
+          .from("itens_pedido")
+          .update({ quantidade: qtd, total_item: item.preco_final * qtd } as any)
+          .eq("id", item.id);
+      }
+    }
+
+    await supabase
+      .from("pedidos")
+      .update({
+        status: "no_sankhya",
+        motivo: `Fracionado — pedido sem estoque gerado: #${(novoPedido as any).numero_pedido}`,
+        status_atualizado_em: new Date().toISOString(),
+      } as any)
+      .eq("id", fracionarDialog.id);
+
+    toast.success(`Pedido #${fracionarDialog.numero} fracionado. Pedido sem estoque #${(novoPedido as any).numero_pedido} criado.`);
+    setFracionarDialog(null);
+    setQtdSankhya({});
+    setRefreshKey((k) => k + 1);
+  };
+
   // ── Sub-componentes ───────────────────────────────────────────────
   function StatusBadge({ status }: { status: string }) {
     return (
@@ -1256,6 +1370,45 @@ export default function Faturamento() {
             onClick={(e) => abrirProdFat(p, e)} title="Faturamento por produto">
             <FileText className="h-3 w-3 mr-1" />
             Produtos
+          </Button>
+        )}
+
+        {/* Fracionar */}
+        {(abaAtiva === "em_aberto" || abaAtiva === "assumidos") && !STATUS_TERMINAL.has(p.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-purple-700 border-purple-300 hover:bg-purple-50"
+            onClick={wrap(async () => {
+              const { data: itens } = await supabase
+                .from("itens_pedido")
+                .select("id, produto_id, quantidade, qtd_faturada, preco_final, preco_unitario_bruto, desconto_perfil, desconto_comercial, desconto_trade, produtos(nome, codigo_jiva)")
+                .eq("pedido_id", p.id);
+
+              const qtdInicial: Record<string, number> = {};
+              itens?.forEach((item) => { qtdInicial[item.id] = item.quantidade; });
+              setQtdSankhya(qtdInicial);
+
+              setFracionarDialog({
+                id: p.id,
+                numero: p.numero_pedido,
+                itens: (itens ?? []).map((item: any) => ({
+                  id: item.id,
+                  produto_id: item.produto_id,
+                  nome: item.produtos?.nome ?? "Produto",
+                  codigo: item.produtos?.codigo_jiva ?? "",
+                  quantidade: item.quantidade,
+                  preco_final: item.preco_final ?? 0,
+                  preco_unitario_bruto: item.preco_unitario_bruto ?? 0,
+                  desconto_perfil: item.desconto_perfil ?? 0,
+                  desconto_comercial: item.desconto_comercial ?? 0,
+                  desconto_trade: item.desconto_trade ?? 0,
+                })),
+              });
+            })}
+          >
+            <Scissors className="h-3 w-3 mr-1" />
+            Fracionar
           </Button>
         )}
 
@@ -1581,6 +1734,11 @@ export default function Faturamento() {
                             {p.ordem_compra && (
                               <div className="text-xs text-muted-foreground font-mono mt-1">
                                 OC: <span className="text-blue-600 font-medium">{p.ordem_compra}</span>
+                              </div>
+                            )}
+                            {p.motivo?.startsWith("Fracionado") && (
+                              <div className="text-xs text-purple-600 font-medium mt-1">
+                                {p.motivo}
                               </div>
                             )}
                           </TableCell>
@@ -2136,6 +2294,131 @@ export default function Faturamento() {
               disabled={!motivoSemEstoque.trim()}
             >
               Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: fracionar pedido */}
+      <Dialog open={!!fracionarDialog} onOpenChange={(o) => !o && setFracionarDialog(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Fracionar pedido #{fracionarDialog?.numero}</DialogTitle>
+            <DialogDescription>
+              Defina a quantidade de cada item que vai para o Sankhya.
+              O saldo vai para um novo pedido com status "Sem estoque".
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2">
+            <div className="grid grid-cols-4 gap-3 text-xs font-medium text-muted-foreground pb-2 border-b">
+              <span>Produto</span>
+              <span className="text-center">Qtd pedida</span>
+              <span className="text-center text-teal-700">Para Sankhya</span>
+              <span className="text-center text-red-600">Sem estoque</span>
+            </div>
+
+            {fracionarDialog?.itens.map((item) => {
+              const qtd = qtdSankhya[item.id] ?? 0;
+              const semEstoque = item.quantidade - qtd;
+              return (
+                <div key={item.id} className="grid grid-cols-4 gap-3 items-center py-2 border-b">
+                  <div>
+                    <div className="text-sm font-medium">{item.nome}</div>
+                    <div className="text-xs text-muted-foreground">{item.codigo}</div>
+                  </div>
+                  <div className="text-center font-medium">{item.quantidade}</div>
+                  <div>
+                    <Input
+                      type="number"
+                      min={0}
+                      max={item.quantidade}
+                      value={qtd}
+                      onChange={(e) => {
+                        const val = Math.min(item.quantidade, Math.max(0, Number(e.target.value)));
+                        setQtdSankhya((prev) => ({ ...prev, [item.id]: val }));
+                      }}
+                      className="text-center border-teal-300 focus:ring-teal-500"
+                    />
+                  </div>
+                  <div className={`text-center font-medium ${semEstoque > 0 ? "text-red-600" : "text-muted-foreground"}`}>
+                    {semEstoque}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {(() => {
+            const itens = fracionarDialog?.itens ?? [];
+            const tudoSankhya = itens.every((item) => (qtdSankhya[item.id] ?? 0) === item.quantidade);
+            const tudoSemEstoque = itens.every((item) => (qtdSankhya[item.id] ?? 0) === 0);
+            if (tudoSankhya)
+              return (
+                <p className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2">
+                  Use o botão Cadastrar no Sankhya para enviar o pedido completo.
+                </p>
+              );
+            if (tudoSemEstoque)
+              return (
+                <p className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2">
+                  Use o botão Sem Estoque para marcar o pedido completo.
+                </p>
+              );
+            return null;
+          })()}
+
+          {(() => {
+            const itens = fracionarDialog?.itens ?? [];
+            const tudoSankhya = itens.every((item) => (qtdSankhya[item.id] ?? 0) === item.quantidade);
+            const tudoSemEstoque = itens.every((item) => (qtdSankhya[item.id] ?? 0) === 0);
+            if (tudoSankhya || tudoSemEstoque) return null;
+            return (
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <div className="bg-teal-50 border border-teal-200 rounded p-3">
+                  <p className="text-xs font-medium text-teal-800 mb-1">
+                    Pedido #{fracionarDialog?.numero} — Cadastrado no Sankhya
+                  </p>
+                  {itens
+                    .filter((item) => (qtdSankhya[item.id] ?? 0) > 0)
+                    .map((item) => (
+                      <p key={item.id} className="text-xs text-teal-700">
+                        {item.nome} → {qtdSankhya[item.id]} un
+                      </p>
+                    ))}
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded p-3">
+                  <p className="text-xs font-medium text-red-800 mb-1">
+                    Pedido novo — Sem estoque
+                  </p>
+                  {itens
+                    .filter((item) => item.quantidade - (qtdSankhya[item.id] ?? 0) > 0)
+                    .map((item) => (
+                      <p key={item.id} className="text-xs text-red-700">
+                        {item.nome} → {item.quantidade - (qtdSankhya[item.id] ?? 0)} un
+                      </p>
+                    ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setFracionarDialog(null)}>
+              Voltar
+            </Button>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700 text-white"
+              onClick={confirmarFracionamento}
+              disabled={(() => {
+                const itens = fracionarDialog?.itens ?? [];
+                return (
+                  itens.every((item) => (qtdSankhya[item.id] ?? 0) === item.quantidade) ||
+                  itens.every((item) => (qtdSankhya[item.id] ?? 0) === 0)
+                );
+              })()}
+            >
+              Confirmar fracionamento
             </Button>
           </DialogFooter>
         </DialogContent>
