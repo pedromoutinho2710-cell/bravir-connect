@@ -24,6 +24,7 @@ import FaturamentoClientesPendentes from "./pages/FaturamentoClientesPendentes";
 import FaturamentoClientes from "./pages/FaturamentoClientes";
 import FilaCadastros from "./pages/faturamento/FilaCadastros";
 import DashboardFaturamento from "./pages/faturamento/DashboardFaturamento";
+import NovoPedidoFaturamento from "./pages/faturamento/NovoPedidoFaturamento";
 import EditarPedido from "./pages/faturamento/EditarPedido";
 import EditarPedidoFaturamento from "@/pages/faturamento/EditarPedidoFaturamento";
 import PedidosAdmin from "./pages/admin/PedidosAdmin";
@@ -104,6 +105,7 @@ const App = () => (
               <Route path="/faturamento/cadastrar-cliente" element={<CadastrarClienteFaturamento />} />
               <Route path="/faturamento/cadastros" element={<FilaCadastros />} />
               <Route path="/dashboard-faturamento" element={<DashboardFaturamento />} />
+              <Route path="/faturamento/novo-pedido" element={<NovoPedidoFaturamento />} />
             </Route>
 
             {/* Edição de pedido — acessível por faturamento e admin */}
