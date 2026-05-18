@@ -41,7 +41,7 @@ function getDateRange(periodo: Periodo): { dataInicio: string; dataFim: string }
 }
 
 type KPIs = {
-  preFaturado: number;
+  recebidos: number;
   lancados: number;
   aguardandoFaturamento: number;
   faturado: number;
@@ -101,7 +101,7 @@ export default function Dashboard() {
   const [periodoKpi, setPeriodoKpi] = useState<Periodo>("mes");
   const [loading, setLoading] = useState(true);
   const [kpis, setKpis] = useState<KPIs>({
-    preFaturado: 0,
+    recebidos: 0,
     lancados: 0,
     aguardandoFaturamento: 0,
     faturado: 0,
@@ -190,16 +190,16 @@ export default function Dashboard() {
             .from("pedidos")
             .select("id, itens_pedido(total_item)")
             .in("status", ["pendente_sankhya", "em_faturamento"]),
-          // KPI: Pré Faturado
-          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "pendente_sankhya").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
-          // KPI: Pedidos Lançados
+          // KPI: Pedidos Recebidos (todos exceto rascunho e cancelado)
+          supabase.from("pedidos").select("id", { count: "exact", head: true }).not("status", "in", '("rascunho","cancelado")').gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
+          // KPI: Pedidos Lançados (no_sankhya)
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "no_sankhya").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
-          // KPI: Aguardando Faturamento
-          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "parcialmente_faturado").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
+          // KPI: Aguardando Faturamento (no_sankhya)
+          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "no_sankhya").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
           // KPI: Faturado
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "faturado").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
-          // KPI: Problemas
-          supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "com_problema").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
+          // KPI: Problemas (com_problema + devolvido + cancelado)
+          supabase.from("pedidos").select("id", { count: "exact", head: true }).in("status", ["com_problema", "devolvido", "cancelado"]).gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
           // Campanha ativa
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any).from("campanhas").select("*, campanha_niveis(*)").eq("ativa", true).maybeSingle(),
@@ -219,7 +219,7 @@ export default function Dashboard() {
         const pedidosSemCancelado = pedidos.filter((p) => p.status !== "cancelado");
 
         setKpis({
-          preFaturado: preFatRes.count ?? 0,
+          recebidos: preFatRes.count ?? 0,
           lancados: lancadosRes.count ?? 0,
           aguardandoFaturamento: aguardRes.count ?? 0,
           faturado: fatKpiRes.count ?? 0,
@@ -292,7 +292,7 @@ export default function Dashboard() {
             .select("id, full_name, email")
             .in("id", vendedorIds);
           (profilesData ?? []).forEach((p) => {
-            profileMap[p.id] = p.full_name || p.email;
+            profileMap[p.id] = p.full_name ?? p.email;
           });
         }
 
@@ -528,7 +528,7 @@ export default function Dashboard() {
   const maxFatMensal = Math.max(...fatMensal.map((m) => m.valor), 1);
 
   // Pipeline card bar scale
-  const maxKpi = Math.max(kpis.preFaturado, kpis.lancados, kpis.aguardandoFaturamento, kpis.problemas, 1);
+  const maxKpi = Math.max(kpis.recebidos, kpis.lancados, kpis.aguardandoFaturamento, kpis.faturado, kpis.problemas, 1);
 
   // Donut chart — entrada por marca
   const totalGeralMarca = Object.values(entradaMarca).reduce((s, v) => s + v, 0);
@@ -901,21 +901,25 @@ export default function Dashboard() {
       )}
 
       {/* Seção 4 — KPIs */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-lg border p-4 bg-yellow-50 border-yellow-300">
-          <div className="text-sm font-medium text-yellow-800">Pré Faturado</div>
-          <div className="text-3xl font-bold mt-1 text-yellow-900">{kpis.preFaturado}</div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="rounded-lg border p-4 bg-orange-50 border-orange-300">
+          <div className="text-sm font-medium text-orange-800">Pedidos Recebidos</div>
+          <div className="text-3xl font-bold mt-1 text-orange-900">{kpis.recebidos}</div>
         </div>
         <div className="rounded-lg border p-4 bg-purple-50 border-purple-300">
-          <div className="text-sm font-medium text-purple-800">No Sankhya</div>
+          <div className="text-sm font-medium text-purple-800">Pedidos Lançados</div>
           <div className="text-3xl font-bold mt-1 text-purple-900">{kpis.lancados}</div>
         </div>
         <div className="rounded-lg border p-4 bg-blue-50 border-blue-300">
           <div className="text-sm font-medium text-blue-800">Aguardando Faturamento</div>
           <div className="text-3xl font-bold mt-1 text-blue-900">{kpis.aguardandoFaturamento}</div>
         </div>
+        <div className="rounded-lg border p-4 bg-green-50 border-green-300">
+          <div className="text-sm font-medium text-green-800">Faturado</div>
+          <div className="text-3xl font-bold mt-1 text-green-900">{kpis.faturado}</div>
+        </div>
         <div className="rounded-lg border p-4 bg-red-50 border-red-300">
-          <div className="text-sm font-medium text-red-800">Com Problema</div>
+          <div className="text-sm font-medium text-red-800">Problemas</div>
           <div className="text-3xl font-bold mt-1 text-red-900">{kpis.problemas}</div>
         </div>
       </div>
@@ -1032,10 +1036,11 @@ export default function Dashboard() {
           <CardContent>
             <div className="space-y-4">
               {[
-                { label: "Pré Faturado", value: kpis.preFaturado, color: "#CA8A04" },
-                { label: "No Sankhya", value: kpis.lancados, color: "#9333EA" },
-                { label: "Aguardando Fat.", value: kpis.aguardandoFaturamento, color: "#2563EB" },
-                { label: "Com Problema", value: kpis.problemas, color: "#DC2626" },
+                { label: "Recebidos", value: kpis.recebidos, color: "#EA580C" },
+                { label: "Lançados", value: kpis.lancados, color: "#9333EA" },
+                { label: "Ag. Faturamento", value: kpis.aguardandoFaturamento, color: "#2563EB" },
+                { label: "Faturado", value: kpis.faturado, color: "#16A34A" },
+                { label: "Problemas", value: kpis.problemas, color: "#DC2626" },
               ].map(({ label, value, color }) => (
                 <div key={label} className="space-y-1">
                   <div className="flex justify-between text-sm">
@@ -1130,7 +1135,7 @@ export default function Dashboard() {
                             <TableRow key={s.produto_id}>
                               <TableCell className="font-bold">{idx + 1}</TableCell>
                               <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
-                              <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
+                              <TableCell className="text-sm">{s.nome}</TableCell>
                               <TableCell>
                                 <Badge variant="outline" className="text-xs">{s.marca}</Badge>
                               </TableCell>
@@ -1165,7 +1170,7 @@ export default function Dashboard() {
                             <TableRow key={s.produto_id}>
                               <TableCell className="font-bold">{idx + 1}</TableCell>
                               <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
-                              <TableCell className="text-sm max-w-[100px] truncate" title={s.nome}>{s.nome}</TableCell>
+                              <TableCell className="text-sm">{s.nome}</TableCell>
                               <TableCell>
                                 <Badge variant="outline" className="text-xs">{s.marca}</Badge>
                               </TableCell>
