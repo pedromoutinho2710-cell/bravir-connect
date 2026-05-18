@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy, FileDown, Scissors } from "lucide-react";
+import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy, FileDown } from "lucide-react";
 import ImportarPedidoDialog from "@/components/faturamento/ImportarPedidoDialog";
 import DashboardFaturamento from "@/pages/faturamento/DashboardFaturamento";
 import { MARCAS } from "@/lib/constants";
@@ -315,28 +315,6 @@ export default function Faturamento() {
 
   // Dialog importar pedido
   const [importarOpen, setImportarOpen] = useState(false);
-
-  // Dialog fracionar pedido
-  const [fracionarDialog, setFracionarDialog] = useState<{
-    id: string;
-    numero: number;
-    itens: Array<{
-      id: string;
-      produto_id: string;
-      nome: string;
-      codigo: string;
-      quantidade: number;
-      preco_final: number;
-      preco_unitario_bruto: number;
-      desconto_perfil: number;
-      desconto_comercial: number;
-      desconto_trade: number;
-    }>;
-  } | null>(null);
-  const [qtdSankhya, setQtdSankhya] = useState<Record<string, number>>({});
-
-  // Dialog cadastrar no Sankhya
-  const [cadastrarSankhyaDialog, setCadastrarSankhyaDialog] = useState<PedidoFat | null>(null);
 
   const carregar = useCallback(() => setRefreshKey((k) => k + 1), []);
   usePullToRefresh(carregar);
@@ -1017,7 +995,6 @@ export default function Faturamento() {
   const gerarFormularioPdf = async (p: PedidoFat, e: React.MouseEvent) => {
     e.stopPropagation();
     const { gerarFormularioPDF } = await import("@/lib/pdf");
-    console.log("DEBUG ordem_compra:", p.ordem_compra, "pedido:", p.numero_pedido);
     const doc = gerarFormularioPDF({
       numero_pedido: p.numero_pedido,
       tipo: p.tipo,
@@ -1237,124 +1214,6 @@ export default function Faturamento() {
     doc.save(`saldo-pedido-${p.numero_pedido}.pdf`);
   };
 
-  const confirmarFracionamento = async () => {
-    if (!fracionarDialog) return;
-
-    const itens = fracionarDialog.itens;
-
-    const itensSemEstoque = itens.filter(
-      (item) => (qtdSankhya[item.id] ?? 0) < item.quantidade
-    );
-
-    const temItemNoSankhya = itens.some((item) => (qtdSankhya[item.id] ?? 0) > 0);
-    const temItemSemEstoque = itens.some(
-      (item) => item.quantidade - (qtdSankhya[item.id] ?? 0) > 0
-    );
-    const tudoSankhya = itens.every(
-      (item) => (qtdSankhya[item.id] ?? 0) === item.quantidade
-    );
-    const tudoSemEstoque = itens.every(
-      (item) => (qtdSankhya[item.id] ?? 0) === 0
-    );
-
-    if (tudoSankhya) {
-      toast.error("Use o botão Cadastrar no Sankhya");
-      return;
-    }
-    if (tudoSemEstoque) {
-      toast.error("Use o botão Sem Estoque");
-      return;
-    }
-    if (!temItemNoSankhya || !temItemSemEstoque) {
-      toast.error("Pelo menos 1 item precisa ir para cada lado");
-      return;
-    }
-
-    const pedidoOriginal = pedidos.find((p) => p.id === fracionarDialog.id);
-    if (!pedidoOriginal) return;
-
-    const totalNovoPedido = fracionarDialog.itens.reduce((acc, item) => {
-      const qtd = item.quantidade - (qtdSankhya[item.id] ?? 0);
-      return acc + Number(item.preco_final) * qtd;
-    }, 0);
-
-    const totalOriginal = itens.reduce((sum, item) => {
-      const qtd = qtdSankhya[item.id] ?? 0;
-      return sum + Number(item.preco_final) * qtd;
-    }, 0);
-
-    console.log("DEBUG fracionarDialog.itens:", fracionarDialog.itens);
-    console.log("DEBUG totalNovoPedido:", totalNovoPedido);
-    console.log("DEBUG totalOriginal:", totalOriginal);
-
-    const { data: novoPedido, error: errNovo } = await supabase
-      .from("pedidos")
-      .insert({
-        tipo: pedidoOriginal.tipo,
-        data_pedido: pedidoOriginal.data_pedido,
-        vendedor_id: pedidoOriginal.vendedor_id,
-        cliente_id: pedidoOriginal.cliente_id,
-        perfil_cliente: pedidoOriginal.cluster,
-        tabela_preco: pedidoOriginal.tabela_preco,
-        cond_pagamento: pedidoOriginal.cond_pagamento,
-        agendamento: pedidoOriginal.agendamento,
-        observacoes: pedidoOriginal.observacoes,
-        ordem_compra: pedidoOriginal.ordem_compra,
-        status: "sem_estoque",
-        motivo: `Fracionado do pedido #${fracionarDialog.numero}`,
-        pedido_origem_id: fracionarDialog.id,
-        total: totalNovoPedido,
-      } as any)
-      .select()
-      .single();
-
-    console.log("DEBUG insert novoPedido result:", novoPedido, errNovo);
-    if (errNovo || !novoPedido) { toast.error("Erro ao criar pedido sem estoque"); return; }
-
-    const itensSemEstoqueParaInserir = itensSemEstoque.map((item) => ({
-      pedido_id: novoPedido.id,
-      produto_id: item.produto_id,
-      quantidade: item.quantidade - (qtdSankhya[item.id] ?? 0),
-      qtd_faturada: 0,
-      preco_final: item.preco_final,
-      preco_unitario_bruto: item.preco_unitario_bruto,
-      desconto_perfil: item.desconto_perfil,
-      desconto_comercial: item.desconto_comercial,
-      desconto_trade: item.desconto_trade,
-      total_item: Number(item.preco_final) * (item.quantidade - (qtdSankhya[item.id] ?? 0)),
-    }));
-
-    const { error: errItens } = await supabase.from("itens_pedido").insert(itensSemEstoqueParaInserir as any);
-    if (errItens) { toast.error("Erro ao inserir itens no pedido sem estoque"); return; }
-
-    for (const item of itens) {
-      const qtd = qtdSankhya[item.id] ?? 0;
-      if (qtd === 0) {
-        await supabase.from("itens_pedido").delete().eq("id", item.id);
-      } else if (qtd < item.quantidade) {
-        await supabase
-          .from("itens_pedido")
-          .update({ quantidade: qtd, total_item: Number(item.preco_final) * qtd } as any)
-          .eq("id", item.id);
-      }
-    }
-
-    const { error: errUpdateOriginal } = await supabase
-      .from("pedidos")
-      .update({
-        status: "no_sankhya",
-        total: totalOriginal,
-        motivo: `Fracionado — pedido sem estoque gerado: #${(novoPedido as any).numero_pedido}`,
-        status_atualizado_em: new Date().toISOString(),
-      } as any)
-      .eq("id", fracionarDialog.id);
-    console.log("DEBUG update original error:", errUpdateOriginal);
-
-    toast.success(`Pedido #${fracionarDialog.numero} fracionado. Pedido sem estoque #${(novoPedido as any).numero_pedido} criado.`);
-    setFracionarDialog(null);
-    setQtdSankhya({});
-    setRefreshKey((k) => k + 1);
-  };
 
   // ── Sub-componentes ───────────────────────────────────────────────
   function StatusBadge({ status }: { status: string }) {
@@ -1410,7 +1269,7 @@ export default function Faturamento() {
         )}
 
         {/* Faturamento por produto */}
-        {!isTerminal && abaAtiva !== "em_aberto" && abaAtiva !== "assumidos" && (
+        {!isTerminal && (
           <Button size="sm" variant="outline" disabled={atualizando === p.id}
             onClick={(e) => abrirProdFat(p, e)} title="Faturamento por produto">
             <FileText className="h-3 w-3 mr-1" />
@@ -1430,58 +1289,6 @@ export default function Faturamento() {
             })}
           >
             Sem Estoque
-          </Button>
-        )}
-
-        {/* Fracionar */}
-        {(abaAtiva === "em_aberto" || abaAtiva === "assumidos") && !STATUS_TERMINAL.has(p.status) && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-purple-700 border-purple-300 hover:bg-purple-50"
-            onClick={wrap(async () => {
-              const { data: itens } = await supabase
-                .from("itens_pedido")
-                .select("id, produto_id, quantidade, qtd_faturada, preco_final, preco_unitario_bruto, desconto_perfil, desconto_comercial, desconto_trade, produtos(nome, codigo_jiva)")
-                .eq("pedido_id", p.id);
-
-              console.log("DEBUG itens raw do supabase:", itens);
-              const qtdInicial: Record<string, number> = {};
-              itens?.forEach((item) => { qtdInicial[item.id] = item.quantidade; });
-              setQtdSankhya(qtdInicial);
-
-              setFracionarDialog({
-                id: p.id,
-                numero: p.numero_pedido,
-                itens: (itens ?? []).map((item: any) => ({
-                  id: item.id,
-                  produto_id: item.produto_id,
-                  nome: item.produtos?.nome ?? "Produto",
-                  codigo: item.produtos?.codigo_jiva ?? "",
-                  quantidade: Number(item.quantidade),
-                  preco_final: Number(item.preco_final),
-                  preco_unitario_bruto: Number(item.preco_unitario_bruto),
-                  desconto_perfil: Number(item.desconto_perfil ?? 0),
-                  desconto_comercial: Number(item.desconto_comercial ?? 0),
-                  desconto_trade: Number(item.desconto_trade ?? 0),
-                })),
-              });
-            })}
-          >
-            <Scissors className="h-3 w-3 mr-1" />
-            Fracionar
-          </Button>
-        )}
-
-        {/* Cadastrar no Sankhya */}
-        {(abaAtiva === "em_aberto" || abaAtiva === "assumidos") && !STATUS_TERMINAL.has(p.status) && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-teal-700 border-teal-300 hover:bg-teal-50"
-            onClick={wrap(() => setCadastrarSankhyaDialog(p))}
-          >
-            Cadastrar no Sankhya
           </Button>
         )}
 
@@ -2361,232 +2168,6 @@ export default function Faturamento() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog: fracionar pedido */}
-      <Dialog open={!!fracionarDialog} onOpenChange={(o) => { if (!o) { setFracionarDialog(null); setQtdSankhya({}); } }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Fracionar pedido #{fracionarDialog?.numero}</DialogTitle>
-            <DialogDescription>
-              Defina a quantidade de cada item que vai para o Sankhya.
-              O saldo vai para um novo pedido com status "Sem estoque".
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-2">
-            <div className="grid grid-cols-4 gap-3 text-xs font-medium text-muted-foreground pb-2 border-b">
-              <span>Produto</span>
-              <span className="text-center">Qtd pedida</span>
-              <span className="text-center text-teal-700">Para Sankhya</span>
-              <span className="text-center text-red-600">Sem estoque</span>
-            </div>
-
-            {fracionarDialog?.itens.map((item) => {
-              const qtd = qtdSankhya[item.id] ?? 0;
-              const semEstoque = item.quantidade - qtd;
-              return (
-                <div key={item.id} className="grid grid-cols-4 gap-3 items-center py-2 border-b">
-                  <div>
-                    <div className="text-sm font-medium">{item.nome}</div>
-                    <div className="text-xs text-muted-foreground">{item.codigo}</div>
-                  </div>
-                  <div className="text-center font-medium">{item.quantidade}</div>
-                  <div>
-                    <Input
-                      type="number"
-                      min={0}
-                      max={item.quantidade}
-                      value={qtd}
-                      onChange={(e) => {
-                        const val = Math.min(item.quantidade, Math.max(0, Number(e.target.value)));
-                        setQtdSankhya((prev) => ({ ...prev, [item.id]: val }));
-                      }}
-                      className="text-center border-teal-300 focus:ring-teal-500"
-                    />
-                  </div>
-                  <div className={`text-center font-medium ${semEstoque > 0 ? "text-red-600" : "text-muted-foreground"}`}>
-                    {semEstoque}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {(() => {
-            const itens = fracionarDialog?.itens ?? [];
-            const tudoSankhya = itens.every((item) => (qtdSankhya[item.id] ?? 0) === item.quantidade);
-            const tudoSemEstoque = itens.every((item) => (qtdSankhya[item.id] ?? 0) === 0);
-            if (tudoSankhya)
-              return (
-                <p className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2">
-                  Use o botão Cadastrar no Sankhya para enviar o pedido completo.
-                </p>
-              );
-            if (tudoSemEstoque)
-              return (
-                <p className="text-sm text-yellow-700 bg-yellow-50 border border-yellow-200 rounded p-2">
-                  Use o botão Sem Estoque para marcar o pedido completo.
-                </p>
-              );
-            return null;
-          })()}
-
-          {(() => {
-            const itens = fracionarDialog?.itens ?? [];
-            const tudoSankhya = itens.every((item) => (qtdSankhya[item.id] ?? 0) === item.quantidade);
-            const tudoSemEstoque = itens.every((item) => (qtdSankhya[item.id] ?? 0) === 0);
-            if (tudoSankhya || tudoSemEstoque) return null;
-            return (
-              <div className="grid grid-cols-2 gap-3 mt-2">
-                <div className="bg-teal-50 border border-teal-200 rounded p-3">
-                  <p className="text-xs font-medium text-teal-800 mb-1">
-                    Pedido #{fracionarDialog?.numero} — Cadastrado no Sankhya
-                  </p>
-                  {itens
-                    .filter((item) => (qtdSankhya[item.id] ?? 0) > 0)
-                    .map((item) => (
-                      <p key={item.id} className="text-xs text-teal-700">
-                        {item.nome} → {qtdSankhya[item.id]} un
-                      </p>
-                    ))}
-                </div>
-                <div className="bg-red-50 border border-red-200 rounded p-3">
-                  <p className="text-xs font-medium text-red-800 mb-1">
-                    Pedido novo — Sem estoque
-                  </p>
-                  {itens
-                    .filter((item) => item.quantidade - (qtdSankhya[item.id] ?? 0) > 0)
-                    .map((item) => (
-                      <p key={item.id} className="text-xs text-red-700">
-                        {item.nome} → {item.quantidade - (qtdSankhya[item.id] ?? 0)} un
-                      </p>
-                    ))}
-                </div>
-              </div>
-            );
-          })()}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setFracionarDialog(null)}>
-              Voltar
-            </Button>
-            <Button
-              className="bg-purple-600 hover:bg-purple-700 text-white"
-              onClick={confirmarFracionamento}
-              disabled={(() => {
-                const itens = fracionarDialog?.itens ?? [];
-                return (
-                  itens.every((item) => (qtdSankhya[item.id] ?? 0) === item.quantidade) ||
-                  itens.every((item) => (qtdSankhya[item.id] ?? 0) === 0)
-                );
-              })()}
-            >
-              Confirmar fracionamento
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog: cadastrar no Sankhya */}
-      <Dialog open={!!cadastrarSankhyaDialog} onOpenChange={(o) => !o && setCadastrarSankhyaDialog(null)}>
-        <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>
-              Cadastrar pedido #{cadastrarSankhyaDialog?.numero_pedido} no Sankhya
-            </DialogTitle>
-            <DialogDescription>
-              Confirme os dados antes de cadastrar o pedido inteiro.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm mb-4">
-            <div><span className="text-muted-foreground">Cliente:</span>{" "}
-              {cadastrarSankhyaDialog?.razao_social}</div>
-            <div><span className="text-muted-foreground">Vendedor:</span>{" "}
-              {profiles[cadastrarSankhyaDialog?.vendedor_id ?? ""] ?? "—"}</div>
-            <div><span className="text-muted-foreground">Cond. Pagamento:</span>{" "}
-              {cadastrarSankhyaDialog?.cond_pagamento}</div>
-            <div><span className="text-muted-foreground">Tabela Preço:</span>{" "}
-              {cadastrarSankhyaDialog?.tabela_preco}</div>
-          </div>
-
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-xs text-muted-foreground">
-                <th className="text-left pb-2">Produto</th>
-                <th className="text-center pb-2">Cx</th>
-                <th className="text-center pb-2">Qtd</th>
-                <th className="text-right pb-2">Preço final</th>
-                <th className="text-right pb-2">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(cadastrarSankhyaDialog?.itens ?? []).map((item) => (
-                <tr key={item.id} className="border-b">
-                  <td className="py-2">
-                    <div className="font-medium">{item.nome}</div>
-                    <div className="text-xs text-muted-foreground">{item.codigo}</div>
-                  </td>
-                  <td className="text-center py-2">{item.cx_embarque}</td>
-                  <td className="text-center py-2">{item.quantidade}</td>
-                  <td className="text-right py-2">
-                    {Number(item.preco_final).toLocaleString("pt-BR",
-                      { style: "currency", currency: "BRL" })}
-                  </td>
-                  <td className="text-right py-2 font-medium">
-                    {Number(item.total).toLocaleString("pt-BR",
-                      { style: "currency", currency: "BRL" })}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="flex justify-end items-center gap-2 mt-3">
-            <span className="text-sm text-muted-foreground">Total do pedido:</span>
-            <span className="text-base font-medium text-teal-700">
-              {(cadastrarSankhyaDialog?.itens ?? [])
-                .reduce((s, i) => s + Number(i.total), 0)
-                .toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
-            </span>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCadastrarSankhyaDialog(null)}>
-              Voltar
-            </Button>
-            <Button
-              className="bg-teal-700 hover:bg-teal-800 text-white"
-              onClick={async () => {
-                if (!cadastrarSankhyaDialog) return;
-                const { error } = await supabase
-                  .from("pedidos")
-                  .update({
-                    status: "no_sankhya",
-                    status_atualizado_em: new Date().toISOString(),
-                  })
-                  .eq("id", cadastrarSankhyaDialog.id);
-                if (error) {
-                  toast.error("Erro ao cadastrar no Sankhya");
-                  return;
-                }
-                await insertHistorico(
-                  cadastrarSankhyaDialog.id,
-                  cadastrarSankhyaDialog.status,
-                  "no_sankhya",
-                  "cadastrou_sankhya"
-                );
-                toast.success(
-                  `Pedido #${cadastrarSankhyaDialog.numero_pedido} cadastrado no Sankhya`
-                );
-                setCadastrarSankhyaDialog(null);
-                setRefreshKey((k) => k + 1);
-              }}
-            >
-              Confirmar cadastro
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Dialog: faturamento por produto */}
       <Dialog open={!!prodFatDialog} onOpenChange={(o) => !o && setProdFatDialog(null)}>
