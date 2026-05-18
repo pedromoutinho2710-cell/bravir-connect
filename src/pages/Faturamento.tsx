@@ -18,7 +18,6 @@ import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
 import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy, FileDown } from "lucide-react";
 import ImportarPedidoDialog from "@/components/faturamento/ImportarPedidoDialog";
-import DashboardFaturamento from "@/pages/faturamento/DashboardFaturamento";
 import { MARCAS } from "@/lib/constants";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { formatDistanceToNow } from "date-fns";
@@ -198,7 +197,6 @@ const FILTROS_STATUS_ABA: Record<string, { value: string; label: string }[]> = {
   ],
   sem_estoque: [],
   faturado: [],
-  dashboard: [],
 };
 
 // ── Abas ──────────────────────────────────────────────────────────
@@ -1400,7 +1398,7 @@ export default function Faturamento() {
       />
 
       <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); setFiltroStatusAba("todos"); }}>
-        <TabsList className="w-full grid grid-cols-6">
+        <TabsList className="w-full grid grid-cols-5">
           {ABAS.map((aba) => {
             const count = pedidos.filter((p) => {
               if (!aba.status.includes(p.status)) return false;
@@ -1419,14 +1417,9 @@ export default function Faturamento() {
               </TabsTrigger>
             );
           })}
-          <TabsTrigger value="dashboard" className="relative data-[state=active]:bg-slate-50 data-[state=active]:border-slate-300 data-[state=active]:text-slate-800">
-            Dashboard
-          </TabsTrigger>
         </TabsList>
 
-        {/* Filtros globais — ocultos na aba Dashboard */}
-        {abaAtiva !== "dashboard" && (
-          <div className="flex flex-wrap gap-3 mt-4">
+        <div className="flex flex-wrap gap-3 mt-4">
             <Input
               type="number"
               min={1}
@@ -1472,16 +1465,12 @@ export default function Faturamento() {
               Limpar filtros
             </Button>
           </div>
-        )}
 
-        {/* Descrição da aba — oculta no Dashboard */}
-        {abaAtiva !== "dashboard" && (
-          <p className="text-sm text-muted-foreground mt-2">
-            {ABAS.find((a) => a.key === abaAtiva)?.descricao}
-            {" · "}
-            <span className="font-medium">{pedidosFiltrados.length} pedido(s)</span>
-          </p>
-        )}
+        <p className="text-sm text-muted-foreground mt-2">
+          {ABAS.find((a) => a.key === abaAtiva)?.descricao}
+          {" · "}
+          <span className="font-medium">{pedidosFiltrados.length} pedido(s)</span>
+        </p>
 
         {ABAS.map((aba) => (
           <TabsContent key={aba.key} value={aba.key} className="mt-4">
@@ -1704,9 +1693,6 @@ export default function Faturamento() {
             )}
           </TabsContent>
         ))}
-        <TabsContent value="dashboard" className="mt-4">
-          <DashboardFaturamento />
-        </TabsContent>
       </Tabs>
 
       {/* Dialog: motivo (devolver / cancelar / com_problema) */}

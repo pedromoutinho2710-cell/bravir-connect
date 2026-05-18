@@ -91,6 +91,7 @@ export const ADMIN_SECTIONS: Section[] = [
 
 export const BASE_FATURAMENTO_ITEMS: Item[] = [
   { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
+  { title: "Dashboard", url: "/dashboard-faturamento", icon: LayoutDashboard },
   { title: "Clientes", url: "/faturamento/clientes", icon: Users },
   { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
 ];
