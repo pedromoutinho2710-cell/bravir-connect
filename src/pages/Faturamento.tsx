@@ -1254,6 +1254,11 @@ export default function Faturamento() {
     const pedidoOriginal = pedidos.find((p) => p.id === fracionarDialog.id);
     if (!pedidoOriginal) return;
 
+    const totalNovoPedido = itensSemEstoque.reduce((acc, item) => {
+      const qtd = item.quantidade - (qtdSankhya[item.id] ?? 0);
+      return acc + Number(item.preco_final) * qtd;
+    }, 0);
+
     const { data: novoPedido, error: errNovo } = await supabase
       .from("pedidos")
       .insert({
@@ -1270,6 +1275,7 @@ export default function Faturamento() {
         status: "sem_estoque",
         motivo: `Fracionado do pedido #${fracionarDialog.numero}`,
         pedido_origem_id: fracionarDialog.id,
+        total: totalNovoPedido,
       } as any)
       .select()
       .single();
@@ -1286,17 +1292,8 @@ export default function Faturamento() {
       desconto_perfil: item.desconto_perfil,
       desconto_comercial: item.desconto_comercial,
       desconto_trade: item.desconto_trade,
-      total_item: item.preco_final * (item.quantidade - (qtdSankhya[item.id] ?? 0)),
+      total_item: Number(item.preco_final) * (item.quantidade - (qtdSankhya[item.id] ?? 0)),
     }));
-
-    const totalNovoPedido = itensSemEstoqueParaInserir.reduce(
-      (sum, item) => sum + item.total_item, 0
-    );
-
-    await supabase
-      .from("pedidos")
-      .update({ total: totalNovoPedido } as any)
-      .eq("id", novoPedido.id);
 
     const { error: errItens } = await supabase.from("itens_pedido").insert(itensSemEstoqueParaInserir as any);
     if (errItens) { toast.error("Erro ao inserir itens no pedido sem estoque"); return; }
@@ -1308,14 +1305,14 @@ export default function Faturamento() {
       } else if (qtd < item.quantidade) {
         await supabase
           .from("itens_pedido")
-          .update({ quantidade: qtd, total_item: item.preco_final * qtd } as any)
+          .update({ quantidade: qtd, total_item: Number(item.preco_final) * qtd } as any)
           .eq("id", item.id);
       }
     }
 
     const totalOriginal = itens.reduce((sum, item) => {
       const qtd = qtdSankhya[item.id] ?? 0;
-      return sum + item.preco_final * qtd;
+      return sum + Number(item.preco_final) * qtd;
     }, 0);
 
     await supabase
