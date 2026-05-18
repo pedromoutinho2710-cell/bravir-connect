@@ -87,7 +87,6 @@ function formatPhone(v: string): string {
 const schema = z.object({
   razao_social: z.string().min(2, "Obrigatório"),
   nome_fantasia: z.string().optional(),
-  cnpj: z.string().min(18, "CNPJ inválido"),
   contato_nome: z.string().min(2, "Obrigatório"),
   telefone: z.string().min(14, "WhatsApp inválido"),
   email: z.union([z.string().email("E-mail inválido"), z.literal("")]).optional(),
@@ -174,7 +173,6 @@ export default function EventoFormulario() {
     const { error } = await (supabase as any).from("leads_evento").insert({
       razao_social: data.razao_social,
       nome_fantasia: data.nome_fantasia || null,
-      cnpj: data.cnpj,
       contato_nome: data.contato_nome,
       telefone: data.telefone,
       email: data.email || null,
@@ -389,29 +387,6 @@ export default function EventoFormulario() {
                       className="mt-1"
                       placeholder="Como sua empresa é conhecida"
                     />
-                  </div>
-
-                  {/* CNPJ */}
-                  <div>
-                    <Label htmlFor="cnpj">CNPJ *</Label>
-                    <Controller
-                      name="cnpj"
-                      control={control}
-                      render={({ field }) => (
-                        <Input
-                          id="cnpj"
-                          value={field.value ?? ""}
-                          onChange={(e) => field.onChange(formatCNPJ(e.target.value))}
-                          onBlur={field.onBlur}
-                          className={cn("mt-1", errors.cnpj && "border-red-400 focus-visible:ring-red-300")}
-                          placeholder="00.000.000/0000-00"
-                          inputMode="numeric"
-                        />
-                      )}
-                    />
-                    {errors.cnpj && (
-                      <p className="mt-1 text-xs text-red-500">{errors.cnpj.message}</p>
-                    )}
                   </div>
 
                   {/* Nome do contato */}
