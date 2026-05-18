@@ -310,23 +310,7 @@ export default function Dashboard() {
         const campanha = campanhaRes.data ?? null;
         setCampanhaAtiva(campanha);
 
-        if (campanha) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: pedidosCampanha } = await (supabase as any)
-            .from("pedidos")
-            .select("id, itens_pedido(total_item)")
-            .gte("data_pedido", campanha.data_inicio)
-            .lte("data_pedido", campanha.data_fim)
-            .not("status", "in", '("cancelado","devolvido","rascunho")');
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const entrada = ((pedidosCampanha ?? []) as any[]).reduce(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (s: number, p: any) => s + (p.itens_pedido ?? []).reduce((si: number, i: any) => si + Number(i.total_item), 0),
-            0,
-          );
-          setEntradaCampanha(entrada);
-        } else {
+        if (!campanha) {
           setEntradaCampanha(0);
           setRankingCampanha([]);
         }
@@ -389,20 +373,24 @@ export default function Dashboard() {
             .lte("data_pedido", campanha.data_fim)
             .not("status", "in", '("cancelado","devolvido","rascunho")');
 
+          let entradaFiltrada = 0;
           const vendedorFatCamp: Record<string, number> = {};
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           ((pedCampDetalhe ?? []) as any[]).forEach((p: any) => {
-            if (!p.vendedor_id) return;
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (p.itens_pedido ?? []).forEach((item: any) => {
               const marca = item.produto?.marca as string | undefined;
               const prodId = item.produto_id as string | undefined;
               if ((marca && marcasCampanha.has(marca)) || (prodId && produtosCampanha.has(prodId))) {
-                if (!vendedorFatCamp[p.vendedor_id]) vendedorFatCamp[p.vendedor_id] = 0;
-                vendedorFatCamp[p.vendedor_id] += Number(item.total_item);
+                entradaFiltrada += Number(item.total_item);
+                if (p.vendedor_id) {
+                  if (!vendedorFatCamp[p.vendedor_id]) vendedorFatCamp[p.vendedor_id] = 0;
+                  vendedorFatCamp[p.vendedor_id] += Number(item.total_item);
+                }
               }
             });
           });
+          setEntradaCampanha(entradaFiltrada);
 
           // Metas individuais por vendedor
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
