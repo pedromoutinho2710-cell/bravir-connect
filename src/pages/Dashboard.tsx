@@ -342,15 +342,13 @@ export default function Dashboard() {
           vendedorAgg[p.vendedor_id].numPedidos += 1;
         });
 
-        const vendedorIds = Object.keys(vendedorAgg);
         const profileMap: Record<string, string> = {};
-        if (vendedorIds.length > 0) {
+        {
           const { data: profilesData } = await supabase
             .from("profiles")
-            .select("id, full_name, email")
-            .in("id", vendedorIds);
+            .select("id, full_name, email");
           (profilesData ?? []).forEach((p) => {
-            profileMap[p.id] = p.full_name ?? p.email;
+            profileMap[p.id] = p.full_name || p.email;
           });
         }
 
