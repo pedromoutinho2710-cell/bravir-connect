@@ -528,7 +528,13 @@ export default function Faturamento() {
     const aba = ABAS.find((a) => a.key === abaAtiva);
     if (!aba) return [];
 
-    let lista = pedidos.filter((p) => aba.status.includes(p.status));
+    let lista = pedidos.filter((p) => {
+      if (aba.status.includes(p.status)) return true;
+      if (abaAtiva === "cadastrados_sankhya" && p.status === "sem_estoque") {
+        return p.itens.some((item) => (item.qtd_faturada ?? 0) > 0);
+      }
+      return false;
+    });
 
     if (abaAtiva === "em_aberto") {
       lista = lista.filter((p) =>
