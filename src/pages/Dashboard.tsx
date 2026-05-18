@@ -585,10 +585,7 @@ export default function Dashboard() {
 
   const maxFatMensal = Math.max(...fatMensal.map((m) => m.valor), 1);
 
-  // Pipeline card bar scale
-  const maxKpi = Math.max(kpis.recebidos, kpis.agFaturamento, kpis.semEstoque, kpis.faturado, kpis.problemas, 1);
-
-  // Donut chart — entrada por marca
+// Donut chart — entrada por marca
   const totalGeralMarca = Object.values(entradaMarca).reduce((s, v) => s + v, 0);
   const donutCircumference = 2 * Math.PI * 70;
   const marcasSorted = Object.entries(entradaMarca).sort(([, a], [, b]) => b - a);
@@ -1210,10 +1207,10 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {/* Seção 6 — Faturamento mensal + Pipeline */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      {/* Seção 6 — Faturamento mensal */}
+      <div className="grid gap-4">
         {/* Faturamento mensal — gráfico de barras div+Tailwind */}
-        <Card className="lg:col-span-2">
+        <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Faturamento mensal (últimos 6 meses)</CardTitle>
           </CardHeader>
@@ -1239,39 +1236,6 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Pipeline por status */}
-        <Card className="lg:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Pipeline por status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {[
-                { label: "Recebidos", value: kpis.recebidos, color: "#EA580C" },
-                { label: "Ag. Faturamento", value: kpis.agFaturamento, color: "#2563EB" },
-                { label: "Sem estoque", value: kpis.semEstoque, color: "#CA8A04" },
-                { label: "Faturado", value: kpis.faturado, color: "#16A34A" },
-                { label: "Problemas", value: kpis.problemas, color: "#DC2626" },
-              ].map(({ label, value, color }) => (
-                <div key={label} className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">{label}</span>
-                    <span className="font-medium">{value}</span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-muted">
-                    <div
-                      className="h-2 rounded-full"
-                      style={{
-                        width: `${(value / maxKpi) * 100}%`,
-                        backgroundColor: color,
-                      }}
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       {/* Seção 7 — Rankings */}
