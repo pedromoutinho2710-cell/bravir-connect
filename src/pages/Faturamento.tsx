@@ -1270,7 +1270,7 @@ export default function Faturamento() {
     const pedidoOriginal = pedidos.find((p) => p.id === fracionarDialog.id);
     if (!pedidoOriginal) return;
 
-    const totalNovoPedido = itensSemEstoque.reduce((acc, item) => {
+    const totalNovoPedido = fracionarDialog.itens.reduce((acc, item) => {
       const qtd = item.quantidade - (qtdSankhya[item.id] ?? 0);
       return acc + Number(item.preco_final) * qtd;
     }, 0);
