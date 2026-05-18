@@ -1305,6 +1305,7 @@ export default function Faturamento() {
       .select()
       .single();
 
+    console.log("DEBUG insert novoPedido result:", novoPedido, errNovo);
     if (errNovo || !novoPedido) { toast.error("Erro ao criar pedido sem estoque"); return; }
 
     const itensSemEstoqueParaInserir = itensSemEstoque.map((item) => ({
@@ -1335,7 +1336,7 @@ export default function Faturamento() {
       }
     }
 
-    await supabase
+    const { error: errUpdateOriginal } = await supabase
       .from("pedidos")
       .update({
         status: "no_sankhya",
@@ -1344,6 +1345,7 @@ export default function Faturamento() {
         status_atualizado_em: new Date().toISOString(),
       } as any)
       .eq("id", fracionarDialog.id);
+    console.log("DEBUG update original error:", errUpdateOriginal);
 
     toast.success(`Pedido #${fracionarDialog.numero} fracionado. Pedido sem estoque #${(novoPedido as any).numero_pedido} criado.`);
     setFracionarDialog(null);
