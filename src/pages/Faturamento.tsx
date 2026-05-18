@@ -1361,12 +1361,6 @@ export default function Faturamento() {
           <Eye className="h-3 w-3" />
         </Button>
 
-        {/* PDF resumo */}
-        <Button size="sm" variant="outline"
-          onClick={(e) => gerarPdf(p, e)} title="Resumo PDF">
-          <FileText className="h-3 w-3" />
-        </Button>
-
         {/* PDF formulário antigo */}
         <Button size="sm" variant="outline"
           onClick={(e) => gerarFormularioPdf(p, e)} title="Formulário Completo PDF">
