@@ -195,7 +195,6 @@ const FILTROS_STATUS_ABA: Record<string, { value: string; label: string }[]> = {
   cadastrados_sankhya: [
     { value: "todos", label: "Todos" },
     { value: "no_sankhya", label: "No Sankhya" },
-    { value: "parcialmente_faturado", label: "No Sankhya" },
   ],
   sem_estoque: [],
   faturado: [],
