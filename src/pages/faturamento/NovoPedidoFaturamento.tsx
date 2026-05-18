@@ -11,9 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Switch } from "@/components/ui/switch";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 
-type Vendedor = { id: string; nome: string };
 type Produto = { id: string; nome: string; codigo_jiva: string; marca: string };
 type ItemPedido = {
   produto_id: string;
@@ -28,20 +28,34 @@ export default function NovoPedidoFaturamento() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
+  // ── Modo cliente ────────────────────────────────────────────────
   const [modoCliente, setModoCliente] = useState<"cadastrado" | "nao_cadastrado">("cadastrado");
   const [clienteBusca, setClienteBusca] = useState("");
   const [clientesSugeridos, setClientesSugeridos] = useState<{ id: string; razao_social: string; cnpj: string }[]>([]);
-  const [clienteSelecionado, setClienteSelecionado] = useState<{ id: string; razao_social: string } | null>(null);
-  const [clienteNome, setClienteNome] = useState("");
+  const [clienteId, setClienteId] = useState<string | null>(null);
 
-  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
-  const [vendedoresLoading, setVendedoresLoading] = useState(true);
-  const [vendedorId, setVendedorId] = useState("");
+  // Campos do cliente (preenchidos do DB ou livres)
+  const [clienteRazaoSocial, setClienteRazaoSocial] = useState("");
+  const [clienteCnpj, setClienteCnpj] = useState("");
+  const [clienteCluster, setClienteCluster] = useState("");
+  const [clienteTabelaPreco, setClienteTabelaPreco] = useState("");
+  const [clienteCidade, setClienteCidade] = useState("");
+  const [clienteUf, setClienteUf] = useState("");
+  const [clienteCep, setClienteCep] = useState("");
+  const [clienteComprador, setClienteComprador] = useState("");
+  const [clienteEmailXml, setClienteEmailXml] = useState("");
+  const [clienteCodigo, setClienteCodigo] = useState("");
+  const [aceitaSaldo, setAceitaSaldo] = useState(true);
 
+  // ── Campos do pedido ────────────────────────────────────────────
+  const [vendedorNome, setVendedorNome] = useState("");
   const [condPagamento, setCondPagamento] = useState("");
   const [tipo, setTipo] = useState<"pedido" | "bonificacao">("pedido");
+  const [ordemCompra, setOrdemCompra] = useState("");
+  const [agendamento, setAgendamento] = useState(false);
   const [observacoes, setObservacoes] = useState("");
 
+  // ── Produtos ────────────────────────────────────────────────────
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [produtoBusca, setProdutoBusca] = useState("");
   const [produtosSugeridos, setProdutosSugeridos] = useState<Produto[]>([]);
@@ -49,30 +63,7 @@ export default function NovoPedidoFaturamento() {
 
   const [salvando, setSalvando] = useState(false);
 
-  useEffect(() => {
-    (async () => {
-      const { data: rolesData } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .in("role", ["vendedor", "gestora"]);
-      if (rolesData && rolesData.length > 0) {
-        const ids = rolesData.map((r) => r.user_id);
-        const { data: profData } = await supabase
-          .from("profiles")
-          .select("id, full_name, email")
-          .in("id", ids);
-        if (profData) {
-          setVendedores(
-            profData
-              .map((p) => ({ id: p.id, nome: p.full_name || p.email || "—" }))
-              .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
-          );
-        }
-      }
-      setVendedoresLoading(false);
-    })();
-  }, []);
-
+  // Carrega todos os produtos ativos
   useEffect(() => {
     supabase
       .from("produtos")
@@ -82,6 +73,7 @@ export default function NovoPedidoFaturamento() {
       .then(({ data }) => { if (data) setProdutos(data); });
   }, []);
 
+  // Busca clientes (modo cadastrado)
   useEffect(() => {
     if (modoCliente !== "cadastrado" || clienteBusca.trim().length < 2) {
       setClientesSugeridos([]);
@@ -98,6 +90,50 @@ export default function NovoPedidoFaturamento() {
     return () => clearTimeout(t);
   }, [clienteBusca, modoCliente]);
 
+  // Ao selecionar cliente, busca dados completos
+  async function selecionarCliente(c: { id: string; razao_social: string; cnpj: string }) {
+    const { data } = await supabase
+      .from("clientes")
+      .select("id, razao_social, cnpj, cluster, tabela_preco, cidade, uf, cep, comprador, email, codigo_cliente, codigo_parceiro, aceita_saldo")
+      .eq("id", c.id)
+      .single();
+
+    if (data) {
+      setClienteId(data.id);
+      setClienteRazaoSocial(data.razao_social ?? "");
+      setClienteCnpj(data.cnpj ?? "");
+      setClienteCluster(data.cluster ?? "");
+      setClienteTabelaPreco(data.tabela_preco ?? "");
+      setClienteCidade(data.cidade ?? "");
+      setClienteUf(data.uf ?? "");
+      setClienteCep(data.cep ?? "");
+      setClienteComprador(data.comprador ?? "");
+      setClienteEmailXml(data.email ?? "");
+      setClienteCodigo(data.codigo_parceiro ?? data.codigo_cliente ?? "");
+      setAceitaSaldo(data.aceita_saldo ?? true);
+    }
+    setClientesSugeridos([]);
+    setClienteBusca("");
+  }
+
+  function limparCliente() {
+    setClienteId(null);
+    setClienteRazaoSocial("");
+    setClienteCnpj("");
+    setClienteCluster("");
+    setClienteTabelaPreco("");
+    setClienteCidade("");
+    setClienteUf("");
+    setClienteCep("");
+    setClienteComprador("");
+    setClienteEmailXml("");
+    setClienteCodigo("");
+    setAceitaSaldo(true);
+    setClienteBusca("");
+    setClientesSugeridos([]);
+  }
+
+  // Filtra sugestões de produtos localmente
   useEffect(() => {
     if (produtoBusca.trim().length < 2) { setProdutosSugeridos([]); return; }
     const busca = produtoBusca.toLowerCase();
@@ -137,30 +173,35 @@ export default function NovoPedidoFaturamento() {
 
   async function salvar() {
     if (itens.length === 0) { toast.error("Adicione ao menos um produto"); return; }
-    if (!vendedorId) { toast.error("Selecione um vendedor"); return; }
+    if (!vendedorNome.trim()) { toast.error("Preencha o nome do vendedor"); return; }
     if (!condPagamento.trim()) { toast.error("Preencha a condição de pagamento"); return; }
-    if (modoCliente === "cadastrado" && !clienteSelecionado) { toast.error("Selecione um cliente"); return; }
-    if (modoCliente === "nao_cadastrado" && !clienteNome.trim()) { toast.error("Digite o nome do cliente"); return; }
+    if (modoCliente === "cadastrado" && !clienteId) { toast.error("Selecione um cliente"); return; }
+    if (modoCliente === "nao_cadastrado" && !clienteRazaoSocial.trim()) { toast.error("Preencha o nome do cliente"); return; }
 
     setSalvando(true);
 
-    const obsCompleta =
-      modoCliente === "nao_cadastrado" && clienteNome.trim()
-        ? `[Cliente: ${clienteNome.trim()}] ${observacoes}`.trim()
-        : observacoes;
+    // Monta observacoes com prefixos
+    const partes: string[] = [];
+    if (modoCliente === "nao_cadastrado") partes.push(`[Cliente: ${clienteRazaoSocial.trim()}]`);
+    partes.push(`[Vendedor: ${vendedorNome.trim()}]`);
+    if (clienteEmailXml && modoCliente === "nao_cadastrado") partes.push(`[Email XML: ${clienteEmailXml}]`);
+    if (observacoes.trim()) partes.push(observacoes.trim());
+    const obsCompleta = partes.join(" ").trim() || null;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const pedidoPayload: any = {
       tipo,
       status: "pendente_sankhya",
-      cliente_id: clienteSelecionado?.id ?? null,
-      vendedor_id: vendedorId,
+      cliente_id: clienteId ?? null,
+      vendedor_id: user?.id ?? null,
       responsavel_id: user?.id ?? null,
       cond_pagamento: condPagamento,
-      observacoes: obsCompleta || null,
+      observacoes: obsCompleta,
       data_pedido: new Date().toISOString().split("T")[0],
-      perfil_cliente: "",
-      tabela_preco: "",
+      perfil_cliente: clienteCluster || "",
+      tabela_preco: clienteTabelaPreco || "",
+      agendamento,
+      ordem_compra: ordemCompra.trim() || null,
     };
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -199,6 +240,8 @@ export default function NovoPedidoFaturamento() {
     setSalvando(false);
   }
 
+  const clienteSelecionado = modoCliente === "cadastrado" && clienteId !== null;
+
   return (
     <div className="space-y-6 pb-24">
       <div>
@@ -207,145 +250,173 @@ export default function NovoPedidoFaturamento() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Coluna esquerda */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Dados do Pedido</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Cliente */}
-            <div className="space-y-2">
-              <Label>Cliente</Label>
+        {/* ── Coluna esquerda: dados ── */}
+        <div className="space-y-4">
+
+          {/* Cliente */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Cliente</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Toggle modo */}
               <div className="flex gap-2">
-                <Button
-                  type="button" size="sm"
+                <Button type="button" size="sm"
                   variant={modoCliente === "cadastrado" ? "default" : "outline"}
-                  onClick={() => {
-                    setModoCliente("cadastrado");
-                    setClienteSelecionado(null);
-                    setClienteBusca("");
-                  }}
-                >
+                  onClick={() => { setModoCliente("cadastrado"); limparCliente(); }}>
                   Cliente cadastrado
                 </Button>
-                <Button
-                  type="button" size="sm"
+                <Button type="button" size="sm"
                   variant={modoCliente === "nao_cadastrado" ? "default" : "outline"}
-                  onClick={() => {
-                    setModoCliente("nao_cadastrado");
-                    setClienteSelecionado(null);
-                  }}
-                >
+                  onClick={() => { setModoCliente("nao_cadastrado"); limparCliente(); }}>
                   Não cadastrado
                 </Button>
               </div>
 
-              {modoCliente === "cadastrado" ? (
+              {/* Busca cliente cadastrado */}
+              {modoCliente === "cadastrado" && !clienteSelecionado && (
                 <div className="relative">
-                  {clienteSelecionado ? (
-                    <div className="flex items-center justify-between rounded-md border px-3 py-2 bg-muted/40">
-                      <span className="text-sm font-medium">{clienteSelecionado.razao_social}</span>
-                      <Button
-                        type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs"
-                        onClick={() => { setClienteSelecionado(null); setClienteBusca(""); }}
-                      >
-                        Trocar
-                      </Button>
+                  <Input
+                    placeholder="Buscar por razão social ou CNPJ…"
+                    value={clienteBusca}
+                    onChange={(e) => setClienteBusca(e.target.value)}
+                  />
+                  {clientesSugeridos.length > 0 && (
+                    <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md">
+                      {clientesSugeridos.map((c) => (
+                        <button key={c.id} type="button"
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                          onClick={() => selecionarCliente(c)}>
+                          <div className="font-medium">{c.razao_social}</div>
+                          <div className="text-xs text-muted-foreground">{c.cnpj}</div>
+                        </button>
+                      ))}
                     </div>
-                  ) : (
-                    <>
-                      <Input
-                        placeholder="Buscar por razão social ou CNPJ…"
-                        value={clienteBusca}
-                        onChange={(e) => setClienteBusca(e.target.value)}
-                      />
-                      {clientesSugeridos.length > 0 && (
-                        <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md">
-                          {clientesSugeridos.map((c) => (
-                            <button
-                              key={c.id} type="button"
-                              className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
-                              onClick={() => {
-                                setClienteSelecionado(c);
-                                setClientesSugeridos([]);
-                                setClienteBusca("");
-                              }}
-                            >
-                              <div className="font-medium">{c.razao_social}</div>
-                              <div className="text-xs text-muted-foreground">{c.cnpj}</div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </>
                   )}
                 </div>
-              ) : (
-                <Input
-                  placeholder="Nome do cliente"
-                  value={clienteNome}
-                  onChange={(e) => setClienteNome(e.target.value)}
-                />
               )}
-            </div>
 
-            {/* Vendedor */}
-            <div className="space-y-1.5">
-              <Label>Vendedor</Label>
-              {vendedoresLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" /> Carregando…
+              {/* Banner cliente selecionado */}
+              {modoCliente === "cadastrado" && clienteSelecionado && (
+                <div className="flex items-center justify-between rounded-md border px-3 py-2 bg-muted/40">
+                  <div>
+                    <div className="text-sm font-medium">{clienteRazaoSocial}</div>
+                    <div className="text-xs text-muted-foreground">{clienteCnpj}</div>
+                  </div>
+                  <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs"
+                    onClick={limparCliente}>
+                    Trocar
+                  </Button>
                 </div>
-              ) : (
-                <Select value={vendedorId} onValueChange={setVendedorId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o vendedor" /></SelectTrigger>
-                  <SelectContent>
-                    {vendedores.map((v) => (
-                      <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               )}
-            </div>
 
-            {/* Condição de pagamento */}
-            <div className="space-y-1.5">
-              <Label>Condição de pagamento</Label>
-              <Input
-                placeholder="Ex.: 28/35/42 DDL"
-                value={condPagamento}
-                onChange={(e) => setCondPagamento(e.target.value)}
-              />
-            </div>
+              {/* Campos de cliente — editáveis em ambos os modos */}
+              <div className="grid grid-cols-2 gap-3">
+                {modoCliente === "nao_cadastrado" && (
+                  <div className="col-span-2 space-y-1">
+                    <Label className="text-xs">Razão social / Nome *</Label>
+                    <Input value={clienteRazaoSocial} onChange={(e) => setClienteRazaoSocial(e.target.value)}
+                      placeholder="Nome do cliente" />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <Label className="text-xs">Cluster / Perfil</Label>
+                  <Input value={clienteCluster} onChange={(e) => setClienteCluster(e.target.value)}
+                    placeholder="Ex.: atacado_distribuidor" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Tabela de preço</Label>
+                  <Input value={clienteTabelaPreco} onChange={(e) => setClienteTabelaPreco(e.target.value)}
+                    placeholder="Ex.: atacado" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Cidade</Label>
+                  <Input value={clienteCidade} onChange={(e) => setClienteCidade(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">UF</Label>
+                  <Input value={clienteUf} onChange={(e) => setClienteUf(e.target.value)} maxLength={2} className="uppercase" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">CEP</Label>
+                  <Input value={clienteCep} onChange={(e) => setClienteCep(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Comprador</Label>
+                  <Input value={clienteComprador} onChange={(e) => setClienteComprador(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Email XML / Boleto</Label>
+                  <Input type="email" value={clienteEmailXml} onChange={(e) => setClienteEmailXml(e.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Código do cliente</Label>
+                  <Input value={clienteCodigo} onChange={(e) => setClienteCodigo(e.target.value)} />
+                </div>
+              </div>
 
-            {/* Tipo */}
-            <div className="space-y-1.5">
-              <Label>Tipo</Label>
-              <Select value={tipo} onValueChange={(v) => setTipo(v as "pedido" | "bonificacao")}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pedido">Pedido</SelectItem>
-                  <SelectItem value="bonificacao">Bonificação</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+              {/* Toggles */}
+              <div className="flex gap-6 pt-1">
+                <div className="flex items-center gap-2">
+                  <Switch id="agend" checked={agendamento} onCheckedChange={setAgendamento} />
+                  <Label htmlFor="agend" className="text-xs cursor-pointer">Agendamento</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch id="saldo" checked={aceitaSaldo} onCheckedChange={setAceitaSaldo} />
+                  <Label htmlFor="saldo" className="text-xs cursor-pointer">Aceita saldo</Label>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
-            {/* Observações */}
-            <div className="space-y-1.5">
-              <Label>Observações</Label>
-              <Textarea
-                placeholder="Observações adicionais…"
-                value={observacoes}
-                onChange={(e) => setObservacoes(e.target.value)}
-                rows={3}
-              />
-            </div>
-          </CardContent>
-        </Card>
+          {/* Dados do pedido */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Dados do Pedido</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="space-y-1.5">
+                <Label>Vendedor *</Label>
+                <Input placeholder="Nome do vendedor" value={vendedorNome}
+                  onChange={(e) => setVendedorNome(e.target.value)} />
+              </div>
 
-        {/* Coluna direita */}
+              <div className="space-y-1.5">
+                <Label>Condição de pagamento *</Label>
+                <Input placeholder="Ex.: 28/35/42 DDL" value={condPagamento}
+                  onChange={(e) => setCondPagamento(e.target.value)} />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Tipo</Label>
+                  <Select value={tipo} onValueChange={(v) => setTipo(v as "pedido" | "bonificacao")}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pedido">Pedido</SelectItem>
+                      <SelectItem value="bonificacao">Bonificação</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Ordem de Compra</Label>
+                  <Input placeholder="Nº OC" value={ordemCompra}
+                    onChange={(e) => setOrdemCompra(e.target.value)} />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Observações</Label>
+                <Textarea placeholder="Observações adicionais…" value={observacoes}
+                  onChange={(e) => setObservacoes(e.target.value)} rows={3} />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ── Coluna direita: produtos ── */}
         <Card>
-          <CardHeader>
+          <CardHeader className="pb-3">
             <CardTitle className="text-base">Produtos</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -356,13 +427,11 @@ export default function NovoPedidoFaturamento() {
                 onChange={(e) => setProdutoBusca(e.target.value)}
               />
               {produtosSugeridos.length > 0 && (
-                <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md max-h-48 overflow-y-auto">
+                <div className="absolute z-10 mt-1 w-full rounded-md border bg-popover shadow-md max-h-56 overflow-y-auto">
                   {produtosSugeridos.map((p) => (
-                    <button
-                      key={p.id} type="button"
+                    <button key={p.id} type="button"
                       className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center justify-between"
-                      onClick={() => adicionarProduto(p)}
-                    >
+                      onClick={() => adicionarProduto(p)}>
                       <span>
                         <span className="font-mono text-xs text-muted-foreground mr-2">{p.codigo_jiva}</span>
                         {p.nome}
@@ -392,35 +461,27 @@ export default function NovoPedidoFaturamento() {
                       <TableRow key={it.produto_id}>
                         <TableCell className="text-xs">{it.nome}</TableCell>
                         <TableCell>
-                          <Input
-                            type="number" min={1} value={it.quantidade}
+                          <Input type="number" min={1} value={it.quantidade}
                             className="h-7 w-16 text-sm"
-                            onChange={(e) => atualizarItem(idx, "quantidade", Number(e.target.value) || 1)}
-                          />
+                            onChange={(e) => atualizarItem(idx, "quantidade", Number(e.target.value) || 1)} />
                         </TableCell>
                         <TableCell>
-                          <Input
-                            type="number" min={0} step="0.01" value={it.preco_unitario}
+                          <Input type="number" min={0} step="0.01" value={it.preco_unitario}
                             className="h-7 w-24 text-sm"
-                            onChange={(e) => atualizarItem(idx, "preco_unitario", Number(e.target.value) || 0)}
-                          />
+                            onChange={(e) => atualizarItem(idx, "preco_unitario", Number(e.target.value) || 0)} />
                         </TableCell>
                         <TableCell>
-                          <Input
-                            type="number" min={0} max={100} value={it.desconto}
+                          <Input type="number" min={0} max={100} value={it.desconto}
                             className="h-7 w-16 text-sm"
-                            onChange={(e) => atualizarItem(idx, "desconto", Math.min(100, Number(e.target.value) || 0))}
-                          />
+                            onChange={(e) => atualizarItem(idx, "desconto", Math.min(100, Number(e.target.value) || 0))} />
                         </TableCell>
                         <TableCell className="text-right font-medium text-sm text-green-700">
                           {formatBRL(it.total)}
                         </TableCell>
                         <TableCell>
-                          <Button
-                            type="button" size="sm" variant="ghost"
+                          <Button type="button" size="sm" variant="ghost"
                             className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                            onClick={() => removerItem(idx)}
-                          >
+                            onClick={() => removerItem(idx)}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </TableCell>
@@ -430,7 +491,7 @@ export default function NovoPedidoFaturamento() {
                 </Table>
               </div>
             ) : (
-              <div className="flex h-24 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
+              <div className="flex h-32 items-center justify-center rounded-md border border-dashed text-sm text-muted-foreground">
                 Nenhum produto adicionado
               </div>
             )}
@@ -438,7 +499,7 @@ export default function NovoPedidoFaturamento() {
         </Card>
       </div>
 
-      {/* Rodapé sticky */}
+      {/* ── Rodapé sticky ── */}
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t -mx-4 px-4 py-3 flex items-center justify-between gap-4 z-10">
         <div className="text-sm">
           <span className="text-muted-foreground">Total geral: </span>
