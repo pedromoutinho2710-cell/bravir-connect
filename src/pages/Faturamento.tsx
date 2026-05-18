@@ -938,6 +938,7 @@ export default function Faturamento() {
   const gerarFormularioPdf = async (p: PedidoFat, e: React.MouseEvent) => {
     e.stopPropagation();
     const { gerarFormularioPDF } = await import("@/lib/pdf");
+    console.log("DEBUG ordem_compra:", p.ordem_compra, "pedido:", p.numero_pedido);
     const doc = gerarFormularioPDF({
       numero_pedido: p.numero_pedido,
       tipo: p.tipo,
@@ -1468,6 +1469,11 @@ export default function Faturamento() {
                                 Assumido por: <span className="font-medium">{p.responsavel_nome ?? "—"}</span>
                               </div>
                             )}
+                            {p.ordem_compra && (
+                              <div className="text-xs text-muted-foreground font-mono">
+                                OC: <span className="text-blue-600 font-medium">{p.ordem_compra}</span>
+                              </div>
+                            )}
                             <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
                             {aba.key === "lancados" && (() => {
                               const lancados = p.itens.filter((i) => i.qtd_faturada > 0).length;
@@ -1550,6 +1556,11 @@ export default function Faturamento() {
                           <TableCell className="font-mono font-semibold text-sm">
                             <div>#{p.numero_pedido}</div>
                             <div className="text-xs font-normal text-muted-foreground">{formatDate(p.data_pedido)}</div>
+                            {p.ordem_compra && (
+                              <div className="text-xs text-muted-foreground font-mono mt-1">
+                                OC: <span className="text-blue-600 font-medium">{p.ordem_compra}</span>
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -1860,6 +1871,12 @@ export default function Faturamento() {
                   </div>
                 )}
                 {detalhePedido.comprador && <div><span className="text-muted-foreground">Comprador:</span> {detalhePedido.comprador}</div>}
+                {detalhePedido.ordem_compra && (
+                  <div>
+                    <span className="text-muted-foreground">Ordem de Compra:</span>{" "}
+                    <span className="font-mono font-semibold text-blue-600">{detalhePedido.ordem_compra}</span>
+                  </div>
+                )}
                 {detalhePedido.codigo_cliente && <div><span className="text-muted-foreground">Cód. Sankhya:</span> {detalhePedido.codigo_cliente}</div>}
                 {detalhePedido.codigo_parceiro && <div><span className="text-muted-foreground">Cód. Parceiro:</span> {detalhePedido.codigo_parceiro}</div>}
                 {detalhePedido.email_xml && (
