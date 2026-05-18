@@ -404,7 +404,7 @@ export default function Faturamento() {
         .select(`
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, observacoes, ordem_compra, pedido_origem_id, responsavel_id, motivo, vendedor_id,
-          cliente_id, perfil_cliente, tabela_preco, agendamento,
+          cliente_id, perfil_cliente, tabela_preco, agendamento, total,
           clientes(razao_social, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, aceita_saldo, negativado, email, rua, numero, bairro, telefone),
           itens_pedido(
             id, total_item, quantidade, qtd_faturada, preco_unitario_bruto, preco_unitario_liquido,
