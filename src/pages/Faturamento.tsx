@@ -335,6 +335,9 @@ export default function Faturamento() {
   } | null>(null);
   const [qtdSankhya, setQtdSankhya] = useState<Record<string, number>>({});
 
+  // Dialog cadastrar no Sankhya
+  const [cadastrarSankhyaDialog, setCadastrarSankhyaDialog] = useState<PedidoFat | null>(null);
+
   const carregar = useCallback(() => setRefreshKey((k) => k + 1), []);
   usePullToRefresh(carregar);
 
@@ -1407,11 +1410,26 @@ export default function Faturamento() {
         )}
 
         {/* Faturamento por produto */}
-        {!isTerminal && (
+        {!isTerminal && abaAtiva !== "em_aberto" && abaAtiva !== "assumidos" && (
           <Button size="sm" variant="outline" disabled={atualizando === p.id}
             onClick={(e) => abrirProdFat(p, e)} title="Faturamento por produto">
             <FileText className="h-3 w-3 mr-1" />
             Produtos
+          </Button>
+        )}
+
+        {/* Sem Estoque */}
+        {(abaAtiva === "em_aberto" || abaAtiva === "assumidos") && !STATUS_TERMINAL.has(p.status) && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-amber-700 border-amber-300 hover:bg-amber-50"
+            onClick={wrap(() => {
+              setSemEstoqueDialog({ id: p.id, numero: p.numero_pedido });
+              setMotivoSemEstoque("");
+            })}
+          >
+            Sem Estoque
           </Button>
         )}
 
@@ -1455,18 +1473,15 @@ export default function Faturamento() {
           </Button>
         )}
 
-        {/* Sem Estoque */}
+        {/* Cadastrar no Sankhya */}
         {(abaAtiva === "em_aberto" || abaAtiva === "assumidos") && !STATUS_TERMINAL.has(p.status) && (
           <Button
             size="sm"
             variant="outline"
-            className="text-amber-700 border-amber-300 hover:bg-amber-50"
-            onClick={wrap(() => {
-              setSemEstoqueDialog({ id: p.id, numero: p.numero_pedido });
-              setMotivoSemEstoque("");
-            })}
+            className="text-teal-700 border-teal-300 hover:bg-teal-50"
+            onClick={wrap(() => setCadastrarSankhyaDialog(p))}
           >
-            Sem Estoque
+            Cadastrar no Sankhya
           </Button>
         )}
 
@@ -2466,6 +2481,108 @@ export default function Faturamento() {
               })()}
             >
               Confirmar fracionamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: cadastrar no Sankhya */}
+      <Dialog open={!!cadastrarSankhyaDialog} onOpenChange={(o) => !o && setCadastrarSankhyaDialog(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>
+              Cadastrar pedido #{cadastrarSankhyaDialog?.numero_pedido} no Sankhya
+            </DialogTitle>
+            <DialogDescription>
+              Confirme os dados antes de cadastrar o pedido inteiro.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm mb-4">
+            <div><span className="text-muted-foreground">Cliente:</span>{" "}
+              {cadastrarSankhyaDialog?.razao_social}</div>
+            <div><span className="text-muted-foreground">Vendedor:</span>{" "}
+              {profiles[cadastrarSankhyaDialog?.vendedor_id ?? ""] ?? "—"}</div>
+            <div><span className="text-muted-foreground">Cond. Pagamento:</span>{" "}
+              {cadastrarSankhyaDialog?.cond_pagamento}</div>
+            <div><span className="text-muted-foreground">Tabela Preço:</span>{" "}
+              {cadastrarSankhyaDialog?.tabela_preco}</div>
+          </div>
+
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-xs text-muted-foreground">
+                <th className="text-left pb-2">Produto</th>
+                <th className="text-center pb-2">Cx</th>
+                <th className="text-center pb-2">Qtd</th>
+                <th className="text-right pb-2">Preço final</th>
+                <th className="text-right pb-2">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(cadastrarSankhyaDialog?.itens ?? []).map((item) => (
+                <tr key={item.id} className="border-b">
+                  <td className="py-2">
+                    <div className="font-medium">{item.nome}</div>
+                    <div className="text-xs text-muted-foreground">{item.codigo}</div>
+                  </td>
+                  <td className="text-center py-2">{item.cx_embarque}</td>
+                  <td className="text-center py-2">{item.quantidade}</td>
+                  <td className="text-right py-2">
+                    {Number(item.preco_final).toLocaleString("pt-BR",
+                      { style: "currency", currency: "BRL" })}
+                  </td>
+                  <td className="text-right py-2 font-medium">
+                    {Number(item.total).toLocaleString("pt-BR",
+                      { style: "currency", currency: "BRL" })}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div className="flex justify-end items-center gap-2 mt-3">
+            <span className="text-sm text-muted-foreground">Total do pedido:</span>
+            <span className="text-base font-medium text-teal-700">
+              {(cadastrarSankhyaDialog?.itens ?? [])
+                .reduce((s, i) => s + Number(i.total), 0)
+                .toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}
+            </span>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCadastrarSankhyaDialog(null)}>
+              Voltar
+            </Button>
+            <Button
+              className="bg-teal-700 hover:bg-teal-800 text-white"
+              onClick={async () => {
+                if (!cadastrarSankhyaDialog) return;
+                const { error } = await supabase
+                  .from("pedidos")
+                  .update({
+                    status: "no_sankhya",
+                    status_atualizado_em: new Date().toISOString(),
+                  })
+                  .eq("id", cadastrarSankhyaDialog.id);
+                if (error) {
+                  toast.error("Erro ao cadastrar no Sankhya");
+                  return;
+                }
+                await insertHistorico(
+                  cadastrarSankhyaDialog.id,
+                  cadastrarSankhyaDialog.status,
+                  "no_sankhya",
+                  "cadastrou_sankhya"
+                );
+                toast.success(
+                  `Pedido #${cadastrarSankhyaDialog.numero_pedido} cadastrado no Sankhya`
+                );
+                setCadastrarSankhyaDialog(null);
+                setRefreshKey((k) => k + 1);
+              }}
+            >
+              Confirmar cadastro
             </Button>
           </DialogFooter>
         </DialogContent>
