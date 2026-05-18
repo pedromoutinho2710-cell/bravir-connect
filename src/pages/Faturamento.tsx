@@ -1259,6 +1259,8 @@ export default function Faturamento() {
       return acc + Number(item.preco_final) * qtd;
     }, 0);
 
+    console.log("DEBUG totalNovoPedido:", totalNovoPedido, "| preco_final samples:", itensSemEstoque.map(i => i.preco_final));
+
     const { data: novoPedido, error: errNovo } = await supabase
       .from("pedidos")
       .insert({
@@ -1314,6 +1316,8 @@ export default function Faturamento() {
       const qtd = qtdSankhya[item.id] ?? 0;
       return sum + Number(item.preco_final) * qtd;
     }, 0);
+
+    console.log("DEBUG totalOriginal:", totalOriginal, "| preco_final samples:", itens.map(i => i.preco_final));
 
     await supabase
       .from("pedidos")
