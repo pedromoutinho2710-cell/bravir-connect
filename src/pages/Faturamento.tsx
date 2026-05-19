@@ -16,7 +16,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy, FileDown } from "lucide-react";
+import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy, FileDown, Sheet } from "lucide-react";
+import * as XLSX from "xlsx";
 import ImportarPedidoDialog from "@/components/faturamento/ImportarPedidoDialog";
 import { MARCAS } from "@/lib/constants";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -1212,6 +1213,42 @@ export default function Faturamento() {
   };
 
 
+  // ── Exportar Sem Estoque ──────────────────────────────────────────
+  const exportarSemEstoqueExcel = () => {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const rows: Record<string, unknown>[] = [];
+
+    for (const p of pedidosFiltrados) {
+      const totalPedido = p.total;
+      for (const item of p.itens) {
+        const saldo = item.quantidade - item.qtd_faturada;
+        rows.push({
+          "Data do Pedido": formatDate(p.data_pedido),
+          "Nº Pedido": p.numero_pedido,
+          "Vendedor": profiles[p.vendedor_id] ?? p.vendedor_nome,
+          "Cliente": p.razao_social,
+          "CNPJ": p.cnpj,
+          "Cidade/UF": [p.cidade, p.uf].filter(Boolean).join("/") || "—",
+          "Cond. Pagamento": p.cond_pagamento ?? "—",
+          "Produto": item.nome,
+          "Código": item.codigo,
+          "Qtd Pedida": item.quantidade,
+          "Qtd Faturada": item.qtd_faturada,
+          "Saldo": saldo,
+          "Preço Unit. Final": item.preco_final,
+          "Total Saldo": saldo * item.preco_final,
+          "Motivo": p.motivo ?? "",
+          "Total Geral Pedido": totalPedido,
+        });
+      }
+    }
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Sem Estoque");
+    XLSX.writeFile(wb, `pedidos-sem-estoque-${hoje}.xlsx`);
+  };
+
   // ── Sub-componentes ───────────────────────────────────────────────
   function StatusBadge({ status }: { status: string }) {
     return (
@@ -1458,6 +1495,18 @@ export default function Faturamento() {
             }}>
               Limpar filtros
             </Button>
+            {abaAtiva === "sem_estoque" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportarSemEstoqueExcel}
+                disabled={pedidosFiltrados.length === 0}
+                className="text-green-700 border-green-300 hover:bg-green-50"
+              >
+                <Sheet className="h-3.5 w-3.5 mr-1.5" />
+                Exportar Excel
+              </Button>
+            )}
           </div>
 
         <p className="text-sm text-muted-foreground mt-2">
