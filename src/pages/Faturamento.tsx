@@ -416,9 +416,7 @@ export default function Faturamento() {
           cond_pagamento: p.cond_pagamento,
           observacoes: p.observacoes,
           responsavel_id: p.responsavel_id,
-          responsavel_nome: p.responsavel_id
-            ? (profiles[p.responsavel_id] ?? "Carregando...")
-            : null,
+          responsavel_nome: p.responsavel_id ? (profiles[p.responsavel_id] ?? null) : null,
           motivo: p.motivo,
           vendedor_id: p.vendedor_id,
           cliente_id: p.cliente_id ?? null,
@@ -1626,7 +1624,7 @@ export default function Faturamento() {
                             </div>
                             {p.responsavel_id && (
                               <div className="text-xs text-muted-foreground">
-                                Assumido por: <span className="font-medium">{p.responsavel_nome ?? "—"}</span>
+                                Assumido por: <span className="font-medium">{profiles[p.responsavel_id] ?? p.responsavel_nome ?? "—"}</span>
                               </div>
                             )}
                             {p.ordem_compra && (
@@ -1795,7 +1793,7 @@ export default function Faturamento() {
                             <StatusBadge status={p.status} />
                             {p.responsavel_id && (
                               <div className="text-xs text-muted-foreground mt-1">
-                                Assumido: <span className="font-medium">{p.responsavel_nome ?? profiles[p.responsavel_id] ?? "—"}</span>
+                                Assumido: <span className="font-medium">{profiles[p.responsavel_id] ?? p.responsavel_nome ?? "—"}</span>
                               </div>
                             )}
                             {p.status === "com_problema" && p.motivo && (
