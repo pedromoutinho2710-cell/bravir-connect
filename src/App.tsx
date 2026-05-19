@@ -20,6 +20,7 @@ import Metas from "./pages/admin/Metas";
 import Dashboard from "./pages/Dashboard";
 import Trade from "./pages/Trade";
 import TradeCampanhas from "./pages/TradeCampanhas";
+import ImportarFaturamento from "./pages/trade/ImportarFaturamento";
 import FaturamentoClientesPendentes from "./pages/FaturamentoClientesPendentes";
 import FaturamentoClientes from "./pages/FaturamentoClientes";
 import FilaCadastros from "./pages/faturamento/FilaCadastros";
@@ -149,6 +150,7 @@ const App = () => (
             <Route element={<ProtectedRoute allow={["trade", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/trade" element={<Trade />} />
               <Route path="/trade/campanhas" element={<TradeCampanhas />} />
+              <Route path="/trade/importar-faturamento" element={<ImportarFaturamento />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />

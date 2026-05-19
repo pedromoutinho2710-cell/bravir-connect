@@ -256,6 +256,44 @@ export type Database = {
           },
         ]
       }
+      faturamentos_externos: {
+        Row: {
+          cliente_id: string
+          created_at: string
+          faturado_em: string
+          id: string
+          importado_por: string | null
+          valor: number
+          vendedor_id: string | null
+        }
+        Insert: {
+          cliente_id: string
+          created_at?: string
+          faturado_em?: string
+          id?: string
+          importado_por?: string | null
+          valor: number
+          vendedor_id?: string | null
+        }
+        Update: {
+          cliente_id?: string
+          created_at?: string
+          faturado_em?: string
+          id?: string
+          importado_por?: string | null
+          valor?: number
+          vendedor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "faturamentos_externos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       faturamentos: {
         Row: {
           created_at: string

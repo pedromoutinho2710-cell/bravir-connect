@@ -59,6 +59,7 @@ export const ADMIN_SECTIONS: Section[] = [
     items: [
       { title: "Clientes aguardando", url: "/trade", icon: Store },
       { title: "Campanhas", url: "/trade/campanhas", icon: Megaphone },
+      { title: "Importar Faturamento", url: "/trade/importar-faturamento", icon: Upload },
     ],
   },
   {
@@ -135,5 +136,6 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
   trade: [
     { title: "Clientes aguardando", url: "/trade", icon: Store },
     { title: "Campanhas", url: "/trade/campanhas", icon: Megaphone },
+    { title: "Importar Faturamento", url: "/trade/importar-faturamento", icon: Upload },
   ],
 };
