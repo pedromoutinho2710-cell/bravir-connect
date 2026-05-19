@@ -10,7 +10,7 @@ import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, Briefcase, Gift } from "lucide-react";
+import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, Briefcase, Gift, Trophy } from "lucide-react";
 import { toast } from "sonner";
 
 type KPIs = {
@@ -117,6 +117,35 @@ type ClientesPeriodo = {
   semPedidoList: ClienteSemPedido[];
 };
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type CampanhaNivel = any;
+
+type CampanhaAtiva = {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  data_inicio: string | null;
+  data_fim: string | null;
+  marcas?: string[];
+  campanha_niveis?: CampanhaNivel[];
+};
+
+const MARCA_CORES: Record<string, string> = {
+  "Bendita Cânfora": "#7f77dd",
+  "Laby": "#378add",
+  "Bravir": "#888780",
+  "Alivik": "#1d9e75",
+};
+
+function nivelBadgeClass(nivel: string) {
+  const n = nivel.toLowerCase();
+  if (n.includes("diamante")) return "bg-purple-100 text-purple-800 hover:bg-purple-100";
+  if (n.includes("ouro")) return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
+  if (n.includes("prata")) return "bg-gray-100 text-gray-700 hover:bg-gray-100";
+  if (n.includes("bronze")) return "bg-orange-100 text-orange-800 hover:bg-orange-100";
+  return "bg-gray-100 text-gray-700 hover:bg-gray-100";
+}
+
 export default function MeuPainel() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -132,6 +161,83 @@ export default function MeuPainel() {
   const [baixandoTabela, setBaixandoTabela] = useState(false);
   const [clientesPeriodo, setClientesPeriodo] = useState<ClientesPeriodo>({ carteira: 0, comPedido: 0, semPedidoList: [] });
   const [modalSemPedidoOpen, setModalSemPedidoOpen] = useState(false);
+  const [campanhaAtiva, setCampanhaAtiva] = useState<CampanhaAtiva | null>(null);
+  const [campanhaMarcas, setCampanhaMarcas] = useState<string[]>([]);
+  const [campanhaEntrada, setCampanhaEntrada] = useState(0);
+  const [campanhaMetaVendedor, setCampanhaMetaVendedor] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: campanha } = await (supabase as any)
+        .from("campanhas")
+        .select("*, campanha_niveis(*)")
+        .eq("ativa", true)
+        .maybeSingle();
+
+      if (!campanha) {
+        setCampanhaAtiva(null);
+        setCampanhaMarcas([]);
+        setCampanhaEntrada(0);
+        setCampanhaMetaVendedor(null);
+        return;
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: campanhaProdutosData } = await (supabase as any)
+        .from("campanha_produtos")
+        .select("tipo, marca, produto_id")
+        .eq("campanha_id", campanha.id);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cps = (campanhaProdutosData ?? []) as any[];
+      const marcasSet = new Set<string>(
+        cps.filter((cp) => cp.tipo === "marca").map((cp) => cp.marca as string),
+      );
+      const produtosSet = new Set<string>(
+        cps.filter((cp) => cp.tipo === "produto").map((cp) => cp.produto_id as string),
+      );
+      const marcasArr = Array.from(marcasSet);
+
+      setCampanhaAtiva(campanha as CampanhaAtiva);
+      setCampanhaMarcas(marcasArr);
+
+      // Itens do vendedor no período da campanha
+      const { data: pedidosCampData } = await supabase
+        .from("pedidos")
+        .select("id, vendedor_id, data_pedido, status, itens_pedido(quantidade, total_item, produto_id, produtos(marca))")
+        .eq("vendedor_id", user.id)
+        .gte("data_pedido", campanha.data_inicio)
+        .lte("data_pedido", campanha.data_fim)
+        .not("status", "in", '("rascunho","cancelado")');
+
+      let entrada = 0;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const p of (pedidosCampData ?? []) as any[]) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        for (const it of (p.itens_pedido ?? []) as any[]) {
+          const marca = it.produtos?.marca as string | undefined;
+          const prodId = it.produto_id as string | undefined;
+          if ((marca && marcasSet.has(marca)) || (prodId && produtosSet.has(prodId))) {
+            entrada += Number(it.total_item ?? 0);
+          }
+        }
+      }
+      setCampanhaEntrada(entrada);
+
+      // Meta individual do vendedor na campanha
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: metaData } = await (supabase as any)
+        .from("campanha_metas_vendedor")
+        .select("meta_valor")
+        .eq("campanha_id", campanha.id)
+        .eq("vendedor_id", user.id)
+        .maybeSingle();
+
+      setCampanhaMetaVendedor(metaData?.meta_valor != null ? Number(metaData.meta_valor) : null);
+    })();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -600,6 +706,122 @@ export default function MeuPainel() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Campanha ativa — visão individual */}
+      {campanhaAtiva && (() => {
+        const niveis = [...((campanhaAtiva.campanha_niveis ?? []) as CampanhaNivel[])].sort(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (a: any, b: any) => (a.ordem ?? a.valor_minimo ?? 0) - (b.ordem ?? b.valor_minimo ?? 0),
+        );
+        const meta = campanhaMetaVendedor ?? 0;
+        const pct = meta > 0 ? Math.min((campanhaEntrada / meta) * 100, 100) : 0;
+        const falta = meta > 0 ? Math.max(0, meta - campanhaEntrada) : 0;
+        const diasRestantes = campanhaAtiva.data_fim
+          ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - Date.now()) / 86400000))
+          : 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const nivelAtual: any = niveis.reduce((acc: any, n: any) => {
+          if (campanhaEntrada >= Number(n.valor_minimo ?? 0)) {
+            if (!acc || Number(n.valor_minimo ?? 0) >= Number(acc.valor_minimo ?? 0)) return n;
+          }
+          return acc;
+        }, null);
+        const barColor = pct >= 80 ? "#22c55e" : pct >= 50 ? "#eab308" : "#ef4444";
+
+        return (
+          <Card>
+            <CardHeader className="flex flex-row items-center gap-2 pb-3">
+              <Trophy className="h-5 w-5 text-primary" />
+              <CardTitle>Campanha ativa</CardTitle>
+              {nivelAtual && (
+                <Badge className={`${nivelBadgeClass(nivelAtual.nome)} ml-2 text-xs`}>
+                  Nível atual: {nivelAtual.nome}
+                </Badge>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-col lg:flex-row gap-4">
+                <div className="flex-1 space-y-2">
+                  <h3 className="text-lg font-bold">{campanhaAtiva.nome}</h3>
+                  {campanhaAtiva.descricao && (
+                    <p className="text-sm text-muted-foreground">{campanhaAtiva.descricao}</p>
+                  )}
+                  {campanhaMarcas.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {campanhaMarcas.map((m) => (
+                        <Badge
+                          key={m}
+                          style={{ backgroundColor: MARCA_CORES[m] ?? "#888780", color: "#fff", border: "none" }}
+                        >
+                          {m}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {niveis.length > 0 && (
+                  <div className="flex-1 overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nível</TableHead>
+                          <TableHead>De</TableHead>
+                          <TableHead>Até</TableHead>
+                          <TableHead>Prêmio</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {niveis.map((nivel) => {
+                          const atual = nivelAtual && nivel.id === nivelAtual.id;
+                          return (
+                            <TableRow key={nivel.id} className={atual ? "bg-muted/60" : ""}>
+                              <TableCell className="font-medium">{nivel.nome}</TableCell>
+                              <TableCell>{formatBRL(Number(nivel.valor_minimo ?? 0))}</TableCell>
+                              <TableCell>
+                                {nivel.valor_maximo == null ? "Sem limite" : formatBRL(Number(nivel.valor_maximo))}
+                              </TableCell>
+                              <TableCell className="text-sm">{nivel.descricao_premio}</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t" />
+
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                  <span className="text-muted-foreground">
+                    {meta > 0 ? (
+                      <>
+                        Meta: {formatBRL(meta)} → Entrada: {formatBRL(campanhaEntrada)} · {pct.toFixed(1)}% atingido
+                      </>
+                    ) : (
+                      <>Entrada na campanha: {formatBRL(campanhaEntrada)} · sem meta definida</>
+                    )}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {meta > 0 && falta > 0 && <>Faltam {formatBRL(falta)} · </>}
+                    {diasRestantes} dias restantes
+                  </span>
+                </div>
+                {meta > 0 && (
+                  <div className="h-2 w-full rounded-full bg-muted">
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{ width: `${pct}%`, backgroundColor: barColor }}
+                    />
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Campanhas ativas */}
       {campanhas.length > 0 && (
