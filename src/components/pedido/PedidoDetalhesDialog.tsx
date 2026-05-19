@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { AlertCircle, Clock, Download, User } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Download, PackageX, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { formatDistanceToNow, differenceInHours } from "date-fns";
@@ -27,15 +27,26 @@ type HistoricoItem = {
 };
 
 type ItemDetalhe = {
+  produto_id: string;
   nome: string;
   codigo: string;
   marca: string;
   quantidade: number;
+  qtd_faturada: number;
   preco_bruto: number;
   desconto_perfil: number;
   desconto_comercial: number;
   desconto_trade: number;
   preco_final: number;
+  total: number;
+};
+
+type ItemFracionado = {
+  produto_id: string;
+  nome: string;
+  codigo: string;
+  qtd_pedida: number;
+  saldo: number;
   total: number;
 };
 
@@ -72,6 +83,10 @@ type PedidoDetalhe = {
   itens: ItemDetalhe[];
   historico: HistoricoItem[];
   faturamentos: FaturamentoNF[];
+  fracionado: {
+    pedidoFilhoId: string;
+    itensSaldo: ItemFracionado[];
+  } | null;
 };
 
 type Props = {
@@ -102,10 +117,10 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
   const [pedido, setPedido] = useState<PedidoDetalhe | null>(null);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (!open || !pedidoId) { setPedido(null); return; }
+  const carregar = useCallback(async () => {
+    if (!pedidoId) return;
     setLoading(true);
-    (async () => {
+    try {
       const pRes = await supabase
         .from("pedidos")
         .select(`
@@ -126,7 +141,9 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
           vendedor_id,
           clientes(razao_social, cnpj, cidade, uf, comprador, telefone, codigo_parceiro, negativado),
           itens_pedido(
+            produto_id,
             quantidade,
+            qtd_faturada,
             preco_unitario_bruto,
             preco_final,
             total_item,
@@ -179,6 +196,48 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
         }
       }
 
+      // Busca pedido filho fracionado (se houver)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const filhoRes = await (supabase as any)
+        .from("pedidos")
+        .select(`
+          id,
+          itens_pedido(
+            produto_id,
+            quantidade,
+            total_item,
+            produtos(nome, codigo_jiva)
+          )
+        `)
+        .eq("pedido_origem_id", pedidoId)
+        .maybeSingle();
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const filho = (filhoRes && !filhoRes.error ? filhoRes.data : null) as any;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const itensParent = (d.itens_pedido ?? []) as any[];
+      const qtdPedidaByProd: Record<string, number> = {};
+      itensParent.forEach((i) => {
+        if (i.produto_id) qtdPedidaByProd[i.produto_id] = Number(i.quantidade);
+      });
+
+      let fracionado: PedidoDetalhe["fracionado"] = null;
+      if (filho && Array.isArray(filho.itens_pedido) && filho.itens_pedido.length > 0) {
+        fracionado = {
+          pedidoFilhoId: filho.id,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          itensSaldo: (filho.itens_pedido as any[]).map((i) => ({
+            produto_id: i.produto_id,
+            nome: i.produtos?.nome ?? "—",
+            codigo: i.produtos?.codigo_jiva ?? "—",
+            qtd_pedida: qtdPedidaByProd[i.produto_id] ?? Number(i.quantidade),
+            saldo: Number(i.quantidade),
+            total: Number(i.total_item),
+          })),
+        };
+      }
+
       setPedido({
         numero_pedido: d.numero_pedido,
         tipo: d.tipo,
@@ -202,10 +261,12 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
         responsavel_nome: responsavelNome,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         itens: (d.itens_pedido ?? []).map((i: any) => ({
+          produto_id: i.produto_id,
           nome: i.produtos?.nome ?? "—",
           codigo: i.produtos?.codigo_jiva ?? "—",
           marca: i.produtos?.marca ?? "—",
           quantidade: i.quantidade,
+          qtd_faturada: Number(i.qtd_faturada ?? 0),
           preco_bruto: Number(i.preco_unitario_bruto),
           desconto_perfil: Number(i.desconto_perfil ?? 0),
           desconto_comercial: Number(i.desconto_comercial ?? 0),
@@ -215,9 +276,36 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
         })),
         historico: (hRes.data ?? []) as HistoricoItem[],
         faturamentos: (fatRes.data ?? []) as FaturamentoNF[],
+        fracionado,
       });
-    })().finally(() => setLoading(false));
-  }, [open, pedidoId]);
+    } finally {
+      setLoading(false);
+    }
+  }, [pedidoId]);
+
+  useEffect(() => {
+    if (!open || !pedidoId) { setPedido(null); return; }
+    carregar();
+  }, [open, pedidoId, carregar]);
+
+  // Realtime: refetch quando o pedido (ou seu filho fracionado) muda
+  useEffect(() => {
+    if (!open || !pedidoId) return;
+    const channel = supabase
+      .channel(`pedido-detalhes-${pedidoId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pedidos", filter: `id=eq.${pedidoId}` },
+        () => { carregar(); },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pedidos", filter: `pedido_origem_id=eq.${pedidoId}` },
+        () => { carregar(); },
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [open, pedidoId, carregar]);
 
   const totalGeral = pedido?.itens.reduce((s, i) => s + i.total, 0) ?? 0;
   const etapa = pedido ? tempoNaEtapa(pedido.status_atualizado_em) : null;
@@ -372,50 +460,155 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
             )}
 
             {/* Itens */}
-            <div>
-              <div className="font-semibold mb-2">Produtos</div>
-              <div className="rounded-md border overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-medium">SKU</th>
-                      <th className="text-left px-3 py-2 font-medium">Produto</th>
-                      <th className="text-right px-3 py-2 font-medium">Qtd</th>
-                      <th className="text-right px-3 py-2 font-medium">P. Unit</th>
-                      <th className="text-right px-3 py-2 font-medium">Perf%</th>
-                      <th className="text-right px-3 py-2 font-medium">Com%</th>
-                      <th className="text-right px-3 py-2 font-medium">Trade%</th>
-                      <th className="text-right px-3 py-2 font-medium">P. Final</th>
-                      <th className="text-right px-3 py-2 font-medium">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pedido.itens.map((i, idx) => (
-                      <tr key={idx} className="border-t">
-                        <td className="px-3 py-1.5 font-mono text-muted-foreground whitespace-nowrap">{i.codigo}</td>
-                        <td className="px-3 py-1.5">
-                          {i.nome}
-                          <div className="text-muted-foreground text-[10px]">{i.marca}</div>
-                        </td>
-                        <td className="px-3 py-1.5 text-right">{i.quantidade}</td>
-                        <td className="px-3 py-1.5 text-right">{formatBRL(i.preco_bruto)}</td>
-                        <td className="px-3 py-1.5 text-right text-muted-foreground">{i.desconto_perfil}%</td>
-                        <td className="px-3 py-1.5 text-right text-muted-foreground">{i.desconto_comercial}%</td>
-                        <td className="px-3 py-1.5 text-right text-muted-foreground">{i.desconto_trade}%</td>
-                        <td className="px-3 py-1.5 text-right font-medium">{formatBRL(i.preco_final)}</td>
-                        <td className="px-3 py-1.5 text-right font-semibold">{formatBRL(i.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t bg-primary/10">
-                      <td colSpan={8} className="px-3 py-2 text-right font-bold">Total geral</td>
-                      <td className="px-3 py-2 text-right font-bold text-green-700">{formatBRL(totalGeral)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
+            {pedido.fracionado ? (
+              <div className="space-y-4">
+                {/* SEÇÃO VERDE — Cadastrado no Sankhya */}
+                {(() => {
+                  const verdes = pedido.itens.filter((i) => i.qtd_faturada > 0);
+                  if (verdes.length === 0) return null;
+                  const totalVerde = verdes.reduce(
+                    (s, i) => s + i.preco_final * i.qtd_faturada,
+                    0,
+                  );
+                  return (
+                    <div
+                      className="rounded-md border p-3"
+                      style={{ background: "#E1F5EE", borderColor: "#5DCAA5" }}
+                    >
+                      <div className="flex items-center gap-2 font-semibold mb-2 text-green-800">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Cadastrado no Sankhya
+                      </div>
+                      <div className="rounded-md border overflow-x-auto bg-white">
+                        <table className="w-full text-xs">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="text-left px-3 py-2 font-medium">Produto</th>
+                              <th className="text-left px-3 py-2 font-medium">Código</th>
+                              <th className="text-right px-3 py-2 font-medium">Qtd Pedida</th>
+                              <th className="text-right px-3 py-2 font-medium">Qtd Lançada</th>
+                              <th className="text-right px-3 py-2 font-medium">Total</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {verdes.map((i, idx) => (
+                              <tr key={idx} className="border-t">
+                                <td className="px-3 py-1.5">
+                                  {i.nome}
+                                  <div className="text-muted-foreground text-[10px]">{i.marca}</div>
+                                </td>
+                                <td className="px-3 py-1.5 font-mono text-muted-foreground whitespace-nowrap">{i.codigo}</td>
+                                <td className="px-3 py-1.5 text-right">{i.quantidade}</td>
+                                <td className="px-3 py-1.5 text-right font-medium">{i.qtd_faturada}</td>
+                                <td className="px-3 py-1.5 text-right font-semibold">
+                                  {formatBRL(i.preco_final * i.qtd_faturada)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t bg-green-50">
+                              <td colSpan={4} className="px-3 py-2 text-right font-bold">Total lançado</td>
+                              <td className="px-3 py-2 text-right font-bold text-green-700">
+                                {formatBRL(totalVerde)}
+                              </td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* SEÇÃO VERMELHA — Sem estoque */}
+                <div
+                  className="rounded-md border p-3"
+                  style={{ background: "#FCEBEB", borderColor: "#F09595" }}
+                >
+                  <div className="flex items-center gap-2 font-semibold mb-2 text-red-800">
+                    <PackageX className="h-4 w-4" />
+                    Sem estoque — aguardando reposição
+                  </div>
+                  <div className="rounded-md border overflow-x-auto bg-white">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium">Produto</th>
+                          <th className="text-left px-3 py-2 font-medium">Código</th>
+                          <th className="text-right px-3 py-2 font-medium">Qtd Pedida</th>
+                          <th className="text-right px-3 py-2 font-medium">Saldo</th>
+                          <th className="text-right px-3 py-2 font-medium">Total Saldo</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {pedido.fracionado.itensSaldo.map((i, idx) => (
+                          <tr key={idx} className="border-t">
+                            <td className="px-3 py-1.5">{i.nome}</td>
+                            <td className="px-3 py-1.5 font-mono text-muted-foreground whitespace-nowrap">{i.codigo}</td>
+                            <td className="px-3 py-1.5 text-right">{i.qtd_pedida}</td>
+                            <td className="px-3 py-1.5 text-right font-medium">{i.saldo}</td>
+                            <td className="px-3 py-1.5 text-right font-semibold">{formatBRL(i.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t bg-red-50">
+                          <td colSpan={4} className="px-3 py-2 text-right font-bold">Total saldo</td>
+                          <td className="px-3 py-2 text-right font-bold text-red-700">
+                            {formatBRL(pedido.fracionado.itensSaldo.reduce((s, i) => s + i.total, 0))}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                </div>
               </div>
-            </div>
+            ) : (
+              <div>
+                <div className="font-semibold mb-2">Produtos</div>
+                <div className="rounded-md border overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium">SKU</th>
+                        <th className="text-left px-3 py-2 font-medium">Produto</th>
+                        <th className="text-right px-3 py-2 font-medium">Qtd</th>
+                        <th className="text-right px-3 py-2 font-medium">P. Unit</th>
+                        <th className="text-right px-3 py-2 font-medium">Perf%</th>
+                        <th className="text-right px-3 py-2 font-medium">Com%</th>
+                        <th className="text-right px-3 py-2 font-medium">Trade%</th>
+                        <th className="text-right px-3 py-2 font-medium">P. Final</th>
+                        <th className="text-right px-3 py-2 font-medium">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pedido.itens.map((i, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="px-3 py-1.5 font-mono text-muted-foreground whitespace-nowrap">{i.codigo}</td>
+                          <td className="px-3 py-1.5">
+                            {i.nome}
+                            <div className="text-muted-foreground text-[10px]">{i.marca}</div>
+                          </td>
+                          <td className="px-3 py-1.5 text-right">{i.quantidade}</td>
+                          <td className="px-3 py-1.5 text-right">{formatBRL(i.preco_bruto)}</td>
+                          <td className="px-3 py-1.5 text-right text-muted-foreground">{i.desconto_perfil}%</td>
+                          <td className="px-3 py-1.5 text-right text-muted-foreground">{i.desconto_comercial}%</td>
+                          <td className="px-3 py-1.5 text-right text-muted-foreground">{i.desconto_trade}%</td>
+                          <td className="px-3 py-1.5 text-right font-medium">{formatBRL(i.preco_final)}</td>
+                          <td className="px-3 py-1.5 text-right font-semibold">{formatBRL(i.total)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="border-t bg-primary/10">
+                        <td colSpan={8} className="px-3 py-2 text-right font-bold">Total geral</td>
+                        <td className="px-3 py-2 text-right font-bold text-green-700">{formatBRL(totalGeral)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Histórico */}
             {pedido.historico.length > 0 && (
