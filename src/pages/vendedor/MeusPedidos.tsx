@@ -81,7 +81,7 @@ export default function MeusPedidos() {
   const [detalhesId, setDetalhesId] = useState<string | null>(null);
   const [detalhesOpen, setDetalhesOpen] = useState(false);
 
-  const [excluirId, setExcluirId] = useState<string | null>(null);
+  const [excluirAlvo, setExcluirAlvo] = useState<{ id: string; numero: number } | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
   const [excluirDevolvido, setExcluirDevolvido] = useState<string | null>(null);
@@ -237,15 +237,16 @@ export default function MeusPedidos() {
     setDetalhesOpen(false);
   };
 
-  const excluirRascunho = async () => {
-    if (!excluirId) return;
+  const excluirPedido = async () => {
+    if (!excluirAlvo) return;
     setExcluindo(true);
-    const { error } = await supabase.from("pedidos").delete().eq("id", excluirId);
+    await supabase.from("itens_pedido").delete().eq("pedido_id", excluirAlvo.id);
+    const { error } = await supabase.from("pedidos").delete().eq("id", excluirAlvo.id);
     setExcluindo(false);
-    if (error) { toast.error("Erro ao excluir rascunho"); return; }
-    toast.success("Rascunho excluído");
-    setPedidos((prev) => prev.filter((p) => p.id !== excluirId));
-    setExcluirId(null);
+    if (error) { toast.error("Erro ao excluir pedido"); return; }
+    toast.success(`Pedido #${excluirAlvo.numero} excluído`);
+    setPedidos((prev) => prev.filter((p) => p.id !== excluirAlvo.id));
+    setExcluirAlvo(null);
   };
 
   function StatusBadge({ status }: { status: string }) {
@@ -388,11 +389,12 @@ export default function MeusPedidos() {
                         )}
                         <ProgressoEtapas status={p.status} />
                       </div>
-                      {p.status === "rascunho" && (
+                      {p.responsavel_id === null && (
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); setExcluirId(p.id); }}
+                          onClick={(e) => { e.stopPropagation(); setExcluirAlvo({ id: p.id, numero: p.numero_pedido }); }}
                           className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          title="Excluir pedido"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -467,11 +469,12 @@ export default function MeusPedidos() {
                       {tempoNoStatus(p.status_atualizado_em) ?? "—"}
                     </TableCell>
                     <TableCell>
-                      {p.status === "rascunho" && (
+                      {p.responsavel_id === null && (
                         <button
                           type="button"
-                          onClick={(e) => { e.stopPropagation(); setExcluirId(p.id); }}
+                          onClick={(e) => { e.stopPropagation(); setExcluirAlvo({ id: p.id, numero: p.numero_pedido }); }}
                           className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                          title="Excluir pedido"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -535,19 +538,19 @@ export default function MeusPedidos() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={!!excluirId} onOpenChange={(o) => { if (!o) setExcluirId(null); }}>
+      <AlertDialog open={!!excluirAlvo} onOpenChange={(o) => { if (!o) setExcluirAlvo(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir rascunho?</AlertDialogTitle>
+            <AlertDialogTitle>Excluir pedido?</AlertDialogTitle>
             <AlertDialogDescription>
-              Deseja excluir este rascunho? Esta ação não pode ser desfeita.
+              Tem certeza que deseja excluir o pedido #{excluirAlvo?.numero}? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={excluirRascunho}
+              onClick={excluirPedido}
               disabled={excluindo}
             >
               {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : "Excluir"}
