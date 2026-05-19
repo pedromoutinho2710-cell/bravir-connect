@@ -84,6 +84,10 @@ const App = () => (
               <Route path="/admin/tabelas-preco" element={<TabelasPreco />} />
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
               <Route path="/admin/campanhas" element={<Campanhas />} />
+            </Route>
+
+            {/* Solicitações de melhoria — acessíveis por todos os roles */}
+            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
               <Route path="/solicitacao" element={<NovaSolicitacao />} />
             </Route>

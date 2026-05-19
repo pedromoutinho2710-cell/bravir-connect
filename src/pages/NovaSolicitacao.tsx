@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -57,6 +58,7 @@ const TIPO_BUTTON_CLASS: Record<Tipo, string> = {
 const RASCUNHO_KEY = "solicitacao_rascunho";
 
 export default function NovaSolicitacao() {
+  const { user, fullName } = useAuth();
   const [tipo, setTipo] = useState<Tipo | null>(null);
   const [tela, setTela] = useState<string | null>(null);
   const [outraTela, setOutraTela] = useState("");
@@ -100,8 +102,7 @@ export default function NovaSolicitacao() {
 
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase.from("solicitacoes_gestor").insert({
+      const { error } = await (supabase as any).from("solicitacoes_gestor").insert({
         tipo,
         tela: telaFinal,
         descricao: descricao.trim(),
@@ -109,6 +110,7 @@ export default function NovaSolicitacao() {
         prioridade,
         status: "aberto",
         criado_por: user?.id ?? null,
+        criado_por_nome: fullName ?? user?.email ?? null,
       });
       if (error) throw error;
 
@@ -131,7 +133,7 @@ export default function NovaSolicitacao() {
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold">Nova solicitação</h1>
+      <h1 className="text-2xl font-bold">Nova solicitação de melhoria</h1>
 
       {/* Tipo */}
       <div className="space-y-2">

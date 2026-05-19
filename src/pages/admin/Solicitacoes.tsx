@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Trash2 } from "lucide-react";
+import { Loader2, PlusSquare, Trash2 } from "lucide-react";
+
+const PEDRO_EMAIL = "pedro.menezes@bravir.com.br";
 
 interface Solicitacao {
   id: string;
@@ -33,6 +37,7 @@ interface Solicitacao {
   prioridade: "urgente" | "alta" | "normal" | "baixa";
   status: "aberto" | "em-andamento" | "concluido";
   criado_por: string | null;
+  criado_por_nome: string | null;
   created_at: string;
 }
 
@@ -86,25 +91,35 @@ function formatDate(iso: string) {
 
 export default function Solicitacoes() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const [filterTipo, setFilterTipo] = useState<string>("todos");
   const [filterPrioridade, setFilterPrioridade] = useState<string>("todas");
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
+  const isAdmin = user?.email === PEDRO_EMAIL;
+
   const { data: solicitacoes = [], isLoading } = useQuery({
-    queryKey: ["solicitacoes_gestor"],
+    queryKey: ["solicitacoes_gestor", isAdmin, user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = (supabase as any)
         .from("solicitacoes_gestor")
         .select("*")
         .order("created_at", { ascending: false });
+
+      if (!isAdmin && user?.id) {
+        query = query.eq("criado_por", user.id);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
       return data as Solicitacao[];
     },
+    enabled: !!user,
   });
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("solicitacoes_gestor")
         .update({ status })
         .eq("id", id);
@@ -119,7 +134,7 @@ export default function Solicitacoes() {
 
   const deleteSolicitacao = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("solicitacoes_gestor")
         .delete()
         .eq("id", id);
@@ -146,7 +161,15 @@ export default function Solicitacoes() {
 
   return (
     <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <h1 className="text-2xl font-bold">Solicitações do Gestor</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Solicitações de melhoria</h1>
+        <Button asChild size="sm">
+          <Link to="/solicitacao">
+            <PlusSquare className="mr-2 h-4 w-4" />
+            Nova solicitação
+          </Link>
+        </Button>
+      </div>
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -235,30 +258,37 @@ export default function Solicitacoes() {
                   )}
                 </div>
 
-                {/* Actions */}
+                {/* Author + actions */}
                 <div className="flex items-center gap-3 pt-1">
-                  <Select
-                    value={s.status}
-                    onValueChange={(val) => updateStatus.mutate({ id: s.id, status: val })}
-                  >
-                    <SelectTrigger className="w-44 h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="aberto">Aberto</SelectItem>
-                      <SelectItem value="em-andamento">Em andamento</SelectItem>
-                      <SelectItem value="concluido">Concluído</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {s.criado_por_nome && (
+                    <span className="text-xs text-muted-foreground">
+                      Por: <span className="font-medium text-foreground">{s.criado_por_nome}</span>
+                    </span>
+                  )}
+                  <div className="ml-auto flex items-center gap-3">
+                    <Select
+                      value={s.status}
+                      onValueChange={(val) => updateStatus.mutate({ id: s.id, status: val })}
+                    >
+                      <SelectTrigger className="w-44 h-8 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="aberto">Aberto</SelectItem>
+                        <SelectItem value="em-andamento">Em andamento</SelectItem>
+                        <SelectItem value="concluido">Concluído</SelectItem>
+                      </SelectContent>
+                    </Select>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-red-600 hover:bg-red-50 hover:text-red-700 h-8 px-2"
-                    onClick={() => setDeleteId(s.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:bg-red-50 hover:text-red-700 h-8 px-2"
+                      onClick={() => setDeleteId(s.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
