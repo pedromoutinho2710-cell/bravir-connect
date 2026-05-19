@@ -97,6 +97,7 @@ export default function ClientesAdmin() {
   const [metaVendedorMes, setMetaVendedorMes] = useState<Record<string, number>>({});
   const [metaCampVendedor, setMetaCampVendedor] = useState<Record<string, number>>({});
   const [campanhaAtiva, setCampanhaAtiva] = useState<{ nome: string; marcas: Set<string> } | null>(null);
+  const [clientesComMetaTrade, setClientesComMetaTrade] = useState<Set<string>>(new Set());
 
   // Transferir
   const [transferirCliente, setTransferirCliente] = useState<Cliente | null>(null);
@@ -245,6 +246,32 @@ export default function ClientesAdmin() {
       setCampanhaAtiva(null);
       setFatCampanhaCliente({});
       setMetaCampVendedor({});
+    }
+
+    // Clientes com meta definida pelo trade (em qualquer campanha ativa)
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: campAtivas } = await (supabase as any)
+        .from("campanhas")
+        .select("id")
+        .eq("ativa", true);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ids = ((campAtivas ?? []) as any[]).map((c) => c.id);
+      if (ids.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: mcs, error: mcsErr } = await (supabase as any)
+          .from("campanha_metas_clientes")
+          .select("cliente_id")
+          .in("campanha_id", ids);
+        if (!mcsErr && mcs) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          setClientesComMetaTrade(new Set((mcs as any[]).map((r) => r.cliente_id)));
+        }
+      } else {
+        setClientesComMetaTrade(new Set());
+      }
+    } catch {
+      setClientesComMetaTrade(new Set());
     }
   };
 
@@ -513,7 +540,14 @@ export default function ClientesAdmin() {
                     const atv = computeAtividade(lo?.data_pedido ?? null);
                     return (
                       <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${c.id}`)}>
-                        <TableCell className="font-medium">{c.razao_social}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{c.razao_social}</span>
+                            {clientesComMetaTrade.has(c.id) && (
+                              <Badge className="bg-purple-100 text-purple-800 border-purple-300 text-xs">Meta trade</Badge>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell className="font-mono text-sm text-muted-foreground">{formatCNPJ(c.cnpj)}</TableCell>
                         <TableCell className="text-sm">{[c.cidade, c.uf].filter(Boolean).join(" / ") || "—"}</TableCell>
                         <TableCell>
@@ -652,7 +686,14 @@ export default function ClientesAdmin() {
                     const lo = lastOrders[c.id];
                     return (
                       <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${c.id}`)}>
-                        <TableCell className="font-medium">{c.razao_social}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span>{c.razao_social}</span>
+                            {clientesComMetaTrade.has(c.id) && (
+                              <Badge className="bg-purple-100 text-purple-800 border-purple-300 text-xs">Meta trade</Badge>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell className="font-mono text-sm text-muted-foreground">{formatCNPJ(c.cnpj)}</TableCell>
                         <TableCell>
                           {c.canal ? (

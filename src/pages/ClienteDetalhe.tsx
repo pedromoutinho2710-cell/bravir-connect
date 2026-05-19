@@ -105,6 +105,17 @@ type PedidoLinha = {
 
 type Vendedor = { id: string; nome: string };
 
+type MetaTrade = {
+  id: string;
+  campanha_id: string;
+  campanha_nome: string;
+  meta_valor: number;
+  realizado: number;
+  ativa: boolean;
+  data_inicio: string | null;
+  data_fim: string | null;
+};
+
 function InfoItem({ label, value, icon }: { label: string; value: string | null | undefined; icon?: React.ReactNode }) {
   if (!value) return null;
   return (
@@ -134,6 +145,7 @@ export default function ClienteDetalhe() {
   const [vendedorNome, setVendedorNome] = useState<string | null>(null);
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [metasTrade, setMetasTrade] = useState<MetaTrade[]>([]);
 
   // Edit modal
   const [editOpen, setEditOpen] = useState(false);
@@ -251,7 +263,77 @@ export default function ClienteDetalhe() {
       if (cRes.data?.vendedor_id) setVendedorNome(profMap[cRes.data.vendedor_id] ?? null);
     }
 
+    await carregarMetasTrade();
+
     setLoading(false);
+  };
+
+  const carregarMetasTrade = async () => {
+    if (!id) return;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: mc, error } = await (supabase as any)
+        .from("campanha_metas_clientes")
+        .select("id, meta_valor, campanha_id, campanhas(id, nome, ativa, data_inicio, data_fim)")
+        .eq("cliente_id", id);
+      if (error) { setMetasTrade([]); return; }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = (mc ?? []) as any[];
+      if (rows.length === 0) { setMetasTrade([]); return; }
+
+      const campIds = Array.from(new Set(rows.map((r) => r.campanha_id)));
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: prods } = await (supabase as any)
+        .from("campanha_produtos")
+        .select("campanha_id, tipo, marca")
+        .in("campanha_id", campIds);
+      const marcasByCamp: Record<string, Set<string>> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((prods ?? []) as any[]).forEach((p) => {
+        if (p.tipo === "marca" && p.marca) {
+          if (!marcasByCamp[p.campanha_id]) marcasByCamp[p.campanha_id] = new Set();
+          marcasByCamp[p.campanha_id].add(p.marca);
+        }
+      });
+
+      const items: MetaTrade[] = await Promise.all(rows.map(async (m) => {
+        const camp = m.campanhas ?? {};
+        const marcas = marcasByCamp[m.campanha_id] ?? new Set<string>();
+        let realizado = 0;
+        if (camp.data_inicio && camp.data_fim && marcas.size > 0) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: peds } = await (supabase as any)
+            .from("pedidos")
+            .select("itens_pedido(total_item, produto:produtos(marca))")
+            .eq("cliente_id", id)
+            .gte("data_pedido", camp.data_inicio)
+            .lte("data_pedido", camp.data_fim)
+            .not("status", "in", '("rascunho","cancelado","devolvido")');
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          ((peds ?? []) as any[]).forEach((p) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (p.itens_pedido ?? []).forEach((i: any) => {
+              if (i.produto?.marca && marcas.has(i.produto.marca)) {
+                realizado += Number(i.total_item);
+              }
+            });
+          });
+        }
+        return {
+          id: m.id,
+          campanha_id: m.campanha_id,
+          campanha_nome: camp.nome ?? "—",
+          meta_valor: Number(m.meta_valor),
+          realizado,
+          ativa: !!camp.ativa,
+          data_inicio: camp.data_inicio ?? null,
+          data_fim: camp.data_fim ?? null,
+        };
+      }));
+      setMetasTrade(items);
+    } catch {
+      setMetasTrade([]);
+    }
   };
 
   useEffect(() => { carregar(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -454,6 +536,7 @@ export default function ClienteDetalhe() {
           <TabsTrigger value="dados">Dados cadastrais</TabsTrigger>
           <TabsTrigger value="pedidos">Histórico de pedidos</TabsTrigger>
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
+          <TabsTrigger value="metas">Metas</TabsTrigger>
           <TabsTrigger value="obs">Observações</TabsTrigger>
         </TabsList>
 
@@ -550,6 +633,59 @@ export default function ClienteDetalhe() {
               <TrendingUp className="h-3.5 w-3.5" />
               Último pedido em {formatDate(ultimaData)} — status: <strong>{atividadeConf.label}</strong>
             </p>
+          )}
+        </TabsContent>
+
+        {/* ABA — Metas (definidas pelo trade) */}
+        <TabsContent value="metas" className="mt-4">
+          {metasTrade.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                Nenhuma meta definida pelo trade para este cliente.
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-3">
+              {metasTrade.map((m) => {
+                const pct = m.meta_valor > 0 ? Math.min((m.realizado / m.meta_valor) * 100, 100) : 0;
+                const pctReal = m.meta_valor > 0 ? (m.realizado / m.meta_valor) * 100 : 0;
+                const barColor = pctReal >= 100 ? "#22c55e" : pctReal >= 70 ? "#f59e0b" : "#ef4444";
+                return (
+                  <Card key={m.id}>
+                    <CardContent className="pt-6 space-y-3">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold">{m.campanha_nome}</h3>
+                            {m.ativa ? (
+                              <Badge className="bg-green-100 text-green-800 border-green-300">Ativa</Badge>
+                            ) : (
+                              <Badge variant="outline">Inativa</Badge>
+                            )}
+                          </div>
+                          {(m.data_inicio || m.data_fim) && (
+                            <p className="text-xs text-muted-foreground mt-0.5">
+                              {m.data_inicio ? formatDate(m.data_inicio) : "—"} a {m.data_fim ? formatDate(m.data_fim) : "—"}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <div className="text-xs text-muted-foreground">Atingimento</div>
+                          <div className="text-lg font-bold">{pctReal.toFixed(0)}%{pctReal >= 100 ? " ✓" : ""}</div>
+                        </div>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <StatCard label="Meta" value={formatBRL(m.meta_valor)} />
+                        <StatCard label="Realizado" value={formatBRL(m.realizado)} />
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           )}
         </TabsContent>
 
