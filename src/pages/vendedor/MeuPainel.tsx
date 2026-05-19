@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
-import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, Briefcase } from "lucide-react";
 import { toast } from "sonner";
 
 type KPIs = {
@@ -68,9 +69,59 @@ const TIPO_LABEL: Record<string, string> = {
   outro: "Outro",
 };
 
+type Periodo = "hoje" | "semana" | "mes" | "ano";
+
+const PERIODO_LABEL: Record<Periodo, string> = {
+  hoje: "Hoje",
+  semana: "Esta semana",
+  mes: "Este mês",
+  ano: "Este ano",
+};
+
+function rangePeriodo(p: Periodo): { inicio: string; fim: string } {
+  const agora = new Date();
+  const y = agora.getFullYear();
+  const m = agora.getMonth();
+  const d = agora.getDate();
+  const fmt = (dt: Date) =>
+    `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+  if (p === "hoje") {
+    const hoje = fmt(agora);
+    return { inicio: hoje, fim: hoje };
+  }
+  if (p === "semana") {
+    const dow = agora.getDay();
+    const inicio = new Date(y, m, d - dow);
+    const fim = new Date(y, m, d - dow + 6);
+    return { inicio: fmt(inicio), fim: fmt(fim) };
+  }
+  if (p === "ano") {
+    return { inicio: `${y}-01-01`, fim: `${y}-12-31` };
+  }
+  return { inicio: fmt(new Date(y, m, 1)), fim: fmt(new Date(y, m + 1, 0)) };
+}
+
+type PeriodTotais = { entrada: number; faturado: number; aFaturar: number };
+
+type ClienteSemPedido = {
+  id: string;
+  razao_social: string;
+  cidade: string | null;
+  ultimo_pedido: string | null;
+};
+
+type ClientesPeriodo = {
+  carteira: number;
+  comPedido: number;
+  semPedidoList: ClienteSemPedido[];
+};
+
 export default function MeuPainel() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [periodo, setPeriodo] = useState<Periodo>("mes");
+  const [periodTotais, setPeriodTotais] = useState<PeriodTotais>({ entrada: 0, faturado: 0, aFaturar: 0 });
+  const [loadingPeriodo, setLoadingPeriodo] = useState(false);
   const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0 });
   const [ultimosPedidos, setUltimosPedidos] = useState<UltimoPedido[]>([]);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
@@ -78,6 +129,8 @@ export default function MeuPainel() {
   const [tarefasDia, setTarefasDia] = useState<TarefaDia[]>([]);
   const [loading, setLoading] = useState(true);
   const [baixandoTabela, setBaixandoTabela] = useState(false);
+  const [clientesPeriodo, setClientesPeriodo] = useState<ClientesPeriodo>({ carteira: 0, comPedido: 0, semPedidoList: [] });
+  const [modalSemPedidoOpen, setModalSemPedidoOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -194,6 +247,103 @@ export default function MeuPainel() {
     })().finally(() => setLoading(false));
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+    let cancelado = false;
+    setLoadingPeriodo(true);
+    (async () => {
+      const { inicio, fim } = rangePeriodo(periodo);
+      const { data, error } = await supabase
+        .from("pedidos")
+        .select("status, itens_pedido(total_item)")
+        .eq("vendedor_id", user.id)
+        .gte("data_pedido", inicio)
+        .lte("data_pedido", fim)
+        .not("status", "in", '("rascunho","cancelado")');
+      if (cancelado) return;
+      if (error) {
+        toast.error("Erro ao carregar totais do período");
+        setPeriodTotais({ entrada: 0, faturado: 0, aFaturar: 0 });
+      } else {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const pedidos = (data ?? []) as any[];
+        let entrada = 0, faturado = 0, aFaturar = 0;
+        for (const p of pedidos) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
+          entrada += total;
+          if (p.status === "faturado" || p.status === "parcialmente_faturado") faturado += total;
+          else if (p.status === "no_sankhya" || p.status === "sem_estoque") aFaturar += total;
+        }
+        setPeriodTotais({ entrada, faturado, aFaturar });
+      }
+      setLoadingPeriodo(false);
+    })();
+    return () => { cancelado = true; };
+  }, [user, periodo]);
+
+  useEffect(() => {
+    if (!user) return;
+    const { inicio, fim } = rangePeriodo(periodo);
+    (async () => {
+      const [carteiraRes, pedidosRes] = await Promise.all([
+        supabase
+          .from("clientes")
+          .select("id, razao_social, cidade", { count: "exact" })
+          .eq("vendedor_id", user.id)
+          .eq("status", "ativo"),
+        supabase
+          .from("pedidos")
+          .select("cliente_id, data_pedido")
+          .eq("vendedor_id", user.id)
+          .gte("data_pedido", inicio)
+          .lte("data_pedido", fim)
+          .not("status", "in", '("cancelado","devolvido")'),
+      ]);
+
+      if (carteiraRes.error || pedidosRes.error) {
+        toast.error("Erro ao carregar clientes");
+        return;
+      }
+
+      const carteira = (carteiraRes.data ?? []) as { id: string; razao_social: string; cidade: string | null }[];
+      const pedidos = (pedidosRes.data ?? []) as { cliente_id: string; data_pedido: string }[];
+
+      const idsComPedido = new Set(pedidos.map((p) => p.cliente_id));
+      const semPedidoIds = carteira.filter((c) => !idsComPedido.has(c.id)).map((c) => c.id);
+
+      const ultimoPedidoMap: Record<string, string> = {};
+      if (semPedidoIds.length > 0) {
+        const { data: ultimosData } = await supabase
+          .from("pedidos")
+          .select("cliente_id, data_pedido")
+          .eq("vendedor_id", user.id)
+          .in("cliente_id", semPedidoIds)
+          .not("status", "in", '("cancelado","devolvido","rascunho")')
+          .order("data_pedido", { ascending: false });
+        (ultimosData ?? []).forEach((p) => {
+          if (!ultimoPedidoMap[p.cliente_id]) ultimoPedidoMap[p.cliente_id] = p.data_pedido;
+        });
+      }
+
+      const semPedidoList: ClienteSemPedido[] = carteira
+        .filter((c) => !idsComPedido.has(c.id))
+        .map((c) => ({
+          id: c.id,
+          razao_social: c.razao_social,
+          cidade: c.cidade,
+          ultimo_pedido: ultimoPedidoMap[c.id] ?? null,
+        }))
+        .sort((a, b) => a.razao_social.localeCompare(b.razao_social));
+
+      setClientesPeriodo({
+        carteira: carteira.length,
+        comPedido: idsComPedido.size,
+        semPedidoList,
+      });
+    })();
+  }, [user, periodo]);
+
   const metaPct = kpis.meta > 0 ? Math.min((kpis.faturamento / kpis.meta) * 100, 100) : 0;
   const metaColor = metaPct >= 80 ? "bg-green-500" : metaPct >= 50 ? "bg-yellow-400" : "bg-red-500";
 
@@ -247,6 +397,58 @@ export default function MeuPainel() {
           {baixandoTabela ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           Baixar tabela de preços
         </Button>
+      </div>
+
+      {/* Filtro de período + cards de totais */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground mr-1">Período:</span>
+          {(Object.keys(PERIODO_LABEL) as Periodo[]).map((p) => (
+            <Button
+              key={p}
+              size="sm"
+              variant={periodo === p ? "default" : "outline"}
+              onClick={() => setPeriodo(p)}
+            >
+              {PERIODO_LABEL[p]}
+            </Button>
+          ))}
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Entrada de pedidos</CardTitle>
+              <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {loadingPeriodo ? <Loader2 className="h-5 w-5 animate-spin" /> : formatBRL(periodTotais.entrada)}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Faturado</CardTitle>
+              <CheckCheck className="h-4 w-4 text-green-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-700">
+                {loadingPeriodo ? <Loader2 className="h-5 w-5 animate-spin" /> : formatBRL(periodTotais.faturado)}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">A faturar</CardTitle>
+              <Clock className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-700">
+                {loadingPeriodo ? <Loader2 className="h-5 w-5 animate-spin" /> : formatBRL(periodTotais.aFaturar)}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* KPIs */}
@@ -320,6 +522,83 @@ export default function MeuPainel() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Clientes — período: {PERIODO_LABEL[periodo]} */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Clientes na carteira</CardTitle>
+            <Briefcase className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{clientesPeriodo.carteira}</div>
+            <p className="text-xs text-muted-foreground mt-1">ativos</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Com pedido no período</CardTitle>
+            <UserCheck className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-700">{clientesPeriodo.comPedido}</div>
+            <p className="text-xs text-muted-foreground mt-1">{PERIODO_LABEL[periodo]}</p>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:border-amber-400 hover:shadow-sm transition"
+          onClick={() => setModalSemPedidoOpen(true)}
+        >
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Sem pedido no período</CardTitle>
+            <UserX className="h-4 w-4 text-amber-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-700">{clientesPeriodo.semPedidoList.length}</div>
+            <p className="text-xs text-amber-600 mt-1">Clique para ver lista</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Dialog open={modalSemPedidoOpen} onOpenChange={setModalSemPedidoOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Clientes sem pedido — {PERIODO_LABEL[periodo]}</DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto rounded-md border">
+            {clientesPeriodo.semPedidoList.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-6">Todos os clientes compraram no período</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Cidade</TableHead>
+                    <TableHead>Último pedido</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {clientesPeriodo.semPedidoList.map((c) => (
+                    <TableRow
+                      key={c.id}
+                      className="cursor-pointer"
+                      onClick={() => navigate(`/clientes/${c.id}`)}
+                    >
+                      <TableCell className="text-sm font-medium">{c.razao_social}</TableCell>
+                      <TableCell className="text-sm">{c.cidade ?? "—"}</TableCell>
+                      <TableCell className="text-sm">
+                        {c.ultimo_pedido ? formatDate(c.ultimo_pedido) : "Nunca"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Campanhas ativas */}
       {campanhas.length > 0 && (
