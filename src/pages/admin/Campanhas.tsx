@@ -81,6 +81,16 @@ type MetaVendedor = {
   nivel_atual?: string | null;
 };
 
+type MetaCliente = {
+  id?: string;
+  cliente_id: string;
+  nome: string;
+  meta_valor: number;
+  realizado?: number;
+};
+
+type TipoMeta = "vendedor" | "cliente";
+
 type Campanha = {
   id: string;
   nome: string;
@@ -90,10 +100,12 @@ type Campanha = {
   data_fim: string | null;
   ativa: boolean;
   created_at: string;
+  tipo_meta: TipoMeta;
   niveis: Nivel[];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   campanha_produtos: any[];
   metasVendedor: MetaVendedor[];
+  metasCliente: MetaCliente[];
 };
 
 type FormNivel = {
@@ -108,6 +120,7 @@ type FormData = {
   descricao: string;
   data_inicio: string;
   data_fim: string;
+  tipo_meta: TipoMeta;
   niveis: FormNivel[];
   produtos: FormProduto[];
 };
@@ -137,6 +150,7 @@ const formVazio = (): FormData => ({
   descricao: "",
   data_inicio: "",
   data_fim: "",
+  tipo_meta: "vendedor",
   niveis: [{ nome: "", valor_minimo: "", valor_maximo: "", descricao_premio: "" }],
   produtos: [],
 });
@@ -144,7 +158,7 @@ const formVazio = (): FormData => ({
 // ─── Fetch ────────────────────────────────────────────────────────────────────
 
 async function fetchCampanhas(): Promise<Campanha[]> {
-  const [campanhasRes, niveisRes, cpRes, metasRes] = await Promise.all([
+  const [campanhasRes, niveisRes, cpRes, metasRes, metasClienteRes] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.from("campanhas") as any).select("*").order("created_at", { ascending: false }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -153,11 +167,14 @@ async function fetchCampanhas(): Promise<Campanha[]> {
     (supabase.from("campanha_produtos") as any).select("*"),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.from("campanha_metas_vendedor") as any).select("*"),
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase.from("campanha_metas_clientes") as any).select("*"),
   ]);
   if (campanhasRes.error) throw campanhasRes.error;
   if (niveisRes.error) throw niveisRes.error;
   if (cpRes.error) throw cpRes.error;
   if (metasRes.error) throw metasRes.error;
+  if (metasClienteRes.error) throw metasClienteRes.error;
 
   const niveisMap: Record<string, Nivel[]> = {};
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -225,12 +242,42 @@ async function fetchCampanhas(): Promise<Campanha[]> {
     });
   });
 
+  // Build metas cliente map
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const metasClienteData: any[] = metasClienteRes.data ?? [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const clienteIds = [...new Set(metasClienteData.map((m: any) => m.cliente_id).filter(Boolean))] as string[];
+
+  const clientesNomeMap: Record<string, string> = {};
+  if (clienteIds.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: cliRows } = await (supabase.from("clientes") as any)
+      .select("id, razao_social")
+      .in("id", clienteIds);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (cliRows ?? []).forEach((cl: any) => { clientesNomeMap[cl.id] = cl.razao_social ?? cl.id; });
+  }
+
+  const metasClienteMap: Record<string, MetaCliente[]> = {};
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  metasClienteData.forEach((m: any) => {
+    if (!metasClienteMap[m.campanha_id]) metasClienteMap[m.campanha_id] = [];
+    metasClienteMap[m.campanha_id].push({
+      id: m.id,
+      cliente_id: m.cliente_id,
+      nome: clientesNomeMap[m.cliente_id] ?? m.cliente_id,
+      meta_valor: Number(m.meta_valor),
+    });
+  });
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (campanhasRes.data ?? []).map((c: any) => ({
     ...c,
+    tipo_meta: (c.tipo_meta ?? "vendedor") as TipoMeta,
     niveis: niveisMap[c.id] ?? [],
     campanha_produtos: cpMap[c.id] ?? [],
     metasVendedor: metasMap[c.id] ?? [],
+    metasCliente: metasClienteMap[c.id] ?? [],
   }));
 }
 
@@ -303,6 +350,17 @@ export default function Campanhas() {
   const [editandoMeta, setEditandoMeta] = useState<Record<string, string | null>>({});
   const [editandoCat, setEditandoCat] = useState<Record<string, string | null>>({});
 
+  // Metas por cliente
+  const [buscaCliente, setBuscaCliente] = useState<Record<string, string>>({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [resultadosCliente, setResultadosCliente] = useState<Record<string, any[]>>({});
+  const [buscandoCliente, setBuscandoCliente] = useState<Record<string, boolean>>({});
+  const timerBuscaCli = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [clienteSelecionado, setClienteSelecionado] = useState<Record<string, any | null>>({});
+  const [metaClienteInput, setMetaClienteInput] = useState<Record<string, string>>({});
+  const [editandoMetaCli, setEditandoMetaCli] = useState<Record<string, string | null>>({});
+
   // ── Query campanhas ────────────────────────────────────────────────────────
 
   const { data: campanhas = [], isLoading } = useQuery<Campanha[]>({
@@ -360,6 +418,11 @@ export default function Campanhas() {
         .delete()
         .eq("campanha_id", id);
       if (eMetas) throw eMetas;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: eMetasCli } = await (supabase.from("campanha_metas_clientes") as any)
+        .delete()
+        .eq("campanha_id", id);
+      if (eMetasCli) throw eMetasCli;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: eNiveis } = await (supabase.from("campanha_niveis") as any)
         .delete()
@@ -432,6 +495,85 @@ export default function Campanhas() {
     onError: (e: Error) => toast.error("Erro ao atualizar meta: " + e.message),
   });
 
+  // ── Metas cliente mutations ────────────────────────────────────────────────
+
+  const addMetaCliente = useMutation({
+    mutationFn: async ({
+      campanhaId,
+      clienteId,
+      metaValor,
+    }: {
+      campanhaId: string;
+      clienteId: string;
+      metaValor: number;
+    }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("campanha_metas_clientes") as any).insert({
+        campanha_id: campanhaId,
+        cliente_id: clienteId,
+        meta_valor: metaValor,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["campanhas"] }),
+    onError: (e: Error) => toast.error("Erro ao adicionar meta do cliente: " + e.message),
+  });
+
+  const removeMetaCliente = useMutation({
+    mutationFn: async (id: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("campanha_metas_clientes") as any)
+        .delete()
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["campanhas"] }),
+    onError: (e: Error) => toast.error("Erro ao remover meta do cliente: " + e.message),
+  });
+
+  const updateMetaCliente = useMutation({
+    mutationFn: async ({ id, metaValor }: { id: string; metaValor: number }) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase.from("campanha_metas_clientes") as any)
+        .update({ meta_valor: metaValor })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["campanhas"] }),
+    onError: (e: Error) => toast.error("Erro ao atualizar meta do cliente: " + e.message),
+  });
+
+  // ── Buscar clientes ────────────────────────────────────────────────────────
+
+  async function buscarClientes(campanhaId: string, busca: string) {
+    setBuscandoCliente((p) => ({ ...p, [campanhaId]: true }));
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase.from("clientes") as any)
+        .select("id, razao_social, cnpj")
+        .or(`razao_social.ilike.%${busca}%,cnpj.ilike.%${busca}%`)
+        .limit(10);
+      if (error) throw error;
+      setResultadosCliente((p) => ({ ...p, [campanhaId]: data ?? [] }));
+    } catch {
+      setResultadosCliente((p) => ({ ...p, [campanhaId]: [] }));
+    } finally {
+      setBuscandoCliente((p) => ({ ...p, [campanhaId]: false }));
+    }
+  }
+
+  function handleBuscaClienteChange(campanhaId: string, valor: string) {
+    setBuscaCliente((p) => ({ ...p, [campanhaId]: valor }));
+    setClienteSelecionado((p) => ({ ...p, [campanhaId]: null }));
+    const t = timerBuscaCli.current[campanhaId];
+    if (t) clearTimeout(t);
+    if (valor.length >= 3) {
+      timerBuscaCli.current[campanhaId] = setTimeout(() => buscarClientes(campanhaId, valor), 400);
+    } else {
+      setResultadosCliente((p) => ({ ...p, [campanhaId]: [] }));
+    }
+  }
+
   // ── Salvar (criar/editar) ─────────────────────────────────────────────────
 
   async function salvar() {
@@ -461,6 +603,7 @@ export default function Campanhas() {
             marcas: marcasDerivadas,
             data_inicio: form.data_inicio,
             data_fim: form.data_fim,
+            tipo_meta: form.tipo_meta,
           })
           .eq("id", editandoId);
         if (error) throw error;
@@ -479,6 +622,7 @@ export default function Campanhas() {
             marcas: marcasDerivadas,
             data_inicio: form.data_inicio,
             data_fim: form.data_fim,
+            tipo_meta: form.tipo_meta,
             ativa: false,
           })
           .select("id")
@@ -548,6 +692,7 @@ export default function Campanhas() {
       descricao: c.descricao ?? "",
       data_inicio: c.data_inicio ?? "",
       data_fim: c.data_fim ?? "",
+      tipo_meta: c.tipo_meta ?? "vendedor",
       niveis: c.niveis.map((n) => ({
         nome: n.nome,
         valor_minimo: String(n.valor_minimo ?? ""),
@@ -816,6 +961,7 @@ export default function Campanhas() {
               )}
 
               {/* Metas por vendedor */}
+              {c.tipo_meta !== "cliente" && (
               <div className="space-y-3">
                 <p className="text-sm font-medium text-muted-foreground">Metas por vendedor</p>
 
@@ -1077,6 +1223,202 @@ export default function Campanhas() {
                   </Table>
                 )}
               </div>
+              )}
+
+              {/* Metas por cliente */}
+              {c.tipo_meta === "cliente" && (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-muted-foreground">Metas por cliente</p>
+
+                  {/* Buscar e adicionar cliente */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Input
+                          value={buscaCliente[c.id] ?? ""}
+                          onChange={(e) => handleBuscaClienteChange(c.id, e.target.value)}
+                          placeholder="Buscar cliente por razão social ou CNPJ..."
+                        />
+                        {buscandoCliente[c.id] && (
+                          <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-muted-foreground" />
+                        )}
+                      </div>
+                      <Input
+                        type="number"
+                        min={0}
+                        className="w-36"
+                        placeholder="Meta R$"
+                        value={metaClienteInput[c.id] ?? ""}
+                        onChange={(e) =>
+                          setMetaClienteInput((p) => ({ ...p, [c.id]: e.target.value }))
+                        }
+                      />
+                      <Button
+                        size="sm"
+                        disabled={
+                          !clienteSelecionado[c.id] ||
+                          !metaClienteInput[c.id] ||
+                          addMetaCliente.isPending
+                        }
+                        onClick={() => {
+                          const cli = clienteSelecionado[c.id];
+                          const val = Number(metaClienteInput[c.id]);
+                          if (!cli || !val) return;
+                          addMetaCliente.mutate(
+                            { campanhaId: c.id, clienteId: cli.id, metaValor: val },
+                            {
+                              onSuccess: () => {
+                                setClienteSelecionado((p) => ({ ...p, [c.id]: null }));
+                                setBuscaCliente((p) => ({ ...p, [c.id]: "" }));
+                                setMetaClienteInput((p) => ({ ...p, [c.id]: "" }));
+                                setResultadosCliente((p) => ({ ...p, [c.id]: [] }));
+                              },
+                            }
+                          );
+                        }}
+                      >
+                        <Plus className="h-4 w-4 mr-1" />
+                        Adicionar
+                      </Button>
+                    </div>
+
+                    {(resultadosCliente[c.id] ?? []).length > 0 && !clienteSelecionado[c.id] && (
+                      <div className="border rounded-md divide-y max-h-48 overflow-y-auto bg-background shadow-sm">
+                        {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                        {(resultadosCliente[c.id] ?? []).map((cli: any) => (
+                          <button
+                            key={cli.id}
+                            type="button"
+                            className="w-full text-left px-3 py-2 hover:bg-muted text-sm flex items-center gap-2"
+                            disabled={c.metasCliente.some((m) => m.cliente_id === cli.id)}
+                            onClick={() => {
+                              setClienteSelecionado((p) => ({ ...p, [c.id]: cli }));
+                              setBuscaCliente((p) => ({ ...p, [c.id]: cli.razao_social }));
+                              setResultadosCliente((p) => ({ ...p, [c.id]: [] }));
+                            }}
+                          >
+                            <span className="font-medium">{cli.razao_social}</span>
+                            <span className="text-muted-foreground ml-auto">{cli.cnpj}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Tabela de metas por cliente */}
+                  {c.metasCliente.length > 0 && (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Cliente</TableHead>
+                          <TableHead>Meta</TableHead>
+                          <TableHead className="w-20"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {c.metasCliente.map((m) => {
+                          const isEditing =
+                            m.id !== undefined &&
+                            editandoMetaCli[m.id] !== undefined &&
+                            editandoMetaCli[m.id] !== null;
+
+                          return (
+                            <TableRow key={m.id ?? m.cliente_id}>
+                              <TableCell className="font-medium">{m.nome}</TableCell>
+                              <TableCell>
+                                {isEditing ? (
+                                  <div className="flex items-center gap-1">
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="w-28 h-7 text-sm"
+                                      value={editandoMetaCli[m.id!] ?? ""}
+                                      onChange={(e) =>
+                                        setEditandoMetaCli((prev) => ({
+                                          ...prev,
+                                          [m.id!]: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7 text-green-600 hover:text-green-700"
+                                      disabled={updateMetaCliente.isPending}
+                                      onClick={() => {
+                                        const val = Number(editandoMetaCli[m.id!]);
+                                        if (!val) return;
+                                        updateMetaCliente.mutate(
+                                          { id: m.id!, metaValor: val },
+                                          {
+                                            onSuccess: () => {
+                                              setEditandoMetaCli((prev) => ({
+                                                ...prev,
+                                                [m.id!]: null,
+                                              }));
+                                            },
+                                          }
+                                        );
+                                      }}
+                                    >
+                                      <Check className="h-3 w-3" />
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7"
+                                      onClick={() =>
+                                        setEditandoMetaCli((prev) => ({
+                                          ...prev,
+                                          [m.id!]: null,
+                                        }))
+                                      }
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <span>{fmtBRL(m.meta_valor)}</span>
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <div className="flex items-center gap-1">
+                                  {!isEditing && (
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="h-7 w-7"
+                                      onClick={() =>
+                                        setEditandoMetaCli((prev) => ({
+                                          ...prev,
+                                          [m.id!]: String(m.meta_valor),
+                                        }))
+                                      }
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </Button>
+                                  )}
+                                  <Button
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-7 w-7 text-destructive hover:text-destructive"
+                                    disabled={removeMetaCliente.isPending}
+                                    onClick={() => {
+                                      if (m.id) removeMetaCliente.mutate(m.id);
+                                    }}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
@@ -1134,6 +1476,28 @@ export default function Campanhas() {
                   onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))}
                 />
               </div>
+            </div>
+
+            {/* Tipo de meta */}
+            <div className="space-y-1">
+              <Label htmlFor="camp-tipo-meta">Tipo de meta *</Label>
+              <Select
+                value={form.tipo_meta}
+                onValueChange={(v) => setForm((f) => ({ ...f, tipo_meta: v as TipoMeta }))}
+              >
+                <SelectTrigger id="camp-tipo-meta">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="vendedor">Por vendedor</SelectItem>
+                  <SelectItem value="cliente">Por cliente</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {form.tipo_meta === "cliente"
+                  ? "Você definirá metas individuais por cliente após salvar a campanha."
+                  : "Você definirá metas individuais por vendedor após salvar a campanha."}
+              </p>
             </div>
 
             {/* Níveis */}
