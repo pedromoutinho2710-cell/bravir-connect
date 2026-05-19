@@ -10,7 +10,7 @@ import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, Briefcase } from "lucide-react";
+import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, Briefcase, Gift } from "lucide-react";
 import { toast } from "sonner";
 
 type KPIs = {
@@ -53,6 +53,7 @@ type Campanha = {
   descricao: string | null;
   tipo: string | null;
   valor: number | null;
+  data_inicio: string | null;
   data_fim: string | null;
   created_at: string;
 };
@@ -189,7 +190,7 @@ export default function MeuPainel() {
       const [campRes, ltvRes, tarRes] = await Promise.all([
         supabase
           .from("campanhas")
-          .select("id, nome, descricao, tipo, valor, data_fim, created_at")
+          .select("id, nome, descricao, tipo, valor, data_inicio, data_fim, created_at")
           .eq("ativa", true)
           .or(`data_fim.is.null,data_fim.gte.${hoje}`),
         // RPC returns aggregated rows (≤10) instead of entire order history
@@ -638,6 +639,47 @@ export default function MeuPainel() {
                   </div>
                 );
               })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Benefícios para clientes — campanhas ativas formatadas para oferecer durante a ligação */}
+      {campanhas.length > 0 && (
+        <Card className="border-emerald-300">
+          <CardHeader className="flex flex-row items-center gap-2 pb-3">
+            <Gift className="h-5 w-5 text-emerald-600" />
+            <CardTitle>Benefícios para clientes</CardTitle>
+            <span className="ml-auto text-xs text-muted-foreground">o que oferecer durante a ligação</span>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {campanhas.map((c) => (
+                <div key={c.id} className="rounded-md border border-emerald-200 bg-emerald-50/40 p-3 space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm">{c.nome}</span>
+                    {c.tipo && (
+                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${TIPO_COLOR[c.tipo] ?? "bg-gray-100 text-gray-800 border-gray-300"}`}>
+                        {TIPO_LABEL[c.tipo] ?? c.tipo}
+                      </span>
+                    )}
+                  </div>
+                  {c.descricao && (
+                    <p className="text-xs text-muted-foreground">{c.descricao}</p>
+                  )}
+                  {c.valor != null && (
+                    <div className="text-xs">
+                      <span className="text-muted-foreground">Valor/prêmio: </span>
+                      <span className="font-semibold text-foreground">{c.valor}%</span>
+                    </div>
+                  )}
+                  {(c.data_inicio || c.data_fim) && (
+                    <div className="text-xs text-muted-foreground">
+                      Vigência: {c.data_inicio ? formatDate(c.data_inicio) : "—"} até {c.data_fim ? formatDate(c.data_fim) : "sem prazo"}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
