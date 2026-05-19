@@ -21,6 +21,7 @@ import Dashboard from "./pages/Dashboard";
 import Trade from "./pages/Trade";
 import TradeCampanhas from "./pages/TradeCampanhas";
 import ImportarFaturamento from "./pages/trade/ImportarFaturamento";
+import ImportarMetas from "./pages/trade/ImportarMetas";
 import FaturamentoClientesPendentes from "./pages/FaturamentoClientesPendentes";
 import FaturamentoClientes from "./pages/FaturamentoClientes";
 import FilaCadastros from "./pages/faturamento/FilaCadastros";
@@ -151,6 +152,7 @@ const App = () => (
               <Route path="/trade" element={<Trade />} />
               <Route path="/trade/campanhas" element={<TradeCampanhas />} />
               <Route path="/trade/importar-faturamento" element={<ImportarFaturamento />} />
+              <Route path="/trade/importar-metas" element={<ImportarMetas />} />
             </Route>
 
             <Route path="*" element={<NotFound />} />
