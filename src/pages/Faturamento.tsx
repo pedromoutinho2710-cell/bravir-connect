@@ -17,7 +17,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
 import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy, FileDown, Sheet } from "lucide-react";
-import * as XLSX from "xlsx";
 import ImportarPedidoDialog from "@/components/faturamento/ImportarPedidoDialog";
 import { MARCAS } from "@/lib/constants";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
@@ -1214,39 +1213,125 @@ export default function Faturamento() {
 
 
   // ── Exportar Sem Estoque ──────────────────────────────────────────
-  const exportarSemEstoqueExcel = () => {
-    const hoje = new Date().toISOString().slice(0, 10);
-    const rows: Record<string, unknown>[] = [];
+  const exportarSemEstoqueExcel = async () => {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Sem Estoque");
 
+    const hoje = new Date();
+    const hojeStr = hoje.toISOString().slice(0, 10);
+    const hojeFormatado = hoje.toLocaleDateString("pt-BR");
+
+    const cabecalho = [
+      "Data do Pedido", "Nº Pedido", "Vendedor", "Cliente", "CNPJ",
+      "Cidade/UF", "Cluster", "Cond. Pagamento", "Agendamento", "Ordem de Compra",
+      "Cód. Sankhya", "Endereço", "Produto", "Código",
+      "Cx Embarque", "Qtd Pedida", "Qtd Faturada", "Saldo",
+      "Desc. Perfil (%)", "Desc. Comercial (%)", "Desc. Trade (%)",
+      "Preço Bruto Un.", "Preço Final Un.", "Total do Item",
+      "Peso Total Pedido", "Total Geral Pedido", "Motivo",
+    ];
+
+    // Linha de título (linha 1)
+    ws.addRow([`Pedidos Sem Estoque — exportado em ${hojeFormatado}`]);
+    ws.getRow(1).font = { bold: true, size: 13, color: { argb: "FF166534" } };
+    ws.getRow(1).height = 22;
+    ws.mergeCells(1, 1, 1, cabecalho.length);
+
+    // Linha em branco (linha 2)
+    ws.addRow([]);
+
+    // Cabeçalho (linha 3)
+    ws.addRow(cabecalho);
+    const headerRow = ws.getRow(3);
+    headerRow.height = 20;
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF166534" } };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 10 };
+      cell.alignment = { vertical: "middle", horizontal: "center" };
+      cell.border = {
+        bottom: { style: "thin", color: { argb: "FF14532D" } },
+        right: { style: "thin", color: { argb: "FF14532D" } },
+      };
+    });
+
+    // Dados — uma linha por item de pedido
+    let dataRowIndex = 4;
     for (const p of pedidosFiltrados) {
-      const totalPedido = p.total;
+      const vendedor = profiles[p.vendedor_id] ?? p.vendedor_nome;
+      const cidadeUF = [p.cidade, p.uf].filter(Boolean).join("/") || "—";
+      const endereco = [p.rua, p.numero_endereco, p.bairro].filter(Boolean).join(", ") || "—";
+
       for (const item of p.itens) {
         const saldo = item.quantidade - item.qtd_faturada;
-        rows.push({
-          "Data do Pedido": formatDate(p.data_pedido),
-          "Nº Pedido": p.numero_pedido,
-          "Vendedor": profiles[p.vendedor_id] ?? p.vendedor_nome,
-          "Cliente": p.razao_social,
-          "CNPJ": p.cnpj,
-          "Cidade/UF": [p.cidade, p.uf].filter(Boolean).join("/") || "—",
-          "Cond. Pagamento": p.cond_pagamento ?? "—",
-          "Produto": item.nome,
-          "Código": item.codigo,
-          "Qtd Pedida": item.quantidade,
-          "Qtd Faturada": item.qtd_faturada,
-          "Saldo": saldo,
-          "Preço Unit. Final": item.preco_final,
-          "Total Saldo": saldo * item.preco_final,
-          "Motivo": p.motivo ?? "",
-          "Total Geral Pedido": totalPedido,
+        const isAlternate = (dataRowIndex % 2) === 0;
+
+        ws.addRow([
+          formatDate(p.data_pedido),
+          p.numero_pedido,
+          vendedor,
+          p.razao_social,
+          p.cnpj,
+          cidadeUF,
+          p.cluster ?? "—",
+          p.cond_pagamento ?? "—",
+          p.agendamento ? "Sim" : "Não",
+          p.ordem_compra ?? "—",
+          p.codigo_cliente ?? "—",
+          endereco,
+          item.nome,
+          item.codigo,
+          item.cx_embarque,
+          item.quantidade,
+          item.qtd_faturada,
+          saldo,
+          Number((item.desconto_perfil * 100).toFixed(2)),
+          Number(item.desconto_comercial.toFixed(2)),
+          Number(item.desconto_trade.toFixed(2)),
+          item.preco_bruto,
+          item.preco_final,
+          item.total,
+          p.peso_total,
+          p.total,
+          p.motivo ?? "",
+        ]);
+
+        const row = ws.getRow(dataRowIndex);
+        row.height = 16;
+        const bgColor = isAlternate ? "FFF0FDF4" : "FFFFFFFF";
+        row.eachCell({ includeEmpty: true }, (cell, colIdx) => {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bgColor } };
+          cell.font = { size: 9 };
+          cell.alignment = { vertical: "middle", horizontal: colIdx >= 15 ? "right" : "left" };
         });
+
+        dataRowIndex++;
       }
     }
 
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Sem Estoque");
-    XLSX.writeFile(wb, `pedidos-sem-estoque-${hoje}.xlsx`);
+    // Largura automática das colunas
+    ws.columns.forEach((col, idx) => {
+      const header = cabecalho[idx] ?? "";
+      let maxLen = header.length;
+      col.eachCell?.({ includeEmpty: false }, (cell) => {
+        const v = cell.value != null ? String(cell.value) : "";
+        if (v.length > maxLen) maxLen = v.length;
+      });
+      col.width = Math.min(Math.max(maxLen + 2, 10), 45);
+    });
+
+    // Congelar cabeçalho (após linha 3)
+    ws.views = [{ state: "frozen", xSplit: 0, ySplit: 3, activeCell: "A4" }];
+
+    // Gerar e baixar
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pedidos-sem-estoque-${hojeStr}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   // ── Sub-componentes ───────────────────────────────────────────────
