@@ -104,6 +104,7 @@ type RankingVendedor = {
   faturamento: number;
   numPedidos: number;
   clientesAtivos: number;
+  clientesCarteira: number;
   metaMes: number | null;
 };
 
@@ -343,6 +344,19 @@ export default function Dashboard() {
           setRankingCampanha([]);
         }
 
+        // Clientes na carteira por vendedor (status = 'ativo')
+        const clientesCarteiraPorVendedor: Record<string, number> = {};
+        {
+          const { data: clientesCarteiraData } = await supabase
+            .from("clientes")
+            .select("vendedor_id")
+            .eq("status", "ativo");
+          (clientesCarteiraData ?? []).forEach((c) => {
+            if (!c.vendedor_id) return;
+            clientesCarteiraPorVendedor[c.vendedor_id] = (clientesCarteiraPorVendedor[c.vendedor_id] ?? 0) + 1;
+          });
+        }
+
         // Ranking vendedores — todos, sem slice
         const vendedorAgg: Record<string, { faturamento: number; numPedidos: number }> = {};
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -371,6 +385,7 @@ export default function Dashboard() {
             faturamento: data.faturamento,
             numPedidos: data.numPedidos,
             clientesAtivos: clientesAtivosPorVendedor[vendedor_id]?.size ?? 0,
+            clientesCarteira: clientesCarteiraPorVendedor[vendedor_id] ?? 0,
             metaMes: metasPorVendedor[vendedor_id] ?? null,
           }))
           .sort((a, b) => b.faturamento - a.faturamento);
@@ -1060,6 +1075,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-3 mt-0.5">
                           <span className="text-xs text-muted-foreground">{r.numPedidos} pedido(s)</span>
                           <span className="text-xs text-muted-foreground">{r.clientesAtivos} cliente(s) ativo(s) no mês</span>
+                          <span className="text-xs text-muted-foreground">{r.clientesCarteira} cliente(s) na carteira</span>
                         </div>
                         {/* Linha 3+: meta */}
                         {r.metaMes ? (
