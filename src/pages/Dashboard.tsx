@@ -103,6 +103,8 @@ type RankingVendedor = {
   nome: string;
   faturamento: number;
   numPedidos: number;
+  clientesAtivos: number;
+  metaMes: number | null;
 };
 
 type RankingSku = {
@@ -138,6 +140,17 @@ const MARCA_CORES: Record<string, string> = {
 const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 const NIVEL_ORDEM: Record<string, number> = { "Bronze": 1, "Prata": 2, "Ouro": 3, "Diamante": 4 };
+
+const AVATAR_COLORS = [
+  "bg-green-100 text-green-800",
+  "bg-blue-100 text-blue-800",
+  "bg-purple-100 text-purple-800",
+  "bg-orange-100 text-orange-800",
+  "bg-pink-100 text-pink-800",
+  "bg-teal-100 text-teal-800",
+  "bg-yellow-100 text-yellow-800",
+  "bg-red-100 text-red-800",
+];
 
 function nivelMaior(a: string | null, b: string | null): string | null {
   if (!a && !b) return null;
@@ -230,16 +243,16 @@ export default function Dashboard() {
             .gte("data_pedido", effectiveInicio)
             .lte("data_pedido", effectiveFim)
             .not("status", "in", '("rascunho")'),
-          // Meta total da empresa do mês atual
+          // Meta total da empresa do mês atual (inclui vendedor_id para ranking individual)
           supabase
             .from("metas")
-            .select("valor_meta_reais")
+            .select("vendedor_id, valor_meta_reais")
             .eq("mes", mesAtual)
             .eq("ano", anoAtual),
-          // Faturamento do mês atual para cálculo de % da meta
+          // Faturamento do mês atual para cálculo de % da meta + clientes ativos por vendedor
           supabase
             .from("pedidos")
-            .select("id, itens_pedido(total_item)")
+            .select("id, vendedor_id, cliente_id, status, itens_pedido(total_item)")
             .gte("data_pedido", mesInicio)
             .lte("data_pedido", mesFim)
             .not("status", "in", '("rascunho","cancelado")'),
@@ -297,6 +310,21 @@ export default function Dashboard() {
         );
         setFatMesAtual(fatMes);
 
+        // Meta mensal por vendedor
+        const metasPorVendedor: Record<string, number> = {};
+        (metasRes.data ?? []).forEach((m) => {
+          if (m.vendedor_id) metasPorVendedor[m.vendedor_id] = Number(m.valor_meta_reais);
+        });
+
+        // Clientes ativos por vendedor no mês atual (excluindo devolvido)
+        const clientesAtivosPorVendedor: Record<string, Set<string>> = {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (pedidosMesRes.data ?? []).forEach((p: any) => {
+          if (!p.vendedor_id || !p.cliente_id || p.status === "devolvido") return;
+          if (!clientesAtivosPorVendedor[p.vendedor_id]) clientesAtivosPorVendedor[p.vendedor_id] = new Set();
+          clientesAtivosPorVendedor[p.vendedor_id].add(p.cliente_id);
+        });
+
         // Pipeline total para previsão
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const pipeline = (pipelineRes.data ?? []).reduce(
@@ -342,6 +370,8 @@ export default function Dashboard() {
             nome: profileMap[vendedor_id] ?? "—",
             faturamento: data.faturamento,
             numPedidos: data.numPedidos,
+            clientesAtivos: clientesAtivosPorVendedor[vendedor_id]?.size ?? 0,
+            metaMes: metasPorVendedor[vendedor_id] ?? null,
           }))
           .sort((a, b) => b.faturamento - a.faturamento);
         setRanking(rankingList);
@@ -1235,29 +1265,59 @@ export default function Dashboard() {
             {ranking.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
             ) : (
-              <div className="max-h-[500px] overflow-y-auto">
-                <div className="rounded-md border overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-10">#</TableHead>
-                        <TableHead>Nome</TableHead>
-                        <TableHead className="text-right">Faturamento</TableHead>
-                        <TableHead className="text-right">Pedidos</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {ranking.map((r, idx) => (
-                        <TableRow key={r.vendedor_id}>
-                          <TableCell className="font-bold">{idx + 1}</TableCell>
-                          <TableCell className="text-sm">{r.nome}</TableCell>
-                          <TableCell className="text-right text-sm font-medium">{formatBRL(r.faturamento)}</TableCell>
-                          <TableCell className="text-right text-sm">{r.numPedidos}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+              <div className="max-h-[600px] overflow-y-auto space-y-0 divide-y">
+                {ranking.map((r, idx) => {
+                  const pct = r.metaMes && r.metaMes > 0
+                    ? Math.min((r.faturamento / r.metaMes) * 100, 100)
+                    : 0;
+                  const metaAtingida = r.metaMes != null && r.faturamento >= r.metaMes;
+                  const barColor = pct >= 70 ? "#22c55e" : "#ef4444";
+                  const iniciais = r.nome.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
+                  const avatarColor = AVATAR_COLORS[idx % AVATAR_COLORS.length];
+                  return (
+                    <div key={r.vendedor_id} className="py-3 flex items-start gap-3">
+                      {/* Avatar */}
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avatarColor}`}>
+                        {iniciais}
+                      </div>
+                      {/* Corpo */}
+                      <div className="flex-1 min-w-0">
+                        {/* Linha 1: nome + faturamento */}
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-sm leading-tight">
+                            <span className="text-muted-foreground mr-1.5">{idx + 1}.</span>
+                            {r.nome}
+                          </span>
+                          <span className="text-sm font-bold text-green-700 shrink-0">{formatBRL(r.faturamento)}</span>
+                        </div>
+                        {/* Linha 2: pedidos + clientes ativos */}
+                        <div className="flex items-center gap-3 mt-0.5">
+                          <span className="text-xs text-muted-foreground">{r.numPedidos} pedido(s)</span>
+                          <span className="text-xs text-muted-foreground">{r.clientesAtivos} cliente(s) ativo(s) no mês</span>
+                        </div>
+                        {/* Linha 3+: meta */}
+                        {r.metaMes ? (
+                          <>
+                            <div className="text-xs text-muted-foreground mt-1.5">
+                              Meta: {formatBRL(r.metaMes)} — Realizado: {formatBRL(r.faturamento)} · {pct.toFixed(1)}%
+                            </div>
+                            <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden mt-1">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{ width: `${pct}%`, backgroundColor: barColor }}
+                              />
+                            </div>
+                            {metaAtingida ? (
+                              <div className="text-xs text-green-600 font-medium mt-0.5">✓ Meta atingida!</div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <div className="text-xs text-muted-foreground mt-1">Meta não definida para este mês</div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </CardContent>

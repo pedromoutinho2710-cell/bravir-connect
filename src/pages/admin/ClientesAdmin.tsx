@@ -91,6 +91,13 @@ export default function ClientesAdmin() {
   const [filtroVendedorCarteira, setFiltroVendedorCarteira] = useState("todos");
   const [filtroUF, setFiltroUF] = useState("todas");
 
+  // Dados do mês atual por cliente
+  const [fatMesCliente, setFatMesCliente] = useState<Record<string, number>>({});
+  const [fatCampanhaCliente, setFatCampanhaCliente] = useState<Record<string, number>>({});
+  const [metaVendedorMes, setMetaVendedorMes] = useState<Record<string, number>>({});
+  const [metaCampVendedor, setMetaCampVendedor] = useState<Record<string, number>>({});
+  const [campanhaAtiva, setCampanhaAtiva] = useState<{ nome: string; marcas: Set<string> } | null>(null);
+
   // Transferir
   const [transferirCliente, setTransferirCliente] = useState<Cliente | null>(null);
   const [novoVendedorId, setNovoVendedorId] = useState("");
@@ -144,6 +151,100 @@ export default function ClientesAdmin() {
         }
       });
       setLastOrders(map);
+    }
+
+    // Dados adicionais do mês atual
+    const now = new Date();
+    const mesAtual = now.getMonth() + 1;
+    const anoAtual = now.getFullYear();
+    const pad2 = (n: number) => String(n).padStart(2, "0");
+    const mesInicio = `${anoAtual}-${pad2(mesAtual)}-01`;
+    const mesFim = new Date(anoAtual, mesAtual, 0).toISOString().slice(0, 10);
+
+    const [pedMesRes, metasMesRes, campRes] = await Promise.all([
+      supabase
+        .from("pedidos")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .select("cliente_id, vendedor_id, itens_pedido(total_item, produto:produtos(marca))" as any)
+        .gte("data_pedido", mesInicio)
+        .lte("data_pedido", mesFim)
+        .not("status", "in", '("rascunho","cancelado","devolvido")'),
+      supabase
+        .from("metas")
+        .select("vendedor_id, valor_meta_reais")
+        .eq("mes", mesAtual)
+        .eq("ano", anoAtual),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).from("campanhas").select("id, nome").eq("ativa", true).maybeSingle(),
+    ]);
+
+    // Faturamento do mês por cliente
+    const fatMesMap: Record<string, number> = {};
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((pedMesRes.data ?? []) as any[]).forEach((p: any) => {
+      if (!p.cliente_id) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
+      fatMesMap[p.cliente_id] = (fatMesMap[p.cliente_id] ?? 0) + total;
+    });
+    setFatMesCliente(fatMesMap);
+
+    // Meta mensal por vendedor
+    const metaVendMap: Record<string, number> = {};
+    (metasMesRes.data ?? []).forEach((m) => {
+      if (m.vendedor_id) metaVendMap[m.vendedor_id] = Number(m.valor_meta_reais);
+    });
+    setMetaVendedorMes(metaVendMap);
+
+    // Campanha ativa
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const campanha = (campRes as any).data ?? null;
+    if (campanha) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: campProdData } = await (supabase as any)
+        .from("campanha_produtos")
+        .select("tipo, marca")
+        .eq("campanha_id", campanha.id);
+
+      const marcasCamp = new Set<string>(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ((campProdData ?? []) as any[])
+          .filter((cp: any) => cp.tipo === "marca")
+          .map((cp: any) => cp.marca as string)
+      );
+      setCampanhaAtiva({ nome: campanha.nome, marcas: marcasCamp });
+
+      // Faturamento campanha por cliente
+      const fatCampMap: Record<string, number> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((pedMesRes.data ?? []) as any[]).forEach((p: any) => {
+        if (!p.cliente_id) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (p.itens_pedido ?? []).forEach((item: any) => {
+          const marca = item.produto?.marca as string | undefined;
+          if (marca && marcasCamp.has(marca)) {
+            fatCampMap[p.cliente_id] = (fatCampMap[p.cliente_id] ?? 0) + Number(item.total_item);
+          }
+        });
+      });
+      setFatCampanhaCliente(fatCampMap);
+
+      // Meta campanha por vendedor
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: campMetasData } = await (supabase as any)
+        .from("campanha_metas_vendedor")
+        .select("vendedor_id, meta_valor")
+        .eq("campanha_id", campanha.id);
+      const metaCampMap: Record<string, number> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ((campMetasData ?? []) as any[]).forEach((m: any) => {
+        metaCampMap[m.vendedor_id] = Number(m.meta_valor);
+      });
+      setMetaCampVendedor(metaCampMap);
+    } else {
+      setCampanhaAtiva(null);
+      setFatCampanhaCliente({});
+      setMetaCampVendedor({});
     }
   };
 
@@ -401,6 +502,7 @@ export default function ClientesAdmin() {
                     <TableHead>Tabela</TableHead>
                     <TableHead>Vendedor</TableHead>
                     <TableHead>Último Pedido</TableHead>
+                    <TableHead>Mês Atual</TableHead>
                     <TableHead>Negativado</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
@@ -436,6 +538,46 @@ export default function ClientesAdmin() {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
+                        </TableCell>
+                        <TableCell className="text-xs min-w-[160px]">
+                          {(() => {
+                            const fatMes = fatMesCliente[c.id] ?? 0;
+                            const fatCamp = fatCampanhaCliente[c.id] ?? 0;
+                            const metaVend = c.vendedor_id ? (metaVendedorMes[c.vendedor_id] ?? null) : null;
+                            const metaCamp = c.vendedor_id ? (metaCampVendedor[c.vendedor_id] ?? null) : null;
+                            if (fatMes === 0 && !metaVend && !metaCamp) return <span className="text-muted-foreground">—</span>;
+                            const pctMes = metaVend && metaVend > 0 ? Math.min((fatMes / metaVend) * 100, 100) : 0;
+                            const barColor = pctMes >= 70 ? "#22c55e" : "#ef4444";
+                            return (
+                              <div className="space-y-1">
+                                {fatMes > 0 && (
+                                  <div>
+                                    <div className="font-medium text-foreground">{formatBRL(fatMes)}</div>
+                                    <div className="text-muted-foreground">realizado no mês</div>
+                                  </div>
+                                )}
+                                {campanhaAtiva && fatCamp > 0 && (
+                                  <div className="text-muted-foreground">
+                                    {campanhaAtiva.nome}: <span className="font-medium text-foreground">{formatBRL(fatCamp)}</span>
+                                  </div>
+                                )}
+                                {metaVend && (
+                                  <div>
+                                    <div className="text-muted-foreground">Meta vendedor: {formatBRL(metaVend)}</div>
+                                    <div className="h-1 w-full rounded-full bg-muted overflow-hidden mt-0.5">
+                                      <div className="h-full rounded-full" style={{ width: `${pctMes}%`, backgroundColor: barColor }} />
+                                    </div>
+                                    <div className="text-muted-foreground">{pctMes.toFixed(0)}%{pctMes >= 100 ? " ✓" : ""}</div>
+                                  </div>
+                                )}
+                                {campanhaAtiva && metaCamp && (
+                                  <div className="text-muted-foreground">
+                                    Meta camp.: {formatBRL(metaCamp)}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </TableCell>
                         <TableCell>
                           {c.negativado ? (
