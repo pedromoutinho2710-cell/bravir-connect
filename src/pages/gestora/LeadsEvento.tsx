@@ -122,11 +122,17 @@ export default function LeadsEvento() {
     if (!dialogLead || !vendedorId) return;
     setDirecting(true);
 
+    const cnpjLead = dialogLead.cnpj?.trim();
+    const cnpjFinal =
+      cnpjLead && cnpjLead.length > 0
+        ? cnpjLead
+        : `LEAD-${dialogLead.id}`;
+
     const { data: clienteData, error: clienteError } = await supabase
       .from("clientes")
       .insert({
         razao_social: dialogLead.razao_social || dialogLead.contato_nome || "Sem nome",
-        cnpj: dialogLead.cnpj ?? "00.000.000/0000-00",
+        cnpj: cnpjFinal,
         comprador: dialogLead.contato_nome ?? null,
         telefone: dialogLead.telefone ?? null,
         email: dialogLead.email ?? null,
@@ -140,8 +146,12 @@ export default function LeadsEvento() {
       .single();
 
     if (clienteError) {
-      console.error("Erro clientes:", JSON.stringify(clienteError));
-      toast.error("Erro ao cadastrar cliente.");
+      console.error("Erro clientes:", clienteError);
+      toast.error(
+        clienteError.message?.includes("duplicate") || clienteError.code === "23505"
+          ? "Já existe um cliente com este CNPJ."
+          : `Erro ao cadastrar cliente: ${clienteError.message ?? "desconhecido"}`
+      );
       setDirecting(false);
       return;
     }
@@ -164,7 +174,8 @@ export default function LeadsEvento() {
     setDirecting(false);
 
     if (leadError) {
-      toast.error("Erro ao atualizar lead.");
+      console.error("Erro lead update:", leadError);
+      toast.error(`Erro ao atualizar lead: ${leadError.message ?? "desconhecido"}`);
       return;
     }
 
