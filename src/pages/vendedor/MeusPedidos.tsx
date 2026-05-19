@@ -507,13 +507,10 @@ export default function MeusPedidos() {
           setExcluirDevolvido(detalhesId);
           setDetalhesOpen(false);
         } : undefined}
-        onEditar={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "pendente_sankhya" && pedidos.find(p => p.id === detalhesId)?.responsavel_id === null ? () => {
+        onEditar={detalhesId ? () => {
           setDetalhesOpen(false);
           navigate("/novo-pedido", { state: { pedidoId: detalhesId, editando: true } });
         } : undefined}
-        editarBloqueadoPor={detalhesId && pedidos.find(p => p.id === detalhesId)?.status === "pendente_sankhya" && (pedidos.find(p => p.id === detalhesId)?.responsavel_id ?? null) !== null
-          ? (pedidos.find(p => p.id === detalhesId)?.responsavel_nome ?? "faturamento")
-          : undefined}
       />
 
       <AlertDialog open={!!excluirDevolvido} onOpenChange={(o) => { if (!o) setExcluirDevolvido(null); }}>

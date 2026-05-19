@@ -79,6 +79,7 @@ type PedidoDetalhe = {
   telefone: string | null;
   codigo_parceiro: string | null;
   negativado: boolean;
+  responsavel_id: string | null;
   responsavel_nome: string | null;
   itens: ItemDetalhe[];
   historico: HistoricoItem[];
@@ -96,7 +97,6 @@ type Props = {
   onCorrigir?: () => void;
   onExcluir?: () => void;
   onEditar?: () => void;
-  editarBloqueadoPor?: string | null;
 };
 
 function tempoNaEtapa(dt: string | null): { texto: string; urgente: boolean } | null {
@@ -113,7 +113,7 @@ function tempoNaEtapa(dt: string | null): { texto: string; urgente: boolean } | 
   }
 }
 
-export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir, onExcluir, onEditar, editarBloqueadoPor }: Props) {
+export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir, onExcluir, onEditar }: Props) {
   const [pedido, setPedido] = useState<PedidoDetalhe | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -258,6 +258,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
         telefone: cl?.telefone ?? null,
         codigo_parceiro: cl?.codigo_parceiro ?? null,
         negativado: cl?.negativado ?? false,
+        responsavel_id: d.responsavel_id ?? null,
         responsavel_nome: responsavelNome,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         itens: (d.itens_pedido ?? []).map((i: any) => ({
@@ -367,19 +368,18 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
                 </Button>
               )}
 
-              {pedido.status === "pendente_sankhya" && onEditar && (
+              {pedido.status === "pendente_sankhya" && pedido.responsavel_id === null && onEditar && (
                 <Button size="sm" variant="outline" onClick={onEditar}>
                   Editar pedido
                 </Button>
               )}
-              {pedido.status === "pendente_sankhya" && editarBloqueadoPor != null && (
+              {pedido.status === "pendente_sankhya" && pedido.responsavel_id !== null && (
                 <div>
                   <Button size="sm" variant="outline" disabled>
                     Editar pedido
                   </Button>
                   <div className="text-xs text-muted-foreground mt-1">
-                    Pedido já assumido por {editarBloqueadoPor ?? "faturamento"}.
-                    Para alterações, entre em contato com a equipe de faturamento.
+                    Pedido assumido por {pedido.responsavel_nome ?? "faturamento"} — edição bloqueada.
                   </div>
                 </div>
               )}
