@@ -22,6 +22,7 @@ const PAGE_SIZE = 200;
 type Cliente = {
   id: string;
   razao_social: string;
+  nome_parceiro: string | null;
   cnpj: string | null;
   email: string | null;
   telefone: string | null;
@@ -167,7 +168,7 @@ export default function ClientesGestora() {
     let query: any = supabase
       .from("clientes")
       .select(
-        "id, razao_social, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente",
+        "id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente",
         { count: "exact" }
       )
       .order("razao_social");
@@ -423,7 +424,7 @@ export default function ClientesGestora() {
                 {clientes.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell>
-                      <div className="font-medium">{c.razao_social}</div>
+                      <div className="font-medium">{c.nome_parceiro || c.razao_social}</div>
                       {c.cnpj && (
                         <div className="text-xs text-muted-foreground font-mono">{formatCNPJ(c.cnpj)}</div>
                       )}
@@ -510,7 +511,7 @@ export default function ClientesGestora() {
       <Dialog open={!!modalCliente} onOpenChange={(o) => !o && setModalCliente(null)}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Editar cliente — {modalCliente?.razao_social}</DialogTitle>
+            <DialogTitle>Editar cliente — {modalCliente?.nome_parceiro || modalCliente?.razao_social}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">

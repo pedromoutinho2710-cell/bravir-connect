@@ -146,7 +146,7 @@ export default function DashboardFaturamento() {
       .from("pedidos")
       .select(`
         id, numero_pedido, data_pedido, status, vendedor_id,
-        clientes(razao_social),
+        clientes(razao_social, nome_parceiro),
         itens_pedido(total_item)
       `)
       .neq("status", "rascunho")
@@ -163,7 +163,7 @@ export default function DashboardFaturamento() {
         status: p.status,
         vendedor_id: p.vendedor_id,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        razao_social: (p.clientes as any)?.razao_social ?? "—",
+        razao_social: (p.clientes as any)?.nome_parceiro || (p.clientes as any)?.razao_social || "—",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         total: ((p.itens_pedido ?? []) as any[]).reduce((s: number, i) => s + Number(i.total_item ?? 0), 0),
       }));

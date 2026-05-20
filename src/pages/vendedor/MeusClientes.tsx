@@ -160,7 +160,7 @@ export default function MeusClientes() {
         const cl = p.clientes;
         if (!map.has(p.cliente_id)) {
           map.set(p.cliente_id, {
-            razao_social: cl?.razao_social ?? "—",
+            razao_social: cl?.nome_parceiro || cl?.razao_social || "—",
             cnpj: cl?.cnpj ?? null,
             codigo_cliente: cl?.codigo_cliente ?? null,
             aceita_saldo: cl?.aceita_saldo ?? false,
@@ -187,7 +187,7 @@ export default function MeusClientes() {
       (carteiraRes.data ?? []).forEach((cl: any) => {
         if (map.has(cl.id)) return;
         map.set(cl.id, {
-          razao_social: cl.razao_social ?? "—",
+          razao_social: cl.nome_parceiro || cl.razao_social || "—",
           cnpj: cl.cnpj ?? null,
           codigo_cliente: cl.codigo_cliente ?? null,
           aceita_saldo: cl.aceita_saldo ?? false,

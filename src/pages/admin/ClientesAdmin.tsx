@@ -365,7 +365,7 @@ export default function ClientesAdmin() {
       .eq("id", transferirCliente.id);
     setSalvandoTransferencia(false);
     if (error) { toast.error("Erro ao transferir: " + error.message); return; }
-    toast.success(`${transferirCliente.razao_social} transferido`);
+    toast.success(`${transferirCliente.nome_parceiro || transferirCliente.razao_social} transferido`);
     setTransferirCliente(null);
     setNovoVendedorId("");
     setClientes((prev) =>
@@ -379,7 +379,7 @@ export default function ClientesAdmin() {
     const { error } = await supabase.from("clientes").delete().eq("id", excluirCliente.id);
     setExcluindo(false);
     if (error) { toast.error("Erro ao excluir: " + error.message); return; }
-    toast.success(`${excluirCliente.razao_social} excluído`);
+    toast.success(`${excluirCliente.nome_parceiro || excluirCliente.razao_social} excluído`);
     setExcluirCliente(null);
     setClientes((prev) => prev.filter((c) => c.id !== excluirCliente.id));
   };
@@ -542,7 +542,7 @@ export default function ClientesAdmin() {
                       <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${c.id}`)}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span>{c.razao_social}</span>
+                            <span>{c.nome_parceiro || c.razao_social}</span>
                             {clientesComMetaTrade.has(c.id) && (
                               <Badge className="bg-purple-100 text-purple-800 border-purple-300 text-xs">Meta trade</Badge>
                             )}
@@ -688,7 +688,7 @@ export default function ClientesAdmin() {
                       <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${c.id}`)}>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span>{c.razao_social}</span>
+                            <span>{c.nome_parceiro || c.razao_social}</span>
                             {clientesComMetaTrade.has(c.id) && (
                               <Badge className="bg-purple-100 text-purple-800 border-purple-300 text-xs">Meta trade</Badge>
                             )}
@@ -743,7 +743,7 @@ export default function ClientesAdmin() {
           <DialogHeader><DialogTitle>Transferir cliente</DialogTitle></DialogHeader>
           <div className="py-2 space-y-3">
             <p className="text-sm text-muted-foreground">
-              Transferir <strong>{transferirCliente?.razao_social}</strong> para:
+              Transferir <strong>{transferirCliente?.nome_parceiro || transferirCliente?.razao_social}</strong> para:
             </p>
             <Select value={novoVendedorId} onValueChange={setNovoVendedorId}>
               <SelectTrigger><SelectValue placeholder="Selecionar vendedor..." /></SelectTrigger>
@@ -769,7 +769,7 @@ export default function ClientesAdmin() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir cliente permanentemente?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação é irreversível. <strong>{excluirCliente?.razao_social}</strong> e todos os seus dados serão removidos do banco.
+              Esta ação é irreversível. <strong>{excluirCliente?.nome_parceiro || excluirCliente?.razao_social}</strong> e todos os seus dados serão removidos do banco.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

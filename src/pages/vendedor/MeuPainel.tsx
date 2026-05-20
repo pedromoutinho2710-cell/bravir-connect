@@ -268,7 +268,7 @@ export default function MeuPainel() {
           .maybeSingle(),
         supabase
           .from("pedidos")
-          .select("id, numero_pedido, status, data_pedido, itens_pedido(total_item), clientes(razao_social)")
+          .select("id, numero_pedido, status, data_pedido, itens_pedido(total_item), clientes(razao_social, nome_parceiro)")
           .eq("vendedor_id", user.id)
           .not("status", "in", '("rascunho")')
           .order("created_at", { ascending: false })
@@ -303,7 +303,7 @@ export default function MeuPainel() {
         supabase.rpc("vendedor_ltv_clientes", { _vendedor_id: user.id }),
         supabase
           .from("tarefas")
-          .select("id, titulo, data_vencimento, concluida, cliente_id, clientes(razao_social)")
+          .select("id, titulo, data_vencimento, concluida, cliente_id, clientes(razao_social, nome_parceiro)")
           .eq("vendedor_id", user.id)
           .eq("concluida", false)
           .or(`data_vencimento.is.null,data_vencimento.lte.${hoje}`)
@@ -336,7 +336,7 @@ export default function MeuPainel() {
             data_vencimento: t.data_vencimento,
             concluida: t.concluida,
             cliente_id: t.cliente_id,
-            cliente_nome: (t.clientes as { razao_social: string } | null)?.razao_social,
+            cliente_nome: (t.clientes as { razao_social: string; nome_parceiro: string | null } | null)?.nome_parceiro || (t.clientes as { razao_social: string; nome_parceiro: string | null } | null)?.razao_social,
           })),
         );
       }
@@ -346,7 +346,7 @@ export default function MeuPainel() {
         id: p.id,
         numero_pedido: p.numero_pedido,
         status: p.status,
-        razao_social: p.clientes?.razao_social ?? "—",
+        razao_social: p.clientes?.nome_parceiro || p.clientes?.razao_social || "—",
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         total: (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0),
         data_pedido: p.data_pedido,
@@ -396,7 +396,7 @@ export default function MeuPainel() {
       const [carteiraRes, pedidosRes] = await Promise.all([
         supabase
           .from("clientes")
-          .select("id, razao_social, cidade", { count: "exact" })
+          .select("id, razao_social, nome_parceiro, cidade", { count: "exact" })
           .eq("vendedor_id", user.id)
           .eq("status", "ativo"),
         supabase
@@ -413,7 +413,7 @@ export default function MeuPainel() {
         return;
       }
 
-      const carteira = (carteiraRes.data ?? []) as { id: string; razao_social: string; cidade: string | null }[];
+      const carteira = (carteiraRes.data ?? []) as { id: string; razao_social: string; nome_parceiro: string | null; cidade: string | null }[];
       const pedidos = (pedidosRes.data ?? []) as { cliente_id: string; data_pedido: string }[];
 
       const idsComPedido = new Set(pedidos.map((p) => p.cliente_id));
@@ -437,7 +437,7 @@ export default function MeuPainel() {
         .filter((c) => !idsComPedido.has(c.id))
         .map((c) => ({
           id: c.id,
-          razao_social: c.razao_social,
+          razao_social: c.nome_parceiro || c.razao_social,
           cidade: c.cidade,
           ultimo_pedido: ultimoPedidoMap[c.id] ?? null,
         }))

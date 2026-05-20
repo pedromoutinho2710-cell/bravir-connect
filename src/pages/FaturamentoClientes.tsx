@@ -20,6 +20,7 @@ import { Loader2, Search, Users, Pencil, Trash2, SlidersHorizontal, X, UserPlus 
 type Cliente = {
   id: string;
   razao_social: string;
+  nome_parceiro: string | null;
   nome_fantasia: string | null;
   cnpj: string | null;
   email: string | null;
@@ -126,7 +127,7 @@ export default function FaturamentoClientes() {
     const [clientesRes, roleRes, loRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, codigo_parceiro, codigo_cliente, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade")
+        .select("id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, codigo_parceiro, codigo_cliente, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade")
         .order("razao_social")
         .range(0, 9999),
       supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
@@ -290,7 +291,7 @@ export default function FaturamentoClientes() {
       await supabase.from("notificacoes").insert({
         destinatario_id: editVendedorId,
         destinatario_role: "vendedor",
-        mensagem: `Cliente ${modalCliente.razao_social} teve perfil definido: ${editPerfil} — Tabela: ${tabelaLabel(editTabela)}`,
+        mensagem: `Cliente ${modalCliente.nome_parceiro || modalCliente.razao_social} teve perfil definido: ${editPerfil} — Tabela: ${tabelaLabel(editTabela)}`,
         tipo: "perfil_definido",
         lida: false,
       });
@@ -308,7 +309,7 @@ export default function FaturamentoClientes() {
     const { error } = await supabase.from("clientes").delete().eq("id", excluirCliente.id);
     setExcluindo(false);
     if (error) { toast.error("Erro ao excluir: " + error.message); return; }
-    toast.success(`${excluirCliente.razao_social} excluído`);
+    toast.success(`${excluirCliente.nome_parceiro || excluirCliente.razao_social} excluído`);
     setExcluirCliente(null);
     setClientes((prev) => prev.filter((c) => c.id !== excluirCliente.id));
   };
@@ -494,7 +495,7 @@ export default function FaturamentoClientes() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => navigate(`/clientes/${c.id}`)}
                   >
-                    <TableCell className="font-medium">{c.razao_social}</TableCell>
+                    <TableCell className="font-medium">{c.nome_parceiro || c.razao_social}</TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       <div className="font-mono">{c.cnpj ? formatCNPJ(c.cnpj) : "—"}</div>
                       {c.codigo_parceiro && <div className="text-xs">Cód: {c.codigo_parceiro}</div>}
@@ -576,7 +577,7 @@ export default function FaturamentoClientes() {
       <Dialog open={!!modalCliente} onOpenChange={(o) => !o && setModalCliente(null)}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Editar cliente — {modalCliente?.razao_social}</DialogTitle>
+            <DialogTitle>Editar cliente — {modalCliente?.nome_parceiro || modalCliente?.razao_social}</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
@@ -740,7 +741,7 @@ export default function FaturamentoClientes() {
       <Dialog open={!!analiseCliente} onOpenChange={(o) => !o && setAnaliseCliente(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Solicitar análise de crédito — {analiseCliente?.razao_social}</DialogTitle>
+            <DialogTitle>Solicitar análise de crédito — {analiseCliente?.nome_parceiro || analiseCliente?.razao_social}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <Label>Observações</Label>
@@ -767,7 +768,7 @@ export default function FaturamentoClientes() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir cliente permanentemente?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação é irreversível. <strong>{excluirCliente?.razao_social}</strong> e todos os seus dados serão removidos do banco.
+              Esta ação é irreversível. <strong>{excluirCliente?.nome_parceiro || excluirCliente?.razao_social}</strong> e todos os seus dados serão removidos do banco.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

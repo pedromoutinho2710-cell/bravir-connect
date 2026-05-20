@@ -100,7 +100,7 @@ export default function MeusPedidos() {
         .select(`
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, motivo, responsavel_id,
-          clientes(razao_social),
+          clientes(razao_social, nome_parceiro),
           itens_pedido(total_item, produtos(marca))
         `)
         .eq("vendedor_id", user.id)
@@ -127,7 +127,7 @@ export default function MeusPedidos() {
           status_atualizado_em: p.status_atualizado_em ?? null,
           cond_pagamento: p.cond_pagamento,
           motivo: p.motivo,
-          razao_social: p.clientes?.razao_social ?? "—",
+          razao_social: p.clientes?.nome_parceiro || p.clientes?.razao_social || "—",
           marcas,
           total: itensList.reduce((s: number, i) => s + Number(i.total_item), 0),
           responsavel_id: p.responsavel_id ?? null,

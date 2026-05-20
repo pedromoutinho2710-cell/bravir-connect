@@ -35,6 +35,7 @@ type UltimoPedido = { id: string; numero_pedido: number; data_pedido: string; st
 type Sugestao = {
   id: string;
   razao_social: string;
+  nome_parceiro: string | null;
   cnpj: string;
   cidade: string | null;
   uf: string | null;
@@ -249,7 +250,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
       searchTimerRef.current = setTimeout(async () => {
         const { data } = await supabase
           .from("clientes")
-          .select("id, razao_social, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, cluster, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado, email")
+          .select("id, razao_social, nome_parceiro, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, cluster, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado, email")
           .ilike("razao_social", `%${text.trim()}%`)
           .limit(10);
         setSugestoes((data ?? []) as Sugestao[]);
@@ -319,7 +320,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
                       onMouseDown={(e) => { e.preventDefault(); selecionarSugestao(s); }}
                       className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b last:border-0"
                     >
-                      <div className="font-medium">{s.razao_social}</div>
+                      <div className="font-medium">{s.nome_parceiro || s.razao_social}</div>
                       <div className="text-xs text-muted-foreground">{formatCNPJ(s.cnpj)}</div>
                     </button>
                   ))}

@@ -34,6 +34,7 @@ type ProdutoRow = {
 type ClienteInfo = {
   id: string;
   razao_social: string;
+  nome_parceiro: string | null;
   cnpj: string;
   cluster: string;
   vendedor_id: string;
@@ -184,7 +185,7 @@ export default function ImportarPedidoDialog({
 
       const { data: clData } = await supabase
         .from("clientes")
-        .select("id, razao_social, cnpj, cluster, vendedor_id")
+        .select("id, razao_social, nome_parceiro, cnpj, cluster, vendedor_id")
         .eq("codigo_cliente", codigo_cliente)
         .maybeSingle();
 
@@ -326,7 +327,7 @@ export default function ImportarPedidoDialog({
             {/* Card cliente */}
             {cliente && (
               <div className="rounded-md border p-3 text-sm space-y-1">
-                <div className="font-semibold">{cliente.razao_social}</div>
+                <div className="font-semibold">{cliente.nome_parceiro || cliente.razao_social}</div>
                 <div className="text-muted-foreground">{formatCNPJ(cliente.cnpj)}</div>
                 <div className="flex gap-4 text-xs text-muted-foreground">
                   <span>Cluster: <span className="font-medium text-foreground">{cliente.cluster || "—"}</span></span>

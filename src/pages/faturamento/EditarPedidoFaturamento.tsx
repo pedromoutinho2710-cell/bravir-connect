@@ -75,7 +75,7 @@ export default function EditarPedidoFaturamento() {
         .select(`
           id, numero_pedido, status, tipo, cond_pagamento, observacoes, agendamento,
           cliente_id, perfil_cliente, tabela_preco,
-          clientes(razao_social, cnpj, cidade, uf, comprador, codigo_parceiro, codigo_cliente, email),
+          clientes(razao_social, nome_parceiro, cnpj, cidade, uf, comprador, codigo_parceiro, codigo_cliente, email),
           itens_pedido(
             id, produto_id, quantidade,
             preco_unitario_bruto, desconto_perfil, desconto_comercial, desconto_trade,
@@ -108,7 +108,7 @@ export default function EditarPedidoFaturamento() {
         observacoes: p.observacoes ?? "",
         agendamento: p.agendamento ?? false,
         cliente_id: p.cliente_id ?? null,
-        razao_social: cl?.razao_social ?? "—",
+        razao_social: cl?.nome_parceiro || cl?.razao_social || "—",
         cnpj: cl?.cnpj ?? "",
         cidade: cl?.cidade ?? "",
         uf: cl?.uf ?? "",

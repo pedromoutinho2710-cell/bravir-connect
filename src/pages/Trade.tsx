@@ -12,6 +12,7 @@ import { Loader2, Users } from "lucide-react";
 type ClientePendente = {
   id: string;
   razao_social: string;
+  nome_parceiro: string | null;
   cnpj: string;
   cidade: string | null;
   uf: string | null;
@@ -30,7 +31,7 @@ export default function Trade() {
     setLoading(true);
     const { data, error } = await supabase
       .from("clientes")
-      .select("id, razao_social, cnpj, cidade, uf, vendedor_id, cluster, created_at")
+      .select("id, razao_social, nome_parceiro, cnpj, cidade, uf, vendedor_id, cluster, created_at")
       .eq("status", "aguardando_trade")
       .order("created_at", { ascending: true });
     if (error) toast.error("Erro ao carregar clientes");
@@ -100,7 +101,7 @@ export default function Trade() {
             <TableBody>
               {clientes.map((c) => (
                 <TableRow key={c.id}>
-                  <TableCell className="font-medium">{c.razao_social}</TableCell>
+                  <TableCell className="font-medium">{c.nome_parceiro || c.razao_social}</TableCell>
                   <TableCell className="font-mono text-sm text-muted-foreground">
                     {formatCNPJ(c.cnpj)}
                   </TableCell>

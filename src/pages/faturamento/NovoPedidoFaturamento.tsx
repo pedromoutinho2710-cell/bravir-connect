@@ -33,7 +33,7 @@ export default function NovoPedidoFaturamento() {
   // ── Modo cliente ────────────────────────────────────────────────
   const [modoCliente, setModoCliente] = useState<"cadastrado" | "nao_cadastrado">("cadastrado");
   const [clienteBusca, setClienteBusca] = useState("");
-  const [clientesSugeridos, setClientesSugeridos] = useState<{ id: string; razao_social: string; cnpj: string }[]>([]);
+  const [clientesSugeridos, setClientesSugeridos] = useState<{ id: string; razao_social: string; nome_parceiro: string | null; cnpj: string }[]>([]);
   const [clienteId, setClienteId] = useState<string | null>(null);
 
   // Campos do cliente (preenchidos do DB ou livres)
@@ -84,7 +84,7 @@ export default function NovoPedidoFaturamento() {
     const t = setTimeout(async () => {
       const { data } = await supabase
         .from("clientes")
-        .select("id, razao_social, cnpj")
+        .select("id, razao_social, nome_parceiro, cnpj")
         .or(`razao_social.ilike.%${clienteBusca}%,cnpj.ilike.%${clienteBusca}%`)
         .limit(8);
       if (data) setClientesSugeridos(data);
@@ -93,7 +93,7 @@ export default function NovoPedidoFaturamento() {
   }, [clienteBusca, modoCliente]);
 
   // Ao selecionar cliente, busca dados completos
-  async function selecionarCliente(c: { id: string; razao_social: string; cnpj: string }) {
+  async function selecionarCliente(c: { id: string; razao_social: string; nome_parceiro: string | null; cnpj: string }) {
     const { data } = await supabase
       .from("clientes")
       .select("id, razao_social, cnpj, cluster, tabela_preco, cidade, uf, cep, comprador, email, codigo_cliente, codigo_parceiro, aceita_saldo")
@@ -294,7 +294,7 @@ export default function NovoPedidoFaturamento() {
                         <button key={c.id} type="button"
                           className="w-full px-3 py-2 text-left text-sm hover:bg-accent"
                           onClick={() => selecionarCliente(c)}>
-                          <div className="font-medium">{c.razao_social}</div>
+                          <div className="font-medium">{c.nome_parceiro || c.razao_social}</div>
                           <div className="text-xs text-muted-foreground">{c.cnpj}</div>
                         </button>
                       ))}

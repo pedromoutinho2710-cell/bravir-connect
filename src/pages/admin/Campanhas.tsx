@@ -252,10 +252,10 @@ async function fetchCampanhas(): Promise<Campanha[]> {
   if (clienteIds.length > 0) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data: cliRows } = await (supabase.from("clientes") as any)
-      .select("id, razao_social")
+      .select("id, razao_social, nome_parceiro")
       .in("id", clienteIds);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (cliRows ?? []).forEach((cl: any) => { clientesNomeMap[cl.id] = cl.razao_social ?? cl.id; });
+    (cliRows ?? []).forEach((cl: any) => { clientesNomeMap[cl.id] = cl.nome_parceiro || cl.razao_social || cl.id; });
   }
 
   const metasClienteMap: Record<string, MetaCliente[]> = {};
@@ -550,7 +550,7 @@ export default function Campanhas() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error } = await (supabase.from("clientes") as any)
-        .select("id, razao_social, cnpj")
+        .select("id, razao_social, nome_parceiro, cnpj")
         .or(`razao_social.ilike.%${busca}%,cnpj.ilike.%${busca}%`)
         .limit(10);
       if (error) throw error;
@@ -1293,11 +1293,11 @@ export default function Campanhas() {
                             disabled={c.metasCliente.some((m) => m.cliente_id === cli.id)}
                             onClick={() => {
                               setClienteSelecionado((p) => ({ ...p, [c.id]: cli }));
-                              setBuscaCliente((p) => ({ ...p, [c.id]: cli.razao_social }));
+                              setBuscaCliente((p) => ({ ...p, [c.id]: cli.nome_parceiro || cli.razao_social }));
                               setResultadosCliente((p) => ({ ...p, [c.id]: [] }));
                             }}
                           >
-                            <span className="font-medium">{cli.razao_social}</span>
+                            <span className="font-medium">{cli.nome_parceiro || cli.razao_social}</span>
                             <span className="text-muted-foreground ml-auto">{cli.cnpj}</span>
                           </button>
                         ))}

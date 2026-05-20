@@ -163,7 +163,7 @@ export default function FilaLogistica() {
       .from("pedidos")
       .select(`
         id, numero_pedido, data_pedido, status, cond_pagamento, observacoes, vendedor_id, cliente_id,
-        clientes(razao_social, cnpj, cidade, uf, email, negativado, cep, rua, numero, bairro, codigo_parceiro, codigo_cliente, comprador),
+        clientes(razao_social, nome_parceiro, cnpj, cidade, uf, email, negativado, cep, rua, numero, bairro, codigo_parceiro, codigo_cliente, comprador),
         itens_pedido(
           id, quantidade, qtd_faturada, total_item, preco_final, preco_unitario_bruto,
           produtos(nome, codigo_jiva, cx_embarque, peso_unitario)
@@ -193,7 +193,7 @@ export default function FilaLogistica() {
         observacoes: p.observacoes,
         vendedor_id: p.vendedor_id,
         cliente_id: p.cliente_id ?? null,
-        razao_social: cl?.razao_social ?? "—",
+        razao_social: cl?.nome_parceiro || cl?.razao_social || "—",
         cnpj: cl?.cnpj ?? "",
         cidade: cl?.cidade ?? null,
         uf: cl?.uf ?? null,

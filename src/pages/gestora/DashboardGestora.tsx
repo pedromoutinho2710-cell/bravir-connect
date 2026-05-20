@@ -176,7 +176,7 @@ export default function DashboardGestora() {
           .gte("data_pedido", ha90Dias)
           .not("status", "in", '("rascunho","cancelado")'),
 
-        supabase.from("clientes").select("id, razao_social"),
+        supabase.from("clientes").select("id, razao_social, nome_parceiro"),
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
@@ -262,8 +262,8 @@ export default function DashboardGestora() {
         }
       });
       const clienteNomeMap: Record<string, string> = {};
-      (clientesRes.data ?? []).forEach((c: { id: string; razao_social: string }) => {
-        clienteNomeMap[c.id] = c.razao_social;
+      (clientesRes.data ?? []).forEach((c: { id: string; razao_social: string; nome_parceiro: string | null }) => {
+        clienteNomeMap[c.id] = c.nome_parceiro || c.razao_social;
       });
       const inativos: AlertaCliente[] = Object.entries(ultimoPedidoMap)
         .filter(([, date]) => date < ha60Dias)

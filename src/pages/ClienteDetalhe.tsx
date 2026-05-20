@@ -74,6 +74,7 @@ const ATIVIDADE = {
 type ClienteInfo = {
   id: string;
   razao_social: string;
+  nome_parceiro: string | null;
   cnpj: string;
   codigo_parceiro: string | null;
   cluster: string | null;
@@ -200,7 +201,7 @@ export default function ClienteDetalhe() {
     const [cRes, pRes, profRes, roleRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, cnpj, codigo_parceiro, cluster, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade")
+        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade")
         .eq("id", id)
         .single(),
       supabase
@@ -219,6 +220,7 @@ export default function ClienteDetalhe() {
       const info: ClienteInfo = {
         id: c.id,
         razao_social: c.razao_social,
+        nome_parceiro: c.nome_parceiro ?? null,
         cnpj: c.cnpj,
         codigo_parceiro: c.codigo_parceiro,
         cluster: c.cluster,
@@ -418,7 +420,7 @@ export default function ClienteDetalhe() {
     const { error } = await supabase.from("clientes").delete().eq("id", cliente.id);
     setExcluindo(false);
     if (error) { toast.error("Erro ao excluir: " + error.message); return; }
-    toast.success(`${cliente.razao_social} excluído`);
+    toast.success(`${cliente.nome_parceiro || cliente.razao_social} excluído`);
     navigate(-1);
   };
 
@@ -432,7 +434,7 @@ export default function ClienteDetalhe() {
           destinatario_id: uid,
           destinatario_role: "admin",
           tipo: "analise_credito",
-          mensagem: `Solicitação de análise de crédito: ${cliente.razao_social}`,
+          mensagem: `Solicitação de análise de crédito: ${cliente.nome_parceiro || cliente.razao_social}`,
         }))
       );
       if (error) { toast.error("Erro ao enviar solicitação"); return; }
@@ -473,7 +475,7 @@ export default function ClienteDetalhe() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold leading-tight">{cliente.razao_social}</h1>
+              <h1 className="text-2xl font-bold leading-tight">{cliente.nome_parceiro || cliente.razao_social}</h1>
               <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${atividadeConf.cls}`}>
                 {atividadeConf.label}
               </span>
@@ -544,6 +546,7 @@ export default function ClienteDetalhe() {
         <TabsContent value="dados" className="mt-4">
           <Card>
             <CardContent className="pt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <InfoItem label="Nome Fantasia" value={cliente.nome_parceiro} />
               <InfoItem label="Razão Social" value={cliente.razao_social} />
               <InfoItem label="CNPJ" value={formatCNPJ(cliente.cnpj)} />
               {cliente.codigo_parceiro && <InfoItem label="Código Sankhya" value={cliente.codigo_parceiro} />}
@@ -790,7 +793,7 @@ export default function ClienteDetalhe() {
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir cliente permanentemente?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação é irreversível. <strong>{cliente.razao_social}</strong> e todos os seus dados serão removidos.
+              Esta ação é irreversível. <strong>{cliente.nome_parceiro || cliente.razao_social}</strong> e todos os seus dados serão removidos.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -809,7 +812,7 @@ export default function ClienteDetalhe() {
       <Dialog open={analiseOpen} onOpenChange={setAnaliseOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Solicitar análise de crédito — {cliente.razao_social}</DialogTitle>
+            <DialogTitle>Solicitar análise de crédito — {cliente.nome_parceiro || cliente.razao_social}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <Label>Observações</Label>

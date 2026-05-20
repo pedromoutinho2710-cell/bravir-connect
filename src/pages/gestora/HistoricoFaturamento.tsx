@@ -63,7 +63,7 @@ export default function HistoricoFaturamento() {
       .select(`
         id, pedido_id, status_anterior, status_novo,
         usuario_nome, usuario_email, acao, observacao, created_at,
-        pedidos(numero_pedido, clientes(razao_social, cnpj))
+        pedidos(numero_pedido, clientes(razao_social, nome_parceiro, cnpj))
       `)
       .order("created_at", { ascending: false })
       .limit(500);
@@ -73,7 +73,7 @@ export default function HistoricoFaturamento() {
       id: h.id,
       pedido_id: h.pedido_id,
       numero_pedido: h.pedidos?.numero_pedido ?? 0,
-      razao_social: h.pedidos?.clientes?.razao_social ?? "—",
+      razao_social: h.pedidos?.clientes?.nome_parceiro || h.pedidos?.clientes?.razao_social || "—",
       cnpj: h.pedidos?.clientes?.cnpj ?? null,
       status_anterior: h.status_anterior,
       status_novo: h.status_novo,

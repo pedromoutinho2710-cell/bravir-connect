@@ -76,7 +76,7 @@ export default function PedidosAdmin() {
       .from("pedidos")
       .select(`
         id, numero_pedido, tipo, data_pedido, status, vendedor_id,
-        clientes(razao_social),
+        clientes(razao_social, nome_parceiro),
         itens_pedido(total_item, produtos(marca))
       `)
       .order("created_at", { ascending: false });
@@ -102,7 +102,7 @@ export default function PedidosAdmin() {
         data_pedido: p.data_pedido,
         status: p.status,
         vendedor_id: p.vendedor_id,
-        razao_social: p.clientes?.razao_social ?? "—",
+        razao_social: p.clientes?.nome_parceiro || p.clientes?.razao_social || "—",
         total,
         marcas,
       };

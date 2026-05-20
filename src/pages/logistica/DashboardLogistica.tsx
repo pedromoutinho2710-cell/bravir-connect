@@ -54,7 +54,7 @@ export default function DashboardLogistica() {
           .from("pedidos")
           .select(`
             id, numero_pedido, data_pedido,
-            clientes(razao_social),
+            clientes(razao_social, nome_parceiro),
             itens_pedido(quantidade, total_item, produtos(peso_unitario))
           `)
           .eq("status", "faturado")
@@ -80,7 +80,7 @@ export default function DashboardLogistica() {
           id: p.id,
           numero_pedido: p.numero_pedido,
           data_pedido: p.data_pedido,
-          razao_social: p.clientes?.razao_social ?? "—",
+          razao_social: p.clientes?.nome_parceiro || p.clientes?.razao_social || "—",
           total,
           peso_total: peso,
         };

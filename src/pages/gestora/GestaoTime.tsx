@@ -56,6 +56,7 @@ type PedidoHistorico = {
 type ClienteCarteira = {
   id: string;
   razao_social: string;
+  nome_parceiro: string | null;
 };
 
 type MesData = { label: string; realizado: number; meta: number };
@@ -208,7 +209,7 @@ export default function GestaoTime() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (supabase as any)
         .from("pedidos")
-        .select("id, numero_pedido, data_pedido, status, clientes(razao_social), itens_pedido(total_item)")
+        .select("id, numero_pedido, data_pedido, status, clientes(razao_social, nome_parceiro), itens_pedido(total_item)")
         .eq("vendedor_id", v.id)
         .order("data_pedido", { ascending: false })
         .limit(10),
@@ -216,7 +217,7 @@ export default function GestaoTime() {
       // Clientes da carteira
       supabase
         .from("clientes")
-        .select("id, razao_social")
+        .select("id, razao_social, nome_parceiro")
         .eq("vendedor_id", v.id)
         .order("razao_social"),
 
@@ -276,7 +277,7 @@ export default function GestaoTime() {
         data_pedido: p.data_pedido,
         status: p.status,
         total,
-        razao_social: p.clientes?.razao_social ?? "—",
+        razao_social: p.clientes?.nome_parceiro || p.clientes?.razao_social || "—",
       };
     });
 
@@ -473,7 +474,7 @@ export default function GestaoTime() {
                       <div className="space-y-1 max-h-64 overflow-y-auto pr-1">
                         {detalhe.clientes.map((c) => (
                           <div key={c.id} className="text-sm py-1 border-b last:border-0">
-                            {c.razao_social}
+                            {c.nome_parceiro || c.razao_social}
                           </div>
                         ))}
                       </div>

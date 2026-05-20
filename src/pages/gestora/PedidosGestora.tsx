@@ -72,7 +72,7 @@ export default function PedidosGestora() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let query: any = supabase
         .from("pedidos")
-        .select("id, numero_pedido, tipo, data_pedido, status, status_atualizado_em, cond_pagamento, vendedor_id, clientes(razao_social), itens_pedido(total_item, produtos(marca))")
+        .select("id, numero_pedido, tipo, data_pedido, status, status_atualizado_em, cond_pagamento, vendedor_id, clientes(razao_social, nome_parceiro), itens_pedido(total_item, produtos(marca))")
         .order("created_at", { ascending: false });
 
       if (filtroStatus !== "todos") query = query.eq("status", filtroStatus);
@@ -93,7 +93,7 @@ export default function PedidosGestora() {
           status: p.status,
           status_atualizado_em: p.status_atualizado_em ?? null,
           cond_pagamento: p.cond_pagamento ?? null,
-          razao_social: p.clientes?.razao_social ?? "—",
+          razao_social: p.clientes?.nome_parceiro || p.clientes?.razao_social || "—",
           vendedor_id: p.vendedor_id ?? null,
           total: itensList.reduce((s: number, i) => s + Number(i.total_item), 0),
           marcas,
@@ -139,7 +139,7 @@ export default function PedidosGestora() {
         .select(`
           numero_pedido, data_pedido, agendamento, observacoes, cond_pagamento,
           perfil_cliente, tabela_preco, vendedor_id,
-          clientes(razao_social, cnpj, comprador, cidade, uf, cep),
+          clientes(razao_social, nome_parceiro, cnpj, comprador, cidade, uf, cep),
           itens_pedido(
             quantidade, total_item, preco_unitario_bruto, desconto_comercial, desconto_trade,
             preco_apos_perfil, preco_apos_comercial, preco_final,
@@ -157,7 +157,7 @@ export default function PedidosGestora() {
         numero_pedido: d.numero_pedido,
         data_pedido: d.data_pedido,
         cliente: {
-          razao_social: d.clientes?.razao_social ?? "—",
+          razao_social: d.clientes?.nome_parceiro || d.clientes?.razao_social || "—",
           cnpj: d.clientes?.cnpj ?? "—",
           comprador: d.clientes?.comprador ?? "—",
           cidade: d.clientes?.cidade ?? "—",
