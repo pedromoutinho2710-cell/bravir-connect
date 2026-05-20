@@ -112,7 +112,30 @@ export default function Solicitacoes() {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as Solicitacao[];
+      const rows = (data ?? []) as Solicitacao[];
+
+      const missingIds = Array.from(
+        new Set(
+          rows
+            .filter((r) => !r.criado_por_nome && r.criado_por)
+            .map((r) => r.criado_por as string),
+        ),
+      );
+      if (missingIds.length === 0) return rows;
+
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", missingIds);
+
+      const nameById = new Map(
+        (profiles ?? []).map((p) => [p.id, p.full_name || p.email || null]),
+      );
+      return rows.map((r) =>
+        r.criado_por_nome || !r.criado_por
+          ? r
+          : { ...r, criado_por_nome: nameById.get(r.criado_por) ?? null },
+      );
     },
     enabled: !!user,
   });
