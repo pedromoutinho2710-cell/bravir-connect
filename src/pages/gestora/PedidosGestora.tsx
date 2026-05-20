@@ -10,7 +10,17 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/format";
-import { Loader2, PlusCircle, Clock, FileDown } from "lucide-react";
+import { Loader2, PlusCircle, Clock, FileDown, RotateCcw, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 import { MARCAS } from "@/lib/constants";
@@ -55,6 +65,26 @@ export default function PedidosGestora() {
   const [detalhesId, setDetalhesId] = useState<string | null>(null);
   const [detalhesOpen, setDetalhesOpen] = useState(false);
   const [exportandoId, setExportandoId] = useState<string | null>(null);
+
+  const [excluirAlvo, setExcluirAlvo] = useState<{ id: string; numero: number } | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
+
+  const retomarRascunho = (e: React.MouseEvent, pedidoId: string) => {
+    e.stopPropagation();
+    navigate("/gestora/novo-pedido", { state: { pedidoId } });
+  };
+
+  const excluirRascunho = async () => {
+    if (!excluirAlvo) return;
+    setExcluindo(true);
+    await supabase.from("itens_pedido").delete().eq("pedido_id", excluirAlvo.id);
+    const { error } = await supabase.from("pedidos").delete().eq("id", excluirAlvo.id);
+    setExcluindo(false);
+    if (error) { toast.error("Erro ao excluir rascunho"); return; }
+    toast.success(`Rascunho #${excluirAlvo.numero} excluído`);
+    setPedidos((prev) => prev.filter((p) => p.id !== excluirAlvo.id));
+    setExcluirAlvo(null);
+  };
 
   useEffect(() => {
     (async () => {
@@ -316,7 +346,14 @@ export default function PedidosGestora() {
                 <TableRow
                   key={p.id}
                   className="cursor-pointer hover:bg-muted/50"
-                  onClick={() => { setDetalhesId(p.id); setDetalhesOpen(true); }}
+                  onClick={() => {
+                    if (p.status === "rascunho") {
+                      navigate("/gestora/novo-pedido", { state: { pedidoId: p.id } });
+                      return;
+                    }
+                    setDetalhesId(p.id);
+                    setDetalhesOpen(true);
+                  }}
                 >
                   <TableCell className="font-mono font-semibold text-sm">#{p.numero_pedido}</TableCell>
                   <TableCell className="text-sm">{formatDate(p.data_pedido)}</TableCell>
@@ -339,17 +376,38 @@ export default function PedidosGestora() {
                     ) : "—"}
                   </TableCell>
                   <TableCell>
-                    <button
-                      type="button"
-                      title="Exportar Excel"
-                      onClick={(e) => exportarPedido(e, p.id)}
-                      disabled={exportandoId === p.id}
-                      className="p-1 rounded text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
-                    >
-                      {exportandoId === p.id
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <FileDown className="h-3.5 w-3.5" />}
-                    </button>
+                    {p.status === "rascunho" ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          title="Retomar rascunho"
+                          onClick={(e) => retomarRascunho(e, p.id)}
+                          className="p-1 rounded text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors"
+                        >
+                          <RotateCcw className="h-3.5 w-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          title="Excluir rascunho"
+                          onClick={(e) => { e.stopPropagation(); setExcluirAlvo({ id: p.id, numero: p.numero_pedido }); }}
+                          className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        title="Exportar Excel"
+                        onClick={(e) => exportarPedido(e, p.id)}
+                        disabled={exportandoId === p.id}
+                        className="p-1 rounded text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+                      >
+                        {exportandoId === p.id
+                          ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          : <FileDown className="h-3.5 w-3.5" />}
+                      </button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -363,6 +421,27 @@ export default function PedidosGestora() {
         open={detalhesOpen}
         onOpenChange={setDetalhesOpen}
       />
+
+      <AlertDialog open={!!excluirAlvo} onOpenChange={(o) => { if (!o) setExcluirAlvo(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir rascunho?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o rascunho #{excluirAlvo?.numero}? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={excluirRascunho}
+              disabled={excluindo}
+            >
+              {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
