@@ -130,9 +130,12 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
   ],
   gestora_faturamento: [
     { title: "Histórico Faturamento", url: "/gestora/historico-faturamento", icon: History },
+    { title: "Novo Pedido", url: "/faturamento/novo-pedido", icon: PlusCircle },
     { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
     { title: "Clientes", url: "/faturamento/clientes", icon: Users },
     { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
+    { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
+    { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
   ],
   trade: [
     { title: "Clientes aguardando", url: "/trade", icon: Store },

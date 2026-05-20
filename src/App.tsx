@@ -89,7 +89,7 @@ const App = () => (
             </Route>
 
             {/* Solicitações de melhoria — acessíveis por todos os roles */}
-            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora"]}><AppLayout /></ProtectedRoute>}>
+            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
               <Route path="/solicitacao" element={<NovaSolicitacao />} />
             </Route>
