@@ -258,6 +258,7 @@ export default function Faturamento() {
   const [abaAtiva, setAbaAtiva] = useState("em_aberto");
   const [filtroStatusAba, setFiltroStatusAba] = useState("todos");
   const [filtroNumeroGlobal, setFiltroNumeroGlobal] = useState("");
+  const [filtroClienteGlobal, setFiltroClienteGlobal] = useState("");
   const [filtroVendedorGlobal, setFiltroVendedorGlobal] = useState("todos");
   const iniciMes = useMemo(() => {
     const d = new Date();
@@ -568,6 +569,11 @@ export default function Faturamento() {
       if (!isNaN(num)) lista = lista.filter((p) => p.numero_pedido === num);
     }
 
+    if (filtroClienteGlobal.trim()) {
+      const q = filtroClienteGlobal.trim().toLowerCase();
+      lista = lista.filter((p) => (p.razao_social ?? "").toLowerCase().includes(q));
+    }
+
     if (filtroVendedorGlobal !== "todos") {
       lista = lista.filter((p) => p.vendedor_id === filtroVendedorGlobal);
     }
@@ -592,7 +598,7 @@ export default function Faturamento() {
     return lista.sort((a, b) =>
       new Date(b.data_pedido).getTime() - new Date(a.data_pedido).getTime()
     );
-  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim, filtroStatusAba]);
+  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroClienteGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim, filtroStatusAba]);
 
   // ── Ações ─────────────────────────────────────────────────────────
   const atualizar = async (id: string, updates: Record<string, unknown>): Promise<boolean> => {
@@ -1558,6 +1564,13 @@ export default function Faturamento() {
               placeholder="Nº do pedido"
               className="w-36"
             />
+            <Input
+              type="text"
+              value={filtroClienteGlobal}
+              onChange={(e) => setFiltroClienteGlobal(e.target.value)}
+              placeholder="Buscar cliente..."
+              className="w-56"
+            />
             <Select value={filtroVendedorGlobal} onValueChange={setFiltroVendedorGlobal}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="Vendedor" />
@@ -1589,6 +1602,7 @@ export default function Faturamento() {
               setFiltroDataInicio(iniciMes);
               setFiltroDataFim("");
               setFiltroNumeroGlobal("");
+              setFiltroClienteGlobal("");
               setFiltroVendedorGlobal("todos");
               setFiltroStatusAba("todos");
             }}>
