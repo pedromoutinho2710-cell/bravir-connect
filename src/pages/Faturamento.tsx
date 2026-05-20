@@ -1638,6 +1638,13 @@ export default function Faturamento() {
                               <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
                               <StatusBadge status={p.status} />
                             </div>
+                            {p.tipo === "Bonificação" && (
+                              <div className="mt-0.5">
+                                <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 text-amber-800 font-medium" style={{ fontSize: "10px", padding: "1px 6px", borderRadius: 999 }}>
+                                  Bonificação
+                                </span>
+                              </div>
+                            )}
                             {p.responsavel_id && (
                               <div className="text-xs text-muted-foreground">
                                 Assumido por: <span className="font-medium">{profiles[p.responsavel_id] ?? p.responsavel_nome ?? "—"}</span>
@@ -1729,6 +1736,13 @@ export default function Faturamento() {
                           onClick={() => setDetalhePedido(p)}>
                           <TableCell className="font-mono font-semibold text-sm">
                             <div>#{p.numero_pedido}</div>
+                            {p.tipo === "Bonificação" && (
+                              <div className="mt-0.5">
+                                <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 text-amber-800 font-medium" style={{ fontSize: "10px", padding: "1px 6px", borderRadius: 999 }}>
+                                  Bonificação
+                                </span>
+                              </div>
+                            )}
                             <div className="text-xs font-normal text-muted-foreground">{formatDate(p.data_pedido)}</div>
                             {p.ordem_compra && (
                               <div className="text-xs text-muted-foreground font-mono mt-1">
