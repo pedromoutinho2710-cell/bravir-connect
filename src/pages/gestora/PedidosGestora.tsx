@@ -27,6 +27,7 @@ type Pedido = {
   cond_pagamento: string | null;
   razao_social: string;
   vendedor_id: string | null;
+  criado_por_id: string | null;
   total: number;
   marcas: string[];
 };
@@ -70,9 +71,13 @@ export default function PedidosGestora() {
     setLoading(true);
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: userRes } = await supabase.auth.getUser();
+      const currentUserId = userRes.user?.id ?? null;
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let query: any = supabase
         .from("pedidos")
-        .select("id, numero_pedido, tipo, data_pedido, status, status_atualizado_em, cond_pagamento, vendedor_id, clientes(razao_social, nome_parceiro), itens_pedido(total_item, produtos(marca))")
+        .select("id, numero_pedido, tipo, data_pedido, status, status_atualizado_em, cond_pagamento, vendedor_id, criado_por_id, clientes(razao_social, nome_parceiro), itens_pedido(total_item, produtos(marca))")
         .order("created_at", { ascending: false });
 
       if (filtroStatus !== "todos") query = query.eq("status", filtroStatus);
@@ -80,8 +85,32 @@ export default function PedidosGestora() {
       const { data, error } = await query;
       if (error) { toast.error("Erro ao carregar pedidos"); return; }
 
+      // Garante que rascunhos criados pela própria gestora apareçam
+      // mesmo que o filtro principal não os retorne por algum motivo.
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let lista: Pedido[] = (data ?? []).map((p: any) => {
+      let extra: any[] = [];
+      if (currentUserId && (filtroStatus === "todos" || filtroStatus === "rascunho")) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const extraRes: any = await supabase
+          .from("pedidos")
+          .select("id, numero_pedido, tipo, data_pedido, status, status_atualizado_em, cond_pagamento, vendedor_id, criado_por_id, clientes(razao_social, nome_parceiro), itens_pedido(total_item, produtos(marca))")
+          .eq("status", "rascunho")
+          .eq("criado_por_id", currentUserId);
+        extra = extraRes.data ?? [];
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const seen = new Set<string>();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const merged: any[] = [];
+      for (const p of [...(data ?? []), ...extra]) {
+        if (seen.has(p.id)) continue;
+        seen.add(p.id);
+        merged.push(p);
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let lista: Pedido[] = merged.map((p: any) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const itensList = (p.itens_pedido ?? []) as any[];
         const marcas = [...new Set(itensList.map((i) => i.produtos?.marca).filter(Boolean))] as string[];
@@ -95,6 +124,7 @@ export default function PedidosGestora() {
           cond_pagamento: p.cond_pagamento ?? null,
           razao_social: p.clientes?.nome_parceiro || p.clientes?.razao_social || "—",
           vendedor_id: p.vendedor_id ?? null,
+          criado_por_id: p.criado_por_id ?? null,
           total: itensList.reduce((s: number, i) => s + Number(i.total_item), 0),
           marcas,
         };

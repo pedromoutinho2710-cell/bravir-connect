@@ -281,6 +281,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         .insert({
           tipo: cliente.tipo,
           vendedor_id: pedidoVendedorId,
+          criado_por_id: user.id,
           cliente_id,
           perfil_cliente: cliente.cluster,
           tabela_preco: cliente.tabela_preco,
