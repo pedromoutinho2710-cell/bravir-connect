@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Eye, Copy } from "lucide-react";
+import { Eye, Copy, Trash2 } from "lucide-react";
 import {
   Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -94,6 +94,7 @@ export default function FilaCadastros() {
   const [motivoDevolvido, setMotivoDevolvido] = useState("");
   const [saving, setSaving] = useState(false);
   const [aprovarDialog, setAprovarDialog] = useState<Cadastro | null>(null);
+  const [excluirDialog, setExcluirDialog] = useState<Cadastro | null>(null);
   const [aprovarForm, setAprovarForm] = useState({
     codigo_cliente: "",
     cluster: "",
@@ -166,7 +167,7 @@ export default function FilaCadastros() {
     try {
       const { error } = await (supabase.from("cadastros_pendentes") as any)
         .update({
-          status: "pendente_sankhya",
+          status: "aprovado",
           cluster_sugerido: form.cluster || null,
           negativado: negativadoEdit,
           vendedor_id: vendedorSelecionado,
@@ -269,6 +270,24 @@ export default function FilaCadastros() {
     }
   };
 
+  const handleExcluir = async () => {
+    if (!excluirDialog) return;
+    setSaving(true);
+    try {
+      const { error } = await (supabase.from("cadastros_pendentes") as any)
+        .delete()
+        .eq("id", excluirDialog.id);
+      if (error) throw error;
+      toast.success("Cadastro excluído.");
+      setExcluirDialog(null);
+      load();
+    } catch (err: any) {
+      toast.error(err.message ?? "Erro ao excluir.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleReprovar = async () => {
     if (!selected) return;
     setSaving(true);
@@ -343,10 +362,21 @@ export default function FilaCadastros() {
                       <Badge variant={st.variant}>{st.label}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Button size="sm" variant="outline" onClick={() => openDialog(c)}>
-                        <Eye className="h-4 w-4 mr-1" />
-                        Ver detalhes
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="outline" onClick={() => openDialog(c)}>
+                          <Eye className="h-4 w-4 mr-1" />
+                          Ver detalhes
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => setExcluirDialog(c)}
+                          title="Excluir cadastro"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -670,6 +700,30 @@ export default function FilaCadastros() {
               disabled={saving || motivoDevolvido.trim() === ""}
             >
               Confirmar devolução
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog de exclusão */}
+      <AlertDialog open={!!excluirDialog} onOpenChange={(o) => !o && setExcluirDialog(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir cadastro</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o cadastro de{" "}
+              <strong>{excluirDialog?.nome_cliente ?? excluirDialog?.razao_social ?? "este cliente"}</strong>?
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleExcluir}
+              disabled={saving}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {saving ? "Excluindo..." : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
