@@ -272,7 +272,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
       if (isGestora) updatePayload.vendedor_id = pedidoVendedorId;
       const { error } = await supabase.from("pedidos").update(updatePayload).eq("id", id);
       if (error) {
-        if (status !== "rascunho") toast.error("Erro ao atualizar: " + error.message);
+        toast.error("Erro ao atualizar: " + error.message);
         return null;
       }
     } else {
@@ -294,7 +294,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         .select("id")
         .single();
       if (error) {
-        if (status !== "rascunho") toast.error("Erro ao criar pedido: " + error.message);
+        toast.error("Erro ao criar pedido: " + error.message);
         return null;
       }
       id = data.id;
@@ -322,7 +322,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         .from("itens_pedido")
         .upsert(itemsPayload, { onConflict: "pedido_id,produto_id" });
       if (error) {
-        if (status !== "rascunho") toast.error("Erro ao salvar itens: " + error.message);
+        toast.error("Erro ao salvar itens: " + error.message);
         return null;
       }
     }
@@ -339,14 +339,9 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
       return;
     }
     setSalvandoRascunho(true);
-    if (isGestora) {
-      toast.success("Rascunho salvo!");
-      setSalvandoRascunho(false);
-    } else {
-      const id = await salvarPedido("rascunho");
-      setSalvandoRascunho(false);
-      if (id) toast.success("Rascunho salvo!");
-    }
+    const id = await salvarPedido("rascunho");
+    setSalvandoRascunho(false);
+    if (id) toast.success("Rascunho salvo!");
   };
 
   const onEnviarFaturamento = async () => {
