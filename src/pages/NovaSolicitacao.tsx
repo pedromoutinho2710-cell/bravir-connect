@@ -87,7 +87,7 @@ export default function NovaSolicitacao() {
 
     setSaving(true);
     try {
-      const { error } = await (supabase as any).from("solicitacoes_gestor").insert({
+      const payload = {
         tipo,
         tela: telaFinal,
         descricao: descricao.trim(),
@@ -96,8 +96,19 @@ export default function NovaSolicitacao() {
         status: "aberto",
         criado_por: user?.id ?? null,
         criado_por_nome: fullName ?? user?.email ?? null,
-      });
-      if (error) throw error;
+      };
+      const { error } = await (supabase as any).from("solicitacoes_gestor").insert(payload);
+      if (error) {
+        console.error("Erro Supabase ao salvar solicitação:", {
+          message: (error as any)?.message,
+          details: (error as any)?.details,
+          hint: (error as any)?.hint,
+          code: (error as any)?.code,
+          payload,
+          raw: error,
+        });
+        throw error;
+      }
 
       localStorage.removeItem(RASCUNHO_KEY);
       toast.success("Solicitação salva com sucesso!");
@@ -109,7 +120,12 @@ export default function NovaSolicitacao() {
       setPrioridade("normal");
     } catch (err) {
       console.error("Erro ao salvar solicitação:", err);
-      const msg = err instanceof Error ? err.message : "Erro ao salvar solicitação";
+      const anyErr = err as { message?: string; details?: string; hint?: string; code?: string };
+      const msg =
+        anyErr?.message ||
+        anyErr?.details ||
+        anyErr?.hint ||
+        (err instanceof Error ? err.message : "Erro ao salvar solicitação");
       toast.error(msg);
     } finally {
       setSaving(false);
