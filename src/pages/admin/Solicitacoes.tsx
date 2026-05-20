@@ -42,7 +42,7 @@ interface Solicitacao {
 }
 
 const TIPO_LABEL: Record<Solicitacao["tipo"], string> = {
-  nova: "Nova feature",
+  nova: "Sugestão de adição na plataforma",
   altera: "Alteração",
   bug: "Bug",
 };
@@ -196,7 +196,7 @@ export default function Solicitacoes() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos os tipos</SelectItem>
-            <SelectItem value="nova">Nova feature</SelectItem>
+            <SelectItem value="nova">Sugestão de adição na plataforma</SelectItem>
             <SelectItem value="altera">Alteração</SelectItem>
             <SelectItem value="bug">Bug</SelectItem>
           </SelectContent>

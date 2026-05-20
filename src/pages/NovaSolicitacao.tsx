@@ -37,7 +37,7 @@ const TIPO_CLASS: Record<Tipo, string> = {
 };
 
 const TIPO_LABEL: Record<Tipo, string> = {
-  nova: "Nova feature",
+  nova: "Sugestão de adição na plataforma",
   altera: "Alteração",
   bug: "Bug",
 };
@@ -122,8 +122,10 @@ export default function NovaSolicitacao() {
       setDescricao("");
       setMotivo("");
       setPrioridade("normal");
-    } catch {
-      toast.error("Erro ao salvar solicitação");
+    } catch (err) {
+      console.error("Erro ao salvar solicitação:", err);
+      const msg = err instanceof Error ? err.message : "Erro ao salvar solicitação";
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
