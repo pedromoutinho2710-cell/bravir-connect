@@ -915,23 +915,122 @@ export default function Faturamento() {
   const salvarProdFat = async () => {
     if (!prodFatDialog) return;
     setSalvandoProdFat(true);
-    const updates = prodFatDialog.itens.map((item) =>
-      supabase.from("itens_pedido").update({ qtd_faturada: prodFatQtds[item.id] ?? 0 } as any).eq("id", item.id)
+
+    const pedido = prodFatDialog;
+    const nowIso = new Date().toISOString();
+    const itensComFat = pedido.itens.filter((i) => (prodFatQtds[i.id] ?? 0) > 0);
+    const itensSemFat = pedido.itens.filter((i) => (prodFatQtds[i.id] ?? 0) === 0);
+
+    await Promise.all(
+      pedido.itens.map((item) =>
+        supabase
+          .from("itens_pedido")
+          .update({ qtd_faturada: prodFatQtds[item.id] ?? 0 } as any)
+          .eq("id", item.id)
+      )
     );
-    await Promise.all(updates);
-    const todosCompletos = prodFatDialog.itens.every((i) => (prodFatQtds[i.id] ?? 0) >= i.quantidade);
-    const algumParcial = prodFatDialog.itens.some((i) => (prodFatQtds[i.id] ?? 0) > 0);
-    let novoStatus = prodFatDialog.status;
-    if (todosCompletos) novoStatus = "no_sankhya";
-    else if (algumParcial) novoStatus = "parcialmente_faturado";
-    if (novoStatus !== prodFatDialog.status) {
+
+    if (itensComFat.length === 0) {
       await supabase.from("pedidos").update({
-        status: novoStatus,
-        status_atualizado_em: new Date().toISOString(),
-        ...(novoStatus === "faturado" ? { faturado_em: new Date().toISOString() } : {}),
-      }).eq("id", prodFatDialog.id);
+        status: "sem_estoque",
+        status_atualizado_em: nowIso,
+      }).eq("id", pedido.id);
+      toast.success("Pedido marcado como sem estoque");
+      setSalvandoProdFat(false);
+      setProdFatDialog(null);
+      setRefreshKey((k) => k + 1);
+      return;
     }
-    toast.success("Faturamento salvo!");
+
+    if (itensSemFat.length === 0) {
+      await supabase.from("pedidos").update({
+        status: "no_sankhya",
+        status_atualizado_em: nowIso,
+      }).eq("id", pedido.id);
+      toast.success("Faturamento salvo!");
+      setSalvandoProdFat(false);
+      setProdFatDialog(null);
+      setRefreshKey((k) => k + 1);
+      return;
+    }
+
+    const { data: origemPedido, error: errOrig } = await supabase
+      .from("pedidos")
+      .select("cliente_id, vendedor_id, cond_pagamento, tabela_preco, perfil_cliente, agendamento, observacoes, ordem_compra, tipo, vigencia_id")
+      .eq("id", pedido.id)
+      .single();
+    if (errOrig || !origemPedido) {
+      toast.error("Erro ao carregar pedido original: " + (errOrig?.message ?? ""));
+      setSalvandoProdFat(false);
+      return;
+    }
+
+    const idsSemFat = itensSemFat.map((i) => i.id);
+    const { data: itensOrigem, error: errItens } = await supabase
+      .from("itens_pedido")
+      .select("produto_id, quantidade, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_comercial, desconto_trade, total_item, bolsao")
+      .in("id", idsSemFat);
+    if (errItens || !itensOrigem) {
+      toast.error("Erro ao buscar itens originais: " + (errItens?.message ?? ""));
+      setSalvandoProdFat(false);
+      return;
+    }
+
+    const { data: novoPedido, error: errNovo } = await supabase
+      .from("pedidos")
+      .insert({
+        cliente_id: origemPedido.cliente_id,
+        vendedor_id: origemPedido.vendedor_id,
+        cond_pagamento: origemPedido.cond_pagamento,
+        tabela_preco: origemPedido.tabela_preco,
+        perfil_cliente: origemPedido.perfil_cliente,
+        agendamento: origemPedido.agendamento,
+        observacoes: origemPedido.observacoes,
+        ordem_compra: origemPedido.ordem_compra,
+        tipo: origemPedido.tipo,
+        vigencia_id: origemPedido.vigencia_id,
+        status: "sem_estoque",
+        pedido_origem_id: pedido.id,
+        status_atualizado_em: nowIso,
+      } as any)
+      .select("id")
+      .single();
+    if (errNovo || !novoPedido) {
+      toast.error("Erro ao criar pedido filho: " + (errNovo?.message ?? ""));
+      setSalvandoProdFat(false);
+      return;
+    }
+
+    const novosItensPayload = itensOrigem.map((i) => ({
+      pedido_id: novoPedido.id,
+      produto_id: i.produto_id,
+      quantidade: i.quantidade,
+      qtd_faturada: 0,
+      preco_unitario_bruto: i.preco_unitario_bruto,
+      preco_unitario_liquido: i.preco_unitario_liquido,
+      preco_apos_perfil: i.preco_apos_perfil,
+      preco_apos_comercial: i.preco_apos_comercial,
+      preco_final: i.preco_final,
+      desconto_comercial: i.desconto_comercial,
+      desconto_trade: i.desconto_trade,
+      total_item: i.total_item,
+      bolsao: i.bolsao,
+    }));
+    const { error: errInsItens } = await supabase.from("itens_pedido").insert(novosItensPayload);
+    if (errInsItens) {
+      toast.error("Erro ao inserir itens no pedido filho: " + errInsItens.message);
+      setSalvandoProdFat(false);
+      return;
+    }
+
+    await supabase.from("itens_pedido").delete().in("id", idsSemFat);
+
+    await supabase.from("pedidos").update({
+      status: "no_sankhya",
+      status_atualizado_em: nowIso,
+    }).eq("id", pedido.id);
+
+    toast.success("Pedido fracionado: itens sem estoque movidos para novo pedido");
     setSalvandoProdFat(false);
     setProdFatDialog(null);
     setRefreshKey((k) => k + 1);
