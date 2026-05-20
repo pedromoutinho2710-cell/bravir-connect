@@ -78,7 +78,7 @@ async function main() {
   for (const p of pedidos) {
     const { data: itens, error: errIt } = await supabase
       .from('itens_pedido')
-      .select('id, produto_id, quantidade, qtd_faturada, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_comercial, desconto_trade, total_item, bolsao')
+      .select('*')
       .eq('pedido_id', p.id);
 
     if (errIt) {
@@ -140,22 +140,11 @@ async function main() {
       continue;
     }
 
-    // 2. Insere itens no novo pedido (quantidade original, qtd_faturada = 0)
-    const novosItensPayload = itensSemFat.map((i) => ({
-      pedido_id: novoPedido.id,
-      produto_id: i.produto_id,
-      quantidade: i.quantidade,
-      qtd_faturada: 0,
-      preco_unitario_bruto: i.preco_unitario_bruto,
-      preco_unitario_liquido: i.preco_unitario_liquido,
-      preco_apos_perfil: i.preco_apos_perfil,
-      preco_apos_comercial: i.preco_apos_comercial,
-      preco_final: i.preco_final,
-      desconto_comercial: i.desconto_comercial,
-      desconto_trade: i.desconto_trade,
-      total_item: i.total_item,
-      bolsao: i.bolsao,
-    }));
+    // 2. Insere itens no novo pedido (clona tudo menos id/pedido_id)
+    const novosItensPayload = itensSemFat.map((i) => {
+      const { id: _id, pedido_id: _pid, ...rest } = i;
+      return { ...rest, pedido_id: novoPedido.id, qtd_faturada: 0 };
+    });
 
     const { error: errInsItens } = await supabase
       .from('itens_pedido')
