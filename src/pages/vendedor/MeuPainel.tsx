@@ -164,7 +164,9 @@ export default function MeuPainel() {
   const [campanhaAtiva, setCampanhaAtiva] = useState<CampanhaAtiva | null>(null);
   const [campanhaMarcas, setCampanhaMarcas] = useState<string[]>([]);
   const [campanhaEntrada, setCampanhaEntrada] = useState(0);
+  const [campanhaEntradaPorMarca, setCampanhaEntradaPorMarca] = useState<Record<string, number>>({});
   const [campanhaMetaVendedor, setCampanhaMetaVendedor] = useState<number | null>(null);
+  const [faturadoMesAtual, setFaturadoMesAtual] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -180,6 +182,7 @@ export default function MeuPainel() {
         setCampanhaAtiva(null);
         setCampanhaMarcas([]);
         setCampanhaEntrada(0);
+        setCampanhaEntradaPorMarca({});
         setCampanhaMetaVendedor(null);
         return;
       }
@@ -213,6 +216,7 @@ export default function MeuPainel() {
         .not("status", "in", '("rascunho","cancelado")');
 
       let entrada = 0;
+      const porMarca: Record<string, number> = {};
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const p of (pedidosCampData ?? []) as any[]) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -220,11 +224,15 @@ export default function MeuPainel() {
           const marca = it.produtos?.marca as string | undefined;
           const prodId = it.produto_id as string | undefined;
           if ((marca && marcasSet.has(marca)) || (prodId && produtosSet.has(prodId))) {
-            entrada += Number(it.total_item ?? 0);
+            const valor = Number(it.total_item ?? 0);
+            entrada += valor;
+            const chaveMarca = marca ?? "Outros";
+            porMarca[chaveMarca] = (porMarca[chaveMarca] ?? 0) + valor;
           }
         }
       }
       setCampanhaEntrada(entrada);
+      setCampanhaEntradaPorMarca(porMarca);
 
       // Meta individual do vendedor na campanha
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -374,13 +382,25 @@ export default function MeuPainel() {
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const pedidos = (data ?? []) as any[];
+        // "A faturar" = pedidos que ainda NÃO entraram no Sankhya.
+        // Exclui status já tratados: no_sankhya, faturado, parcialmente_faturado,
+        // sem_estoque, devolvido, cancelado (rascunho/cancelado já filtrados na query).
+        const STATUS_FORA_A_FATURAR = new Set([
+          "no_sankhya",
+          "faturado",
+          "parcialmente_faturado",
+          "sem_estoque",
+          "devolvido",
+          "cancelado",
+          "rascunho",
+        ]);
         let entrada = 0, faturado = 0, aFaturar = 0;
         for (const p of pedidos) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
           entrada += total;
           if (p.status === "faturado" || p.status === "parcialmente_faturado") faturado += total;
-          else if (p.status === "no_sankhya" || p.status === "sem_estoque") aFaturar += total;
+          if (!STATUS_FORA_A_FATURAR.has(p.status)) aFaturar += total;
         }
         setPeriodTotais({ entrada, faturado, aFaturar });
       }
@@ -388,6 +408,32 @@ export default function MeuPainel() {
     })();
     return () => { cancelado = true; };
   }, [user, periodo]);
+
+  // Faturado do mês — vem da tabela faturamentos_externos (importada pelo trade).
+  // Soma valores onde vendedor_id = logado e faturado_em dentro do mês atual.
+  useEffect(() => {
+    if (!user) return;
+    let cancelado = false;
+    (async () => {
+      const agora = new Date();
+      const mesInicio = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-01`;
+      const mesFim = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
+      const { data, error } = await supabase
+        .from("faturamentos_externos")
+        .select("valor")
+        .eq("vendedor_id", user.id)
+        .gte("faturado_em", mesInicio)
+        .lte("faturado_em", mesFim);
+      if (cancelado) return;
+      if (error) {
+        setFaturadoMesAtual(0);
+        return;
+      }
+      const total = (data ?? []).reduce((s, r) => s + Number(r.valor ?? 0), 0);
+      setFaturadoMesAtual(total);
+    })();
+    return () => { cancelado = true; };
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -535,13 +581,12 @@ export default function MeuPainel() {
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">Faturado</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">Faturado (mês)</CardTitle>
               <CheckCheck className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-green-700">
-                {loadingPeriodo ? <Loader2 className="h-5 w-5 animate-spin" /> : formatBRL(periodTotais.faturado)}
-              </div>
+              <div className="text-2xl font-bold text-green-700">{formatBRL(faturadoMesAtual)}</div>
+              <p className="text-xs text-muted-foreground mt-1">faturamentos do mês atual</p>
             </CardContent>
           </Card>
           <Card>
@@ -818,6 +863,35 @@ export default function MeuPainel() {
                   </div>
                 )}
               </div>
+
+              {Object.keys(campanhaEntradaPorMarca).length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-xs font-medium text-muted-foreground">Entrada por marca</div>
+                  <div className="grid gap-1.5 sm:grid-cols-2">
+                    {Object.entries(campanhaEntradaPorMarca)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([marca, valor]) => {
+                        const pctMarca = campanhaEntrada > 0 ? (valor / campanhaEntrada) * 100 : 0;
+                        return (
+                          <div key={marca} className="flex items-center gap-2 text-xs">
+                            <span
+                              className="shrink-0"
+                              style={{
+                                width: 10,
+                                height: 10,
+                                borderRadius: 2,
+                                backgroundColor: MARCA_CORES[marca] ?? "#888780",
+                              }}
+                            />
+                            <span className="flex-1 truncate">{marca}</span>
+                            <span className="text-muted-foreground tabular-nums">{pctMarca.toFixed(1)}%</span>
+                            <span className="font-medium tabular-nums">{formatBRL(valor)}</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         );
