@@ -968,7 +968,7 @@ export default function Faturamento() {
     const idsSemFat = itensSemFat.map((i) => i.id);
     const { data: itensOrigem, error: errItens } = await supabase
       .from("itens_pedido")
-      .select("produto_id, quantidade, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_comercial, desconto_trade, total_item, bolsao")
+      .select("produto_id, quantidade, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_comercial, desconto_trade, total_item")
       .in("id", idsSemFat);
     if (errItens || !itensOrigem) {
       toast.error("Erro ao buscar itens originais: " + (errItens?.message ?? ""));
@@ -1014,7 +1014,6 @@ export default function Faturamento() {
       desconto_comercial: i.desconto_comercial,
       desconto_trade: i.desconto_trade,
       total_item: i.total_item,
-      bolsao: i.bolsao,
     }));
     const { error: errInsItens } = await supabase.from("itens_pedido").insert(novosItensPayload);
     if (errInsItens) {
