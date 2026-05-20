@@ -556,6 +556,7 @@ export type Database = {
           cliente_id: string
           cond_pagamento: string | null
           created_at: string
+          criado_por_id: string | null
           data_pedido: string
           faturado_em: string | null
           id: string
@@ -579,6 +580,7 @@ export type Database = {
           cliente_id: string
           cond_pagamento?: string | null
           created_at?: string
+          criado_por_id?: string | null
           data_pedido?: string
           faturado_em?: string | null
           id?: string
@@ -602,6 +604,7 @@ export type Database = {
           cliente_id?: string
           cond_pagamento?: string | null
           created_at?: string
+          criado_por_id?: string | null
           data_pedido?: string
           faturado_em?: string | null
           id?: string
