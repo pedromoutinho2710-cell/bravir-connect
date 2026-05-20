@@ -56,10 +56,12 @@ const nowIso = () => new Date().toISOString();
 async function main() {
   console.log(`Modo: ${APPLY ? 'APPLY (executa alterações)' : 'DRY-RUN (apenas loga)'}`);
 
+  const STATUS_IGNORADOS = ['sem_estoque', 'faturado', 'devolvido', 'cancelado', 'rascunho'];
+
   const { data: pedidos, error } = await supabase
     .from('pedidos')
     .select('id, numero_pedido, cliente_id, vendedor_id, cond_pagamento, tabela_preco, perfil_cliente, agendamento, observacoes, ordem_compra, tipo, vigencia_id, status, pedido_origem_id')
-    .eq('status', 'no_sankhya')
+    .not('status', 'in', `(${STATUS_IGNORADOS.join(',')})`)
     .is('pedido_origem_id', null);
 
   if (error) {
@@ -67,7 +69,7 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Pedidos no_sankhya sem pedido_origem_id encontrados: ${pedidos.length}`);
+  console.log(`Pedidos elegíveis (sem pedido_origem_id, status fora de [${STATUS_IGNORADOS.join(', ')}]): ${pedidos.length}`);
 
   let fracionados = 0;
   let semItensZerados = 0;
@@ -106,7 +108,7 @@ async function main() {
       continue;
     }
 
-    console.log(`  Pedido #${p.numero_pedido} (${p.id}): MISTO — ${itensComFat.length} com faturamento, ${itensSemFat.length} a fracionar`);
+    console.log(`  Pedido #${p.numero_pedido} (${p.id}) [${p.status}]: MISTO — ${itensComFat.length} com faturamento, ${itensSemFat.length} a fracionar`);
 
     if (!APPLY) {
       fracionados++;
