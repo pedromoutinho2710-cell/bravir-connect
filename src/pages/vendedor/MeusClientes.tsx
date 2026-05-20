@@ -15,7 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
 import { MARCAS } from "@/lib/constants";
-import { Loader2, Search, CalendarClock, CheckCircle2, Plus, UserMinus } from "lucide-react";
+import { Loader2, Search, CalendarClock, CheckCircle2, Plus, UserMinus, ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
@@ -332,6 +332,33 @@ export default function MeusClientes() {
     setClientes((prev) => prev.filter((c) => c.cliente_id !== removerCliente.cliente_id));
   };
 
+  const novoPedidoParaCliente = async (clienteId: string) => {
+    const { data, error } = await supabase
+      .from("clientes")
+      .select("id, cnpj, razao_social, cidade, uf, cep, comprador, cluster, tabela_preco")
+      .eq("id", clienteId)
+      .single();
+    if (error || !data) {
+      toast.error("Erro ao carregar dados do cliente");
+      return;
+    }
+    navigate("/novo-pedido", {
+      state: {
+        fromCliente: {
+          cliente_id: data.id,
+          cnpj: data.cnpj,
+          razao_social: data.razao_social,
+          cidade: data.cidade,
+          uf: data.uf,
+          cep: data.cep,
+          comprador: data.comprador,
+          cluster: data.cluster,
+          tabela_preco: data.tabela_preco,
+        },
+      },
+    });
+  };
+
   const clientesFiltrados = useMemo(() => {
     const filtrados = busca.trim()
       ? clientes.filter((c) => {
@@ -447,7 +474,23 @@ export default function MeusClientes() {
                       >
                         <TableCell className="font-mono text-muted-foreground text-sm">{c.rank}</TableCell>
                         <TableCell>{abcBadge(c.abc)}</TableCell>
-                        <TableCell className="font-medium">{c.razao_social}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate">{c.razao_social}</span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-primary hover:bg-primary/10 shrink-0"
+                              title="Novo pedido para este cliente"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                novoPedidoParaCliente(c.cliente_id);
+                              }}
+                            >
+                              <ShoppingCart className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
                         <TableCell>
                           {c.canal ? (
                             <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300 text-xs">
