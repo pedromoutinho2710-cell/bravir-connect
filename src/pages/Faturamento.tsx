@@ -502,6 +502,22 @@ export default function Faturamento() {
     })().finally(() => setLoading(false));
   }, [refreshKey]);
 
+  // Segundo mapeamento: quando profiles carregar depois dos pedidos,
+  // atualiza responsavel_nome e vendedor_nome já materializados em estado.
+  useEffect(() => {
+    if (Object.keys(profiles).length === 0) return;
+    setPedidos((prev) => {
+      if (prev.length === 0) return prev;
+      return prev.map((p) => ({
+        ...p,
+        vendedor_nome: profiles[p.vendedor_id] ?? p.vendedor_nome,
+        responsavel_nome: p.responsavel_id
+          ? (profiles[p.responsavel_id] ?? p.responsavel_nome)
+          : p.responsavel_nome,
+      }));
+    });
+  }, [profiles]);
+
   // Realtime
   useEffect(() => {
     const channel = supabase
