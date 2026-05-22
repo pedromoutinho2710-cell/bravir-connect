@@ -74,6 +74,7 @@ type Props = {
   vigenciaId: string;
   descontoLivre?: boolean;
   bloqueado?: boolean;
+  codigoParceiro?: string;
 };
 
 export function SecaoProdutos({
@@ -87,10 +88,12 @@ export function SecaoProdutos({
   vigenciaId,
   descontoLivre = false,
   bloqueado = false,
+  codigoParceiro = "",
 }: Props) {
   const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
   const [precos, setPrecos] = useState<Record<string, Record<string, number>>>({});
+  const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, number>>({});
 
   // Recarrega preços quando vigência muda
   useEffect(() => {
@@ -106,6 +109,20 @@ export function SecaoProdutos({
         setPrecos(map);
       });
   }, [vigenciaId]);
+
+  // Carrega preços especiais por cliente
+  useEffect(() => {
+    if (!codigoParceiro) { setPrecosEspeciais({}); return; }
+    supabase
+      .from("precos_cliente_produto")
+      .select("codigo_produto, preco_unitario")
+      .eq("codigo_parceiro", codigoParceiro)
+      .then(({ data }) => {
+        const map: Record<string, number> = {};
+        data?.forEach((p) => { map[p.codigo_produto] = Number(p.preco_unitario); });
+        setPrecosEspeciais(map);
+      });
+  }, [codigoParceiro]);
   const [filtroMarca, setFiltroMarca] = useState<string>("Todas");
 
   const calcItem = (p: Produto, qtd: number): ItemPedido => {
@@ -233,6 +250,26 @@ export function SecaoProdutos({
       const dCom = descontoLivre ? 0 : i.desconto_comercial;
       const precos_calc = calcularPrecos(bruto, dPerfil, dCom, i.desconto_trade, i.quantidade);
 
+      const produto = produtos.find((p) => p.id === i.produto_id);
+      const precoEspecial = produto?.codigo_jiva ? precosEspeciais[produto.codigo_jiva] : undefined;
+      const usarEspecial = precoEspecial !== undefined
+        && precoEspecial > bruto
+        && vigenciaId === "311fd93d-f3d1-4160-bd17-fc08472606c0";
+
+      if (usarEspecial) {
+        return {
+          ...i,
+          preco_bruto: bruto,
+          desconto_perfil: 0,
+          desconto_comercial: 0,
+          desconto_trade: 0,
+          preco_apos_perfil: precoEspecial,
+          preco_apos_comercial: precoEspecial,
+          preco_final: precoEspecial,
+          total: Math.round(precoEspecial * i.quantidade * 100) / 100,
+        };
+      }
+
       return {
         ...i,
         preco_bruto: bruto,
@@ -244,7 +281,7 @@ export function SecaoProdutos({
         total: precos_calc.total,
       };
     });
-  }, [itens, precos, descontos, tabelaPreco, perfilCliente, descontoLivre]);
+  }, [itens, precos, descontos, tabelaPreco, perfilCliente, descontoLivre, precosEspeciais]);
 
   // Sincroniza recálculo (apenas quando os números efetivamente mudam)
   useMemoEffect(itensRecalculados, itens, onChange);
