@@ -119,11 +119,12 @@ export function SecaoProdutos({
       .from("precos_cliente_produto")
       .select("codigo_produto, preco_unitario")
       .eq("codigo_parceiro", codigoParceiro)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        console.log("[DEBUG] data:", data, "error:", error);
         const map: Record<string, number> = {};
         data?.forEach((p) => { map[p.codigo_produto] = Number(p.preco_unitario); });
-        setPrecosEspeciais(map);
         console.log("[DEBUG] mapa carregado:", map);
+        setPrecosEspeciais(map);
       });
   }, [codigoParceiro]);
   const [filtroMarca, setFiltroMarca] = useState<string>("Todas");
