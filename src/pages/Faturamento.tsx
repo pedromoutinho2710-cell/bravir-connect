@@ -260,6 +260,8 @@ export default function Faturamento() {
   const [filtroNumeroGlobal, setFiltroNumeroGlobal] = useState("");
   const [filtroClienteGlobal, setFiltroClienteGlobal] = useState("");
   const [filtroVendedorGlobal, setFiltroVendedorGlobal] = useState("todos");
+  const [filtroProdutoSemEstoque, setFiltroProdutoSemEstoque] = useState("");
+  const [ordenarAlfabetico, setOrdenarAlfabetico] = useState(false);
   const iniciMes = useMemo(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
@@ -578,6 +580,17 @@ export default function Faturamento() {
       lista = lista.filter((p) => p.vendedor_id === filtroVendedorGlobal);
     }
 
+    if (abaAtiva === "sem_estoque" && filtroProdutoSemEstoque.trim()) {
+      const q = filtroProdutoSemEstoque.trim().toLowerCase();
+      lista = lista.filter((p) =>
+        p.itens.some(
+          (item) =>
+            (item.nome ?? "").toLowerCase().includes(q) ||
+            (item.codigo ?? "").toLowerCase().includes(q)
+        )
+      );
+    }
+
     if (filtroDataInicio) lista = lista.filter((p) => p.data_pedido >= filtroDataInicio);
     if (filtroDataFim) lista = lista.filter((p) => p.data_pedido <= filtroDataFim);
 
@@ -595,10 +608,16 @@ export default function Faturamento() {
       }
     }
 
+    if (ordenarAlfabetico && (abaAtiva === "em_aberto" || abaAtiva === "assumidos")) {
+      return lista.sort((a, b) =>
+        (a.razao_social ?? "").localeCompare(b.razao_social ?? "", "pt-BR", { sensitivity: "base" })
+      );
+    }
+
     return lista.sort((a, b) =>
       new Date(b.data_pedido).getTime() - new Date(a.data_pedido).getTime()
     );
-  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroClienteGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim, filtroStatusAba]);
+  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroClienteGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim, filtroStatusAba, filtroProdutoSemEstoque, ordenarAlfabetico]);
 
   // ── Ações ─────────────────────────────────────────────────────────
   const atualizar = async (id: string, updates: Record<string, unknown>): Promise<boolean> => {
@@ -1707,16 +1726,24 @@ export default function Faturamento() {
               Limpar filtros
             </Button>
             {abaAtiva === "sem_estoque" && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportarSemEstoqueExcel}
-                disabled={pedidosFiltrados.length === 0}
-                className="text-green-700 border-green-300 hover:bg-green-50"
-              >
-                <Sheet className="h-3.5 w-3.5 mr-1.5" />
-                Exportar Excel
-              </Button>
+              <>
+                <Input
+                  placeholder="Filtrar por produto..."
+                  value={filtroProdutoSemEstoque}
+                  onChange={(e) => setFiltroProdutoSemEstoque(e.target.value)}
+                  className="max-w-xs"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportarSemEstoqueExcel}
+                  disabled={pedidosFiltrados.length === 0}
+                  className="text-green-700 border-green-300 hover:bg-green-50"
+                >
+                  <Sheet className="h-3.5 w-3.5 mr-1.5" />
+                  Exportar Excel
+                </Button>
+              </>
             )}
           </div>
 
