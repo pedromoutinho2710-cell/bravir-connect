@@ -229,14 +229,14 @@ export default function Dashboard() {
       const mes = d.getMonth(); // 0-based
       const inicio = `${ano}-${pad(mes + 1)}-01`;
       const fim = new Date(ano, mes + 1, 0).toISOString().slice(0, 10);
-      return { label: MESES_ABREV[mes], inicio, fim };
+      return { label: MESES_ABREV[mes], inicio, fim, mes: mes + 1, ano };
     });
 
     (async () => {
       try {
         const { inicio: kpiInicio, fim: kpiFim } = getPeriodoCards(periodoCards, customCardInicio, customCardFim);
 
-        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, ...mensaisRes] = await Promise.all([
+        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, mensaisRes] = await Promise.all([
           // Pedidos do período — base para ranking e top SKUs
           supabase
             .from("pedidos")
@@ -275,15 +275,11 @@ export default function Dashboard() {
           // Campanha ativa
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any).from("campanhas").select("*, campanha_niveis(*)").eq("ativa", true).maybeSingle(),
-          // Faturamento mensal — últimos 6 meses
-          ...meses6.map((m) =>
-            supabase
-              .from("pedidos")
-              .select("id, itens_pedido(total_item)")
-              .eq("status", "faturado")
-              .gte("data_pedido", m.inicio)
-              .lte("data_pedido", m.fim)
-          ),
+          // Faturamento mensal — últimos 6 meses (dados reais do Sankhya)
+          supabase
+            .from("historico_faturamento")
+            .select("mes, ano, valor_total")
+            .or(meses6.map((m) => `and(mes.eq.${m.mes},ano.eq.${m.ano})`).join(",")),
         ]);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -546,16 +542,15 @@ export default function Dashboard() {
           setEntradaMarca({});
         }
 
-        // Faturamento mensal — mapear respostas com labels dos meses
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const fatMensalArr = (mensaisRes as any[]).map((res, i) => ({
-          mes: meses6[i].label,
+        // Faturamento mensal — mapear dados do historico_faturamento com labels dos meses
+        const fatMensalArr = meses6.map((m) => ({
+          mes: m.label,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          valor: ((res.data ?? []) as any[]).reduce(
+          valor: ((mensaisRes.data ?? []) as any[])
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (s: number, p: any) => s + (p.itens_pedido ?? []).reduce((si: number, ii: any) => si + Number(ii.total_item), 0),
-            0,
-          ),
+            .filter((r: any) => r.mes === m.mes && r.ano === m.ano)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .reduce((s: number, r: any) => s + Number(r.valor_total), 0),
         }));
         setFatMensal(fatMensalArr);
       } catch {
