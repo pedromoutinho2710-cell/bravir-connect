@@ -1473,23 +1473,39 @@ export default function Faturamento() {
     URL.revokeObjectURL(url);
   };
 
-  // ── Exportar SOMENTE itens de produtos indisponíveis ──────────────
+  // ── Exportar SOMENTE itens de produtos indisponíveis (formato pivot) ──
   const exportarItensSemEstoqueDisponivelExcel = async () => {
     try {
-      // Itens cujo produto está marcado como indisponível, no mesmo escopo da fila atual
-      const linhas: { numero: number; cliente: string; produto: string; qtd: number; totalPedido: number }[] = [];
+      // Um registro por pedido que possui ao menos 1 item sem estoque.
+      // qtdPorProduto = { nome do produto sem estoque -> quantidade no pedido }
+      type LinhaPivot = {
+        cliente: string;
+        numero: number;
+        totalPedido: number;
+        vendedor: string;
+        condPagamento: string;
+        qtdPorProduto: Record<string, number>;
+      };
+      const linhas: LinhaPivot[] = [];
+      const produtosSet = new Set<string>();
+
       for (const p of pedidosFiltrados) {
+        const qtdPorProduto: Record<string, number> = {};
         for (const item of p.itens) {
           if (item.disponivel === false) {
-            linhas.push({
-              numero: p.numero_pedido,
-              cliente: p.razao_social,
-              produto: item.nome,
-              qtd: item.quantidade,
-              totalPedido: p.total,
-            });
+            qtdPorProduto[item.nome] = (qtdPorProduto[item.nome] ?? 0) + item.quantidade;
+            produtosSet.add(item.nome);
           }
         }
+        if (Object.keys(qtdPorProduto).length === 0) continue;
+        linhas.push({
+          cliente: p.razao_social,
+          numero: p.numero_pedido,
+          totalPedido: p.total,
+          vendedor: p.vendedor_nome ?? "—",
+          condPagamento: p.cond_pagamento ?? "—",
+          qtdPorProduto,
+        });
       }
 
       if (linhas.length === 0) {
@@ -1497,49 +1513,77 @@ export default function Faturamento() {
         return;
       }
 
+      // Colunas de produto: alfabética pelo nome
+      const produtos = [...produtosSet].sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+      // Linhas: Cliente (A→Z), depois Pedido (asc)
+      linhas.sort((a, b) => {
+        const c = a.cliente.localeCompare(b.cliente, "pt-BR");
+        return c !== 0 ? c : a.numero - b.numero;
+      });
+
       const ExcelJS = (await import("exceljs")).default;
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Itens sem estoque");
 
       const hojeStr = new Date().toISOString().slice(0, 10);
-      const cabecalho = ["Pedido", "Cliente", "Produto", "Qtd", "Valor total do pedido"];
+      const cabecalho = [
+        "Cliente",
+        "Pedido",
+        "Valor total do pedido",
+        ...produtos,
+        "Total Geral",
+        "Vendedor",
+        "Condição de pagamento",
+      ];
+
+      // Índices 1-based de colunas com tratamento especial
+      const colValor = 3;
+      const colTotalGeral = 3 + produtos.length + 1; // após as colunas de produto
+      const colProdutoInicio = 4;
+      const colProdutoFim = 3 + produtos.length;
 
       ws.addRow(cabecalho);
       const headerRow = ws.getRow(1);
       headerRow.height = 20;
-      headerRow.eachCell((cell) => {
-        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF991B1B" } };
-        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
-        cell.alignment = { vertical: "middle", horizontal: "center" };
+      headerRow.eachCell((cell, colIdx) => {
+        if (colIdx === colTotalGeral) {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFE4E4" } };
+          cell.font = { bold: true, color: { argb: "FFC00000" }, size: 11 };
+        } else {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEFEFEF" } };
+          cell.font = { bold: true, color: { argb: "FF1F2937" }, size: 11 };
+        }
+        cell.alignment = { vertical: "middle", horizontal: "center", wrapText: true };
       });
 
-      // Agrupa por pedido: cliente e total só aparecem na primeira linha de cada grupo
       let rowIdx = 2;
-      let pedidoAnterior: number | null = null;
       for (const l of linhas) {
-        const primeiraDoGrupo = l.numero !== pedidoAnterior;
+        const totalGeral = Object.values(l.qtdPorProduto).reduce((s, q) => s + q, 0);
+        const linhaProdutos = produtos.map((nome) => l.qtdPorProduto[nome] ?? "");
         ws.addRow([
-          primeiraDoGrupo ? l.numero : "",
-          primeiraDoGrupo ? l.cliente : "",
-          l.produto,
-          l.qtd,
-          primeiraDoGrupo ? l.totalPedido : "",
+          l.cliente,
+          l.numero,
+          l.totalPedido,
+          ...linhaProdutos,
+          totalGeral,
+          l.vendedor,
+          l.condPagamento,
         ]);
         const row = ws.getRow(rowIdx);
         row.eachCell({ includeEmpty: true }, (cell, colIdx) => {
+          const numerica = colIdx >= colProdutoInicio && colIdx <= colProdutoFim;
           cell.font = { size: 10 };
-          cell.alignment = { vertical: "middle", horizontal: colIdx === 4 || colIdx === 5 ? "right" : "left" };
-        });
-        if (primeiraDoGrupo) {
-          row.getCell(5).numFmt = '"R$" #,##0.00';
-          // separador visual entre grupos
-          if (pedidoAnterior !== null) {
-            row.eachCell({ includeEmpty: true }, (cell) => {
-              cell.border = { top: { style: "thin", color: { argb: "FFE5E7EB" } } };
-            });
+          cell.alignment = {
+            vertical: "middle",
+            horizontal: colIdx === colValor || colIdx === colTotalGeral || numerica ? "right" : "left",
+          };
+          if (colIdx === colTotalGeral) {
+            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFE4E4" } };
+            cell.font = { size: 10, bold: true, color: { argb: "FFC00000" } };
           }
-        }
-        pedidoAnterior = l.numero;
+        });
+        row.getCell(colValor).numFmt = '"R$" #,##0.00';
         rowIdx++;
       }
 
