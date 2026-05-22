@@ -1505,7 +1505,7 @@ export default function Faturamento() {
           cliente: p.razao_social,
           numero: p.numero_pedido,
           totalPedido: p.total,
-          vendedor: p.vendedor_nome ?? "—",
+          vendedor: profiles[p.vendedor_id] ?? p.vendedor_nome ?? "—",
           condPagamento: p.cond_pagamento ?? "—",
           cluster: p.cluster_cliente ?? "",
           qtdPorProduto,
