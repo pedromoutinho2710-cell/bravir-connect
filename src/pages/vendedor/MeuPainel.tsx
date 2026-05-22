@@ -511,7 +511,7 @@ export default function MeuPainel() {
         if (error) throw error;
         if (!cancelado) setProdutosIndisponiveis((data ?? []) as { id: string; nome: string }[]);
       } catch {
-        if (!cancelado) toast.error("Erro ao carregar produtos indisponíveis");
+        if (!cancelado) toast.error("Erro ao carregar produtos sem estoque disponível para faturar");
       }
     })();
     return () => { cancelado = true; };
@@ -628,7 +628,7 @@ export default function MeuPainel() {
         <Card className="border-red-200">
           <CardHeader className="flex flex-row items-center gap-2 pb-3">
             <PackageX className="h-4 w-4 text-red-600" />
-            <CardTitle className="text-sm font-medium">Produtos indisponíveis</CardTitle>
+            <CardTitle className="text-sm font-medium">Produtos sem estoque disponível para faturar</CardTitle>
             <Badge variant="destructive" className="ml-auto">{produtosIndisponiveis.length}</Badge>
           </CardHeader>
           <CardContent>
@@ -656,7 +656,7 @@ export default function MeuPainel() {
       <Dialog open={modalIndispOpen} onOpenChange={setModalIndispOpen}>
         <DialogContent className="max-w-md max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Produtos indisponíveis ({produtosIndisponiveis.length})</DialogTitle>
+            <DialogTitle>Produtos sem estoque disponível para faturar ({produtosIndisponiveis.length})</DialogTitle>
           </DialogHeader>
           <ul className="overflow-y-auto space-y-1 rounded-md border p-3">
             {produtosIndisponiveis.map((p) => (
