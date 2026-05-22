@@ -608,7 +608,7 @@ export default function Faturamento() {
       }
     }
 
-    if (ordenarAlfabetico && (abaAtiva === "em_aberto" || abaAtiva === "assumidos")) {
+    if (ordenarAlfabetico) {
       return lista.sort((a, b) =>
         (a.razao_social ?? "").localeCompare(b.razao_social ?? "", "pt-BR", { sensitivity: "base" })
       );
@@ -1858,17 +1858,13 @@ export default function Faturamento() {
                       <TableRow>
                         <TableHead className="w-28"># / Data</TableHead>
                         <TableHead>
-                          {(aba.key === "em_aberto" || aba.key === "assumidos") ? (
-                            <button
-                              className="flex items-center gap-1 hover:text-foreground"
-                              onClick={() => setOrdenarAlfabetico(!ordenarAlfabetico)}
-                            >
-                              Cliente
-                              <span className="text-xs">{ordenarAlfabetico ? "▲" : "↕"}</span>
-                            </button>
-                          ) : (
-                            "Cliente"
-                          )}
+                          <button
+                            className="flex items-center gap-1 hover:text-foreground"
+                            onClick={() => setOrdenarAlfabetico(!ordenarAlfabetico)}
+                          >
+                            Cliente
+                            <span className="text-xs">{ordenarAlfabetico ? "▲" : "↕"}</span>
+                          </button>
                         </TableHead>
                         <TableHead>Vendedor</TableHead>
                         <TableHead>Marcas</TableHead>
