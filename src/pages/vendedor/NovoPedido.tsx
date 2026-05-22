@@ -223,7 +223,7 @@ export default function NovoPedido() {
         vigenciaId={vigenciaId}
         descontoLivre={descontoLivre}
         bloqueado={!camposObrigatoriosOk}
-        codigoParceiro={cliente.codigo_parceiro ?? ""}
+        codigoParceiro={cliente.codigo_cliente ?? ""}
       />
 
       <ResumoFinanceiro itens={itens} uf={cliente.uf} tabela_preco={cliente.tabela_preco} />
