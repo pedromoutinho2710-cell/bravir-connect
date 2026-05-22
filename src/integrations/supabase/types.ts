@@ -670,6 +670,7 @@ export type Database = {
           ativo: boolean
           codigo_jiva: string
           cx_embarque: number
+          disponivel: boolean
           id: string
           marca: string
           nome: string
@@ -679,6 +680,7 @@ export type Database = {
           ativo?: boolean
           codigo_jiva: string
           cx_embarque?: number
+          disponivel?: boolean
           id?: string
           marca: string
           nome: string
@@ -688,6 +690,7 @@ export type Database = {
           ativo?: boolean
           codigo_jiva?: string
           cx_embarque?: number
+          disponivel?: boolean
           id?: string
           marca?: string
           nome?: string

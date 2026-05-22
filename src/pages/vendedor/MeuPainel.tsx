@@ -10,7 +10,7 @@ import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, Briefcase, Gift, Trophy } from "lucide-react";
+import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, Briefcase, Gift, Trophy, PackageX } from "lucide-react";
 import { toast } from "sonner";
 
 type KPIs = {
@@ -167,6 +167,8 @@ export default function MeuPainel() {
   const [campanhaEntradaPorMarca, setCampanhaEntradaPorMarca] = useState<Record<string, number>>({});
   const [campanhaMetaVendedor, setCampanhaMetaVendedor] = useState<number | null>(null);
   const [faturadoMesAtual, setFaturadoMesAtual] = useState(0);
+  const [produtosIndisponiveis, setProdutosIndisponiveis] = useState<{ id: string; nome: string }[]>([]);
+  const [modalIndispOpen, setModalIndispOpen] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -497,6 +499,24 @@ export default function MeuPainel() {
     })();
   }, [user, periodo]);
 
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("produtos")
+          .select("id, nome")
+          .eq("disponivel", false)
+          .order("nome", { ascending: true });
+        if (error) throw error;
+        if (!cancelado) setProdutosIndisponiveis((data ?? []) as { id: string; nome: string }[]);
+      } catch {
+        if (!cancelado) toast.error("Erro ao carregar produtos indisponíveis");
+      }
+    })();
+    return () => { cancelado = true; };
+  }, []);
+
   const metaPct = kpis.meta > 0 ? Math.min((kpis.faturamento / kpis.meta) * 100, 100) : 0;
   const metaColor = metaPct >= 80 ? "bg-green-500" : metaPct >= 50 ? "bg-yellow-400" : "bg-red-500";
 
@@ -602,6 +622,49 @@ export default function MeuPainel() {
           </Card>
         </div>
       </div>
+
+      {/* Produtos indisponíveis — bloco discreto */}
+      {produtosIndisponiveis.length > 0 && (
+        <Card className="border-red-200">
+          <CardHeader className="flex flex-row items-center gap-2 pb-3">
+            <PackageX className="h-4 w-4 text-red-600" />
+            <CardTitle className="text-sm font-medium">Produtos indisponíveis</CardTitle>
+            <Badge variant="destructive" className="ml-auto">{produtosIndisponiveis.length}</Badge>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-1">
+              {produtosIndisponiveis.slice(0, 5).map((p) => (
+                <li key={p.id} className="text-sm text-muted-foreground truncate">
+                  {p.nome}
+                </li>
+              ))}
+            </ul>
+            {produtosIndisponiveis.length > 5 && (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 mt-2 text-xs"
+                onClick={() => setModalIndispOpen(true)}
+              >
+                ver todos ({produtosIndisponiveis.length})
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={modalIndispOpen} onOpenChange={setModalIndispOpen}>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Produtos indisponíveis ({produtosIndisponiveis.length})</DialogTitle>
+          </DialogHeader>
+          <ul className="overflow-y-auto space-y-1 rounded-md border p-3">
+            {produtosIndisponiveis.map((p) => (
+              <li key={p.id} className="text-sm">{p.nome}</li>
+            ))}
+          </ul>
+        </DialogContent>
+      </Dialog>
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

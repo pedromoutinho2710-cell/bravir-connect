@@ -26,6 +26,7 @@ import FaturamentoClientesPendentes from "./pages/FaturamentoClientesPendentes";
 import FaturamentoClientes from "./pages/FaturamentoClientes";
 import FilaCadastros from "./pages/faturamento/FilaCadastros";
 import DashboardFaturamento from "./pages/faturamento/DashboardFaturamento";
+import GestaoEstoque from "./pages/faturamento/GestaoEstoque";
 import NovoPedidoFaturamento from "./pages/faturamento/NovoPedidoFaturamento";
 import EditarPedido from "./pages/faturamento/EditarPedido";
 import EditarPedidoFaturamento from "@/pages/faturamento/EditarPedidoFaturamento";
@@ -112,6 +113,11 @@ const App = () => (
               <Route path="/faturamento/cadastros" element={<FilaCadastros />} />
               <Route path="/dashboard-faturamento" element={<DashboardFaturamento />} />
               <Route path="/faturamento/novo-pedido" element={<NovoPedidoFaturamento />} />
+            </Route>
+
+            {/* Gestão de Estoque — acessível por faturamento e admin */}
+            <Route element={<ProtectedRoute allow={["faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/faturamento/gestao-estoque" element={<GestaoEstoque />} />
             </Route>
 
             {/* Edição de pedido — acessível por faturamento e admin */}

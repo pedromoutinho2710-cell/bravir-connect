@@ -86,6 +86,7 @@ type ExcelItemRaw = {
   preco_apos_comercial: number;
   preco_final: number;
   total: number;
+  disponivel: boolean;
 };
 
 const STATUS_TERMINAL = new Set(["faturado", "devolvido", "cancelado"]);
@@ -391,7 +392,7 @@ export default function Faturamento() {
             id, produto_id, total_item, quantidade, qtd_faturada, preco_unitario_bruto, preco_unitario_liquido,
             desconto_perfil, desconto_comercial, desconto_trade,
             preco_apos_perfil, preco_apos_comercial, preco_final,
-            produtos(nome, codigo_jiva, marca, cx_embarque, peso_unitario)
+            produtos(nome, codigo_jiva, marca, cx_embarque, peso_unitario, disponivel)
           )
         `)
         .neq("status", "rascunho")
@@ -466,6 +467,7 @@ export default function Faturamento() {
             preco_apos_comercial: Number(i.preco_apos_comercial ?? i.preco_unitario_liquido ?? 0),
             preco_final: Number(i.preco_final ?? i.preco_unitario_liquido ?? 0),
             total: Number(i.total_item),
+            disponivel: i.produtos?.disponivel ?? true,
           })),
         };
       });
@@ -1471,6 +1473,101 @@ export default function Faturamento() {
     URL.revokeObjectURL(url);
   };
 
+  // ── Exportar SOMENTE itens de produtos indisponíveis ──────────────
+  const exportarItensSemEstoqueDisponivelExcel = async () => {
+    try {
+      // Itens cujo produto está marcado como indisponível, no mesmo escopo da fila atual
+      const linhas: { numero: number; cliente: string; produto: string; qtd: number; totalPedido: number }[] = [];
+      for (const p of pedidosFiltrados) {
+        for (const item of p.itens) {
+          if (item.disponivel === false) {
+            linhas.push({
+              numero: p.numero_pedido,
+              cliente: p.razao_social,
+              produto: item.nome,
+              qtd: item.quantidade,
+              totalPedido: p.total,
+            });
+          }
+        }
+      }
+
+      if (linhas.length === 0) {
+        toast.info("Nenhum item sem estoque nos pedidos atuais");
+        return;
+      }
+
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Itens sem estoque");
+
+      const hojeStr = new Date().toISOString().slice(0, 10);
+      const cabecalho = ["Pedido", "Cliente", "Produto", "Qtd", "Valor total do pedido"];
+
+      ws.addRow(cabecalho);
+      const headerRow = ws.getRow(1);
+      headerRow.height = 20;
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF991B1B" } };
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+        cell.alignment = { vertical: "middle", horizontal: "center" };
+      });
+
+      // Agrupa por pedido: cliente e total só aparecem na primeira linha de cada grupo
+      let rowIdx = 2;
+      let pedidoAnterior: number | null = null;
+      for (const l of linhas) {
+        const primeiraDoGrupo = l.numero !== pedidoAnterior;
+        ws.addRow([
+          primeiraDoGrupo ? l.numero : "",
+          primeiraDoGrupo ? l.cliente : "",
+          l.produto,
+          l.qtd,
+          primeiraDoGrupo ? l.totalPedido : "",
+        ]);
+        const row = ws.getRow(rowIdx);
+        row.eachCell({ includeEmpty: true }, (cell, colIdx) => {
+          cell.font = { size: 10 };
+          cell.alignment = { vertical: "middle", horizontal: colIdx === 4 || colIdx === 5 ? "right" : "left" };
+        });
+        if (primeiraDoGrupo) {
+          row.getCell(5).numFmt = '"R$" #,##0.00';
+          // separador visual entre grupos
+          if (pedidoAnterior !== null) {
+            row.eachCell({ includeEmpty: true }, (cell) => {
+              cell.border = { top: { style: "thin", color: { argb: "FFE5E7EB" } } };
+            });
+          }
+        }
+        pedidoAnterior = l.numero;
+        rowIdx++;
+      }
+
+      ws.columns.forEach((col, idx) => {
+        const header = cabecalho[idx] ?? "";
+        let maxLen = header.length;
+        col.eachCell?.({ includeEmpty: false }, (cell) => {
+          const v = cell.value != null ? String(cell.value) : "";
+          if (v.length > maxLen) maxLen = v.length;
+        });
+        col.width = Math.min(Math.max(maxLen + 2, 10), 50);
+      });
+
+      ws.views = [{ state: "frozen", ySplit: 1 }];
+
+      const buffer = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `itens-sem-estoque-${hojeStr}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error("Erro ao gerar planilha de itens sem estoque");
+    }
+  };
+
   // ── Sub-componentes ───────────────────────────────────────────────
   function StatusBadge({ status }: { status: string }) {
     return (
@@ -1742,6 +1839,16 @@ export default function Faturamento() {
                 >
                   <Sheet className="h-3.5 w-3.5 mr-1.5" />
                   Exportar Excel
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={exportarItensSemEstoqueDisponivelExcel}
+                  disabled={pedidosFiltrados.length === 0}
+                  className="text-red-700 border-red-300 hover:bg-red-50"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 mr-1.5" />
+                  Exportar só itens sem estoque
                 </Button>
               </>
             )}

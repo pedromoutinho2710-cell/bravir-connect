@@ -18,6 +18,7 @@ import {
   History,
   UserCheck,
   PlusSquare,
+  Boxes,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -45,6 +46,7 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Clientes", url: "/faturamento/clientes", icon: Users },
       { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
       { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
+      { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
     ],
   },
   {
@@ -97,6 +99,7 @@ export const BASE_FATURAMENTO_ITEMS: Item[] = [
   { title: "Dashboard", url: "/dashboard-faturamento", icon: LayoutDashboard },
   { title: "Clientes", url: "/faturamento/clientes", icon: Users },
   { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
+  { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
   { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
   { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
 ];
