@@ -487,6 +487,7 @@ export default function EditarPedido() {
         vigenciaId={vigenciaId}
         descontoLivre={descontoLivre}
         bloqueado={false}
+        codigoParceiro={cliente?.codigo_parceiro ?? ""}
       />
 
       <ResumoFinanceiro itens={itens} uf={cliente.uf} />
