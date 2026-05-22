@@ -257,6 +257,7 @@ export function SecaoProdutos({
       const produto = produtos.find((p) => p.id === i.produto_id);
       const precoEspecial = produto?.codigo_jiva ? precosEspeciais[produto.codigo_jiva] : undefined;
       const usarEspecial = precoEspecial !== undefined
+        && precoEspecial > precos_calc.preco_final
         && vigenciaId === "311fd93d-f3d1-4160-bd17-fc08472606c0";
 
       if (usarEspecial) {
