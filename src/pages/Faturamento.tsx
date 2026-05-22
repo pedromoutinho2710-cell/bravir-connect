@@ -1765,17 +1765,6 @@ export default function Faturamento() {
               </div>
             ) : (
               <>
-                {(aba.key === "em_aberto" || aba.key === "assumidos") && (
-                  <div className="mb-3 flex justify-end">
-                    <Button
-                      size="sm"
-                      variant={ordenarAlfabetico ? "default" : "outline"}
-                      onClick={() => setOrdenarAlfabetico(!ordenarAlfabetico)}
-                    >
-                      A-Z
-                    </Button>
-                  </div>
-                )}
                 {/* Mobile: cards */}
                 <div className="grid gap-3 md:hidden">
                   {pedidosFiltrados.map((p) => (
@@ -1868,7 +1857,19 @@ export default function Faturamento() {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-28"># / Data</TableHead>
-                        <TableHead>Cliente</TableHead>
+                        <TableHead>
+                          {(aba.key === "em_aberto" || aba.key === "assumidos") ? (
+                            <button
+                              className="flex items-center gap-1 hover:text-foreground"
+                              onClick={() => setOrdenarAlfabetico(!ordenarAlfabetico)}
+                            >
+                              Cliente
+                              <span className="text-xs">{ordenarAlfabetico ? "▲" : "↕"}</span>
+                            </button>
+                          ) : (
+                            "Cliente"
+                          )}
+                        </TableHead>
                         <TableHead>Vendedor</TableHead>
                         <TableHead>Marcas</TableHead>
                         <TableHead className="text-right">Total</TableHead>
