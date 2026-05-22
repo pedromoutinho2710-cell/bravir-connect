@@ -14,6 +14,10 @@ export const formatNum = (n: number, digits = 3) =>
   });
 
 export const formatDate = (d: Date | string) => {
+  if (typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d)) {
+    const [year, month, day] = d.split("-").map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString("pt-BR");
+  }
   const date = typeof d === "string" ? new Date(d) : d;
   return date.toLocaleDateString("pt-BR");
 };
