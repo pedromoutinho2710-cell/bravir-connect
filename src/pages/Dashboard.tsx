@@ -2,7 +2,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -12,34 +11,6 @@ import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 
 type Periodo = "hoje" | "semana" | "mes" | "ano";
-
-type PeriodoCards = "hoje" | "semana" | "mes" | "ano" | "custom";
-
-const PERIODOS_CARDS: { key: PeriodoCards; label: string }[] = [
-  { key: "hoje", label: "Hoje" },
-  { key: "semana", label: "Esta semana" },
-  { key: "mes", label: "Este mês" },
-  { key: "ano", label: "Este ano" },
-  { key: "custom", label: "Personalizado" },
-];
-
-function getPeriodoCards(key: PeriodoCards, customInicio: string, customFim: string): { inicio: string; fim: string } {
-  const hoje = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const fmt = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  if (key === "hoje") { const s = fmt(hoje); return { inicio: s, fim: s }; }
-  if (key === "semana") {
-    const dow = hoje.getDay();
-    const diff = dow === 0 ? 6 : dow - 1;
-    const seg = new Date(hoje); seg.setDate(hoje.getDate() - diff);
-    return { inicio: fmt(seg), fim: fmt(hoje) };
-  }
-  if (key === "mes") {
-    return { inicio: `${hoje.getFullYear()}-${pad(hoje.getMonth() + 1)}-01`, fim: fmt(hoje) };
-  }
-  if (key === "ano") { return { inicio: `${hoje.getFullYear()}-01-01`, fim: fmt(hoje) }; }
-  return { inicio: customInicio, fim: customFim || fmt(hoje) };
-}
 
 function getDateRange(periodo: Periodo): { dataInicio: string; dataFim: string } {
   const today = new Date();
@@ -162,9 +133,6 @@ function nivelMaior(a: string | null, b: string | null): string | null {
 
 export default function Dashboard() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
-  const [periodoCards, setPeriodoCards] = useState<PeriodoCards>("mes");
-  const [customCardInicio, setCustomCardInicio] = useState("");
-  const [customCardFim, setCustomCardFim] = useState("");
   const [loading, setLoading] = useState(true);
   const [kpis, setKpis] = useState<KPIs>({
     recebidos: 0,
@@ -232,10 +200,13 @@ export default function Dashboard() {
       return { label: MESES_ABREV[mes], inicio, fim, mes: mes + 1, ano };
     });
 
+    // Para o filtro "hoje" (mesmo dia), incluir todo o horário do dia no limite superior
+    const mesmoDia = effectiveInicio === effectiveFim;
+    const kpiInicio = effectiveInicio;
+    const kpiFim = mesmoDia ? `${effectiveFim}T23:59:59` : effectiveFim;
+
     (async () => {
       try {
-        const { inicio: kpiInicio, fim: kpiFim } = getPeriodoCards(periodoCards, customCardInicio, customCardFim);
-
         const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, mensaisRes] = await Promise.all([
           // Pedidos do período — base para ranking e top SKUs
           supabase
@@ -557,7 +528,7 @@ export default function Dashboard() {
         toast.error("Erro ao carregar dashboard");
       }
     })().finally(() => setLoading(false));
-  }, [periodo, periodoCards, customCardInicio, customCardFim, dataInicio, dataFim]);
+  }, [periodo, dataInicio, dataFim]);
 
   const metaPct = metaTotal > 0 ? Math.min((fatMesAtual / metaTotal) * 100, 100) : 0;
   const previsaoMes = fatMesAtual + pipelineTotal;
@@ -632,8 +603,12 @@ export default function Dashboard() {
   void previsaoPct;
 
   async function carregarDrill(card: DrillCardKey) {
-    const { inicio, fim } = getPeriodoCards(periodoCards, customCardInicio, customCardFim);
-    if (periodoCards === "custom" && (!customCardInicio || !customCardFim)) return;
+    const { dataInicio: periodoInicio, dataFim: periodoFim } = getDateRange(periodo);
+    const effectiveInicio = (dataInicio && dataFim) ? dataInicio : periodoInicio;
+    const effectiveFim = (dataInicio && dataFim) ? dataFim : periodoFim;
+    const mesmoDia = effectiveInicio === effectiveFim;
+    const inicio = effectiveInicio;
+    const fim = mesmoDia ? `${effectiveFim}T23:59:59` : effectiveFim;
     setDrillLoading(true);
     setDrillPedidos([]);
 
@@ -806,44 +781,6 @@ export default function Dashboard() {
             em processamento
           </span>
         </div>
-      </div>
-
-      {/* Seção 4 — Filtros dos cards */}
-      <div className="flex flex-wrap items-center gap-2">
-        {PERIODOS_CARDS.map((p) => (
-          <Button
-            key={p.key}
-            size="sm"
-            variant={periodoCards === p.key ? "default" : "outline"}
-            style={periodoCards === p.key ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
-            onClick={() => {
-              setPeriodoCards(p.key);
-              if (p.key !== "custom") {
-                setCustomCardInicio("");
-                setCustomCardFim("");
-              }
-            }}
-          >
-            {p.label}
-          </Button>
-        ))}
-        {periodoCards === "custom" && (
-          <div className="flex items-center gap-2 ml-1">
-            <Input
-              type="date"
-              value={customCardInicio}
-              onChange={(e) => setCustomCardInicio(e.target.value)}
-              className="w-36 h-8 text-xs"
-            />
-            <span className="text-xs text-muted-foreground">até</span>
-            <Input
-              type="date"
-              value={customCardFim}
-              onChange={(e) => setCustomCardFim(e.target.value)}
-              className="w-36 h-8 text-xs"
-            />
-          </div>
-        )}
       </div>
 
       {/* Seção 4 — KPIs */}
