@@ -143,6 +143,7 @@ export default function Dashboard() {
   });
   const [metaTotal, setMetaTotal] = useState(0);
   const [fatMesAtual, setFatMesAtual] = useState(0);
+  const [fatFaturadoPeriodo, setFatFaturadoPeriodo] = useState(0);
   const [pipelineTotal, setPipelineTotal] = useState(0);
   const [ranking, setRanking] = useState<RankingVendedor[]>([]);
   const [topSkus, setTopSkus] = useState<RankingSku[]>([]);
@@ -187,8 +188,6 @@ export default function Dashboard() {
     const mesAtual = now.getMonth() + 1;
     const anoAtual = now.getFullYear();
     const pad = (n: number) => String(n).padStart(2, "0");
-    const mesInicio = `${anoAtual}-${pad(mesAtual)}-01`;
-    const mesFim = new Date(anoAtual, mesAtual, 0).toISOString().slice(0, 10);
 
     // Build array of last 6 months (oldest first, current month last)
     const meses6 = Array.from({ length: 6 }, (_, i) => {
@@ -205,9 +204,23 @@ export default function Dashboard() {
     const kpiInicio = effectiveInicio;
     const kpiFim = mesmoDia ? `${effectiveFim}T23:59:59` : effectiveFim;
 
+    // Meses (mes/ano) contidos no período selecionado — para somar o histórico Sankhya faturado
+    const periodoMeses: { mes: number; ano: number }[] = [];
+    {
+      const [iy, im] = effectiveInicio.split("-").map(Number);
+      const [fy, fm] = effectiveFim.split("-").map(Number);
+      let y = iy;
+      let m = im;
+      while (y < fy || (y === fy && m <= fm)) {
+        periodoMeses.push({ mes: m, ano: y });
+        m++;
+        if (m > 12) { m = 1; y++; }
+      }
+    }
+
     (async () => {
       try {
-        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, mensaisRes] = await Promise.all([
+        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, mensaisRes, fatPeriodoRes] = await Promise.all([
           // Pedidos do período — base para ranking e top SKUs
           supabase
             .from("pedidos")
@@ -221,18 +234,20 @@ export default function Dashboard() {
             .select("vendedor_id, valor_meta_reais")
             .eq("mes", mesAtual)
             .eq("ano", anoAtual),
-          // Faturamento do mês atual para cálculo de % da meta + clientes ativos por vendedor
+          // Entrada de pedidos do período para cálculo de % da meta + clientes ativos por vendedor
           supabase
             .from("pedidos")
             .select("id, vendedor_id, cliente_id, status, itens_pedido(total_item)")
-            .gte("data_pedido", mesInicio)
-            .lte("data_pedido", mesFim)
+            .gte("data_pedido", kpiInicio)
+            .lte("data_pedido", kpiFim)
             .not("status", "in", '("rascunho","cancelado")'),
-          // Pedidos em pipeline para previsão do mês
+          // Pedidos em pipeline (a faturar) dentro do período
           supabase
             .from("pedidos")
             .select("id, itens_pedido(total_item)")
-            .in("status", ["pendente_sankhya", "em_faturamento"]),
+            .in("status", ["pendente_sankhya", "em_faturamento"])
+            .gte("data_pedido", kpiInicio)
+            .lte("data_pedido", kpiFim),
           // KPI: Pedidos recebidos (todos exceto rascunho e cancelado)
           supabase.from("pedidos").select("id", { count: "exact", head: true }).not("status", "in", '("rascunho","cancelado")').gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
           // KPI: Ag. Faturamento (no_sankhya)
@@ -251,7 +266,20 @@ export default function Dashboard() {
             .from("historico_faturamento")
             .select("mes, ano, valor_total")
             .or(meses6.map((m) => `and(mes.eq.${m.mes},ano.eq.${m.ano})`).join(",")),
+          // Total faturado (histórico Sankhya) dentro do período selecionado
+          supabase
+            .from("historico_faturamento")
+            .select("valor_total")
+            .or(periodoMeses.map((m) => `and(mes.eq.${m.mes},ano.eq.${m.ano})`).join(",")),
         ]);
+
+        // Total faturado do período (soma do histórico Sankhya)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const fatFaturadoSum = ((fatPeriodoRes.data ?? []) as any[]).reduce(
+          (s: number, r: any) => s + Number(r.valor_total),
+          0,
+        );
+        setFatFaturadoPeriodo(fatFaturadoSum);
 
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const pedidos = (pedidosRes.data ?? []) as any[];
@@ -561,7 +589,7 @@ export default function Dashboard() {
     : 0;
 
   // Fluxo de metas
-  const fatFaturadoMes = fatMensal.length > 0 ? fatMensal[fatMensal.length - 1].valor : 0;
+  const fatFaturadoMes = fatFaturadoPeriodo;
   const entradaPct = metaTotal > 0 ? (fatMesAtual / metaTotal) * 100 : 0;
   const faturadoPct = metaTotal > 0 ? (fatFaturadoMes / metaTotal) * 100 : 0;
 
