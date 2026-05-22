@@ -6,7 +6,10 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Boxes, Search } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Loader2, Boxes, Search, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 
 type Produto = {
@@ -22,6 +25,7 @@ export default function GestaoEstoque() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [soIndisponiveis, setSoIndisponiveis] = useState(false);
+  const [marcasSelecionadas, setMarcasSelecionadas] = useState<string[]>([]);
   const [salvandoId, setSalvandoId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -48,17 +52,39 @@ export default function GestaoEstoque() {
     [produtos],
   );
 
+  const marcasDisponiveis = useMemo(() => {
+    const set = new Set<string>();
+    produtos.forEach((p) => {
+      if (p.marca) set.add(p.marca);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [produtos]);
+
   const produtosFiltrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
     return produtos.filter((p) => {
       if (soIndisponiveis && p.disponivel) return false;
+      if (marcasSelecionadas.length > 0 && !marcasSelecionadas.includes(p.marca)) return false;
       if (!q) return true;
       return (
         p.nome.toLowerCase().includes(q) ||
         p.codigo_jiva.toLowerCase().includes(q)
       );
     });
-  }, [produtos, busca, soIndisponiveis]);
+  }, [produtos, busca, soIndisponiveis, marcasSelecionadas]);
+
+  const labelMarcas =
+    marcasSelecionadas.length === 0
+      ? "Todas as marcas"
+      : marcasSelecionadas.length === 1
+        ? marcasSelecionadas[0]
+        : `${marcasSelecionadas.length} marcas`;
+
+  const toggleMarca = (marca: string) => {
+    setMarcasSelecionadas((prev) =>
+      prev.includes(marca) ? prev.filter((m) => m !== marca) : [...prev, marca],
+    );
+  };
 
   const toggleDisponivel = async (produto: Produto, novoValor: boolean) => {
     setSalvandoId(produto.id);
@@ -121,6 +147,47 @@ export default function GestaoEstoque() {
                 className="pl-9"
               />
             </div>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="justify-between min-w-[180px]">
+                  <span className="truncate">{labelMarcas}</span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[260px] p-0" align="start">
+                <Command>
+                  <CommandInput placeholder="Buscar marca..." />
+                  <CommandList>
+                    <CommandEmpty>Nenhuma marca encontrada</CommandEmpty>
+                    <CommandGroup>
+                      {marcasDisponiveis.map((marca) => (
+                        <CommandItem
+                          key={marca}
+                          value={marca}
+                          onSelect={() => toggleMarca(marca)}
+                          className="gap-2"
+                        >
+                          <Checkbox checked={marcasSelecionadas.includes(marca)} />
+                          <span className="truncate">{marca}</span>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                  {marcasSelecionadas.length > 0 && (
+                    <div className="border-t p-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full justify-center text-sm"
+                        onClick={() => setMarcasSelecionadas([])}
+                      >
+                        Limpar
+                      </Button>
+                    </div>
+                  )}
+                </Command>
+              </PopoverContent>
+            </Popover>
             <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
               <Switch checked={soIndisponiveis} onCheckedChange={setSoIndisponiveis} />
               Mostrar só indisponíveis
