@@ -113,6 +113,8 @@ export function SecaoProdutos({
   // Carrega preços especiais por cliente
   useEffect(() => {
     if (!codigoParceiro) { setPrecosEspeciais({}); return; }
+    console.log("[DEBUG] codigoParceiro:", codigoParceiro);
+    console.log("[DEBUG] precosEspeciais:", precosEspeciais);
     supabase
       .from("precos_cliente_produto")
       .select("codigo_produto, preco_unitario")
@@ -121,6 +123,7 @@ export function SecaoProdutos({
         const map: Record<string, number> = {};
         data?.forEach((p) => { map[p.codigo_produto] = Number(p.preco_unitario); });
         setPrecosEspeciais(map);
+        console.log("[DEBUG] mapa carregado:", map);
       });
   }, [codigoParceiro]);
   const [filtroMarca, setFiltroMarca] = useState<string>("Todas");
