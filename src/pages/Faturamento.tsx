@@ -48,6 +48,7 @@ type PedidoFat = {
   codigo_parceiro: string | null;
   codigo_cliente: string | null;
   cluster: string;
+  cluster_cliente: string | null;
   tabela_preco: string;
   agendamento: boolean;
   aceita_saldo_cliente: boolean;
@@ -387,7 +388,7 @@ export default function Faturamento() {
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, observacoes, ordem_compra, pedido_origem_id, responsavel_id, motivo, vendedor_id,
           cliente_id, perfil_cliente, tabela_preco, agendamento, total,
-          clientes(razao_social, nome_parceiro, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, aceita_saldo, negativado, email, rua, numero, bairro, telefone),
+          clientes(razao_social, nome_parceiro, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, cluster, aceita_saldo, negativado, email, rua, numero, bairro, telefone),
           itens_pedido(
             id, produto_id, total_item, quantidade, qtd_faturada, preco_unitario_bruto, preco_unitario_liquido,
             desconto_perfil, desconto_comercial, desconto_trade,
@@ -425,6 +426,7 @@ export default function Faturamento() {
           vendedor_id: p.vendedor_id,
           cliente_id: p.cliente_id ?? null,
           cluster: p.perfil_cliente,
+          cluster_cliente: cl?.cluster ?? null,
           tabela_preco: p.tabela_preco,
           agendamento: p.agendamento,
           razao_social: cl?.nome_parceiro || cl?.razao_social || "—",
@@ -1484,6 +1486,7 @@ export default function Faturamento() {
         totalPedido: number;
         vendedor: string;
         condPagamento: string;
+        cluster: string;
         qtdPorProduto: Record<string, number>;
       };
       const linhas: LinhaPivot[] = [];
@@ -1504,6 +1507,7 @@ export default function Faturamento() {
           totalPedido: p.total,
           vendedor: p.vendedor_nome ?? "—",
           condPagamento: p.cond_pagamento ?? "—",
+          cluster: p.cluster_cliente ?? "",
           qtdPorProduto,
         });
       }
@@ -1535,6 +1539,7 @@ export default function Faturamento() {
         "Total Geral",
         "Vendedor",
         "Condição de pagamento",
+        "Cluster",
       ];
 
       // Índices 1-based de colunas com tratamento especial
@@ -1569,6 +1574,7 @@ export default function Faturamento() {
           totalGeral,
           l.vendedor,
           l.condPagamento,
+          l.cluster,
         ]);
         const row = ws.getRow(rowIdx);
         row.eachCell({ includeEmpty: true }, (cell, colIdx) => {
