@@ -1765,6 +1765,17 @@ export default function Faturamento() {
               </div>
             ) : (
               <>
+                {(aba.key === "em_aberto" || aba.key === "assumidos") && (
+                  <div className="mb-3 flex justify-end">
+                    <Button
+                      size="sm"
+                      variant={ordenarAlfabetico ? "default" : "outline"}
+                      onClick={() => setOrdenarAlfabetico(!ordenarAlfabetico)}
+                    >
+                      A-Z
+                    </Button>
+                  </div>
+                )}
                 {/* Mobile: cards */}
                 <div className="grid gap-3 md:hidden">
                   {pedidosFiltrados.map((p) => (
