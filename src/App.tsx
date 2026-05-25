@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -55,6 +56,11 @@ import NovoPedidoGestora from "./pages/gestora/NovoPedidoGestora";
 import PedidosGestora from "./pages/gestora/PedidosGestora";
 import HistoricoFaturamento from "@/pages/gestora/HistoricoFaturamento";
 
+const PropostaPublica = lazy(() => import("./pages/PropostaPublica"));
+const CalculadoraPublica = lazy(() => import("./pages/CalculadoraPublica"));
+const MinhasPropostas = lazy(() => import("./pages/MinhasPropostas"));
+const CalculadoraMargem = lazy(() => import("./pages/CalculadoraMargem"));
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -64,6 +70,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <AuthProvider>
+          <Suspense fallback={null}>
           <Routes>
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="/login" element={<Login />} />
@@ -74,6 +81,8 @@ const App = () => (
             <Route path="/evento" element={<EventoFormulario />} />
             <Route path="/evento/qr" element={<EventoQR />} />
             <Route path="/evento-qr" element={<EventoQR />} />
+            <Route path="/proposta/:token" element={<PropostaPublica />} />
+            <Route path="/calc/:token" element={<CalculadoraPublica />} />
 
             {/* Rotas exclusivas do admin */}
             <Route element={<ProtectedRoute allow={["admin"]}><AppLayout /></ProtectedRoute>}>
@@ -102,6 +111,12 @@ const App = () => (
               <Route path="/meus-pedidos" element={<MeusPedidos />} />
               <Route path="/meus-clientes" element={<MeusClientes />} />
               <Route path="/cadastrar-cliente" element={<CadastrarCliente />} />
+            </Route>
+
+            {/* Propostas e Calculadora — vendedor, gestora e admin */}
+            <Route element={<ProtectedRoute allow={["vendedor", "gestora", "admin"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/propostas" element={<MinhasPropostas />} />
+              <Route path="/calculadora" element={<CalculadoraMargem />} />
             </Route>
 
             {/* Rotas de faturamento — acessíveis por faturamento e admin */}
@@ -163,6 +178,7 @@ const App = () => (
 
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
         </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>

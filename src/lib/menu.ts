@@ -19,6 +19,8 @@ import {
   UserCheck,
   PlusSquare,
   Boxes,
+  FileText,
+  Calculator,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -111,6 +113,8 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
     { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
+    { title: "Propostas", url: "/propostas", icon: FileText },
+    { title: "Calculadora", url: "/calculadora", icon: Calculator },
     { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
     { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
   ],
@@ -128,6 +132,8 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Cadastrar Cliente", url: "/gestora/cadastrar-cliente", icon: UserPlus },
     { title: "Gestão do Time", url: "/gestora/time", icon: UserCog },
     { title: "Leads Evento", url: "/gestora/leads-evento", icon: UserCheck },
+    { title: "Propostas", url: "/propostas", icon: FileText },
+    { title: "Calculadora", url: "/calculadora", icon: Calculator },
     { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
     { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
   ],
