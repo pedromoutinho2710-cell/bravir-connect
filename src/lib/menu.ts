@@ -138,6 +138,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
     { title: "Clientes", url: "/faturamento/clientes", icon: Users },
     { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
+    { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
     { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
     { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
   ],

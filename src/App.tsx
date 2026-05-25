@@ -115,8 +115,8 @@ const App = () => (
               <Route path="/faturamento/novo-pedido" element={<NovoPedidoFaturamento />} />
             </Route>
 
-            {/* Gestão de Estoque — acessível por faturamento e admin */}
-            <Route element={<ProtectedRoute allow={["faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
+            {/* Gestão de Estoque — acessível por faturamento, admin e gestora_faturamento */}
+            <Route element={<ProtectedRoute allow={["faturamento", "admin", "gestora_faturamento"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/faturamento/gestao-estoque" element={<GestaoEstoque />} />
             </Route>
 
