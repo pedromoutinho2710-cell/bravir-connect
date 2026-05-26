@@ -51,6 +51,7 @@ export default function TradeCampanhas() {
     const { data, error } = await supabase
       .from("campanhas")
       .select("*")
+      .eq("categoria", "beneficio")
       .order("created_at", { ascending: false });
     if (error) toast.error("Erro ao carregar campanhas");
     else setCampanhas((data ?? []) as Campanha[]);
@@ -88,6 +89,7 @@ export default function TradeCampanhas() {
       data_inicio: form.data_inicio || null,
       data_fim: form.data_fim || null,
       ativa: form.ativa,
+      categoria: "beneficio",
     };
 
     const { error } = dialog.editing
@@ -112,7 +114,7 @@ export default function TradeCampanhas() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Campanhas</h1>
+          <h1 className="text-2xl font-bold">Benefícios</h1>
           <p className="text-sm text-muted-foreground">Gerencie campanhas de desconto e bonificação</p>
         </div>
         <Button onClick={abrirNova}>

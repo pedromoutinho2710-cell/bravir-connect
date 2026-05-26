@@ -160,7 +160,7 @@ const formVazio = (): FormData => ({
 async function fetchCampanhas(): Promise<Campanha[]> {
   const [campanhasRes, niveisRes, cpRes, metasRes, metasClienteRes] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase.from("campanhas") as any).select("*").order("created_at", { ascending: false }),
+    (supabase.from("campanhas") as any).select("*").eq("categoria", "campanha").order("created_at", { ascending: false }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.from("campanha_niveis") as any).select("*").order("ordem", { ascending: true }),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -624,6 +624,7 @@ export default function Campanhas() {
             data_fim: form.data_fim,
             tipo_meta: form.tipo_meta,
             ativa: false,
+            categoria: "campanha",
           })
           .select("id")
           .single();
