@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { LogOut } from "lucide-react";
+import { LogOut, FileText, Calculator } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
@@ -80,6 +80,14 @@ export function MobileNav({ onNavigate }: Props) {
     return section;
   });
 
+  const isPedroMenezes = user?.email === "pedro.menezes@bravir.com.br";
+  const extraItems: Item[] = isPedroMenezes
+    ? [
+        { title: "Propostas", url: "/propostas", icon: FileText },
+        { title: "Calculadora", url: "/calculadora", icon: Calculator },
+      ]
+    : [];
+
   const navLink = (item: Item) => (
     <NavLink
       key={item.url}
@@ -126,6 +134,9 @@ export function MobileNav({ onNavigate }: Props) {
           ))
         ) : (
           getFlatItems().map(navLink)
+        )}
+        {extraItems.length > 0 && (
+          <div className="mb-3">{extraItems.map(navLink)}</div>
         )}
       </nav>
 

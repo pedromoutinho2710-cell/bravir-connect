@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LogOut } from "lucide-react";
+import { LogOut, FileText, Calculator } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -114,6 +114,14 @@ export function AppSidebar() {
     return section;
   });
 
+  const isPedroMenezes = user?.email === "pedro.menezes@bravir.com.br";
+  const extraItems: Item[] = isPedroMenezes
+    ? [
+        { title: "Propostas", url: "/propostas", icon: FileText },
+        { title: "Calculadora", url: "/calculadora", icon: Calculator },
+      ]
+    : [];
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border px-4 py-5">
@@ -147,6 +155,17 @@ export function AppSidebar() {
             <SidebarGroupContent>
               <SidebarMenu>
                 {getFlatMenu().map((item) => (
+                  <NavItem key={item.url} item={item} pathname={pathname} />
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+        {extraItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {extraItems.map((item) => (
                   <NavItem key={item.url} item={item} pathname={pathname} />
                 ))}
               </SidebarMenu>
