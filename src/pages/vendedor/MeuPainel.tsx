@@ -10,7 +10,7 @@ import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Receipt, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, Briefcase, Gift, Trophy, PackageX } from "lucide-react";
+import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, Briefcase, Gift, Trophy, PackageX } from "lucide-react";
 import { toast } from "sonner";
 
 type KPIs = {
@@ -19,6 +19,7 @@ type KPIs = {
   ticketMedio: number;
   rascunhos: number;
   meta: number;
+  aFaturar: number;
 };
 
 type UltimoPedido = {
@@ -152,7 +153,7 @@ export default function MeuPainel() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [periodTotais, setPeriodTotais] = useState<PeriodTotais>({ entrada: 0, faturado: 0, aFaturar: 0 });
   const [loadingPeriodo, setLoadingPeriodo] = useState(false);
-  const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0 });
+  const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0, aFaturar: 0 });
   const [ultimosPedidos, setUltimosPedidos] = useState<UltimoPedido[]>([]);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [clientesReativar, setClientesReativar] = useState<ClienteReativar[]>([]);
@@ -298,7 +299,7 @@ export default function MeuPainel() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const meta = Number((metasRes.data as any)?.valor_meta_reais ?? 0);
 
-      setKpis({ faturamento, numPedidos, ticketMedio, rascunhos, meta });
+      setKpis({ faturamento, numPedidos, ticketMedio, rascunhos, meta, aFaturar: 0 });
 
       // Second wave: campanhas, reativação via RPC, tarefas — all in parallel
       const hoje = agora.toISOString().slice(0, 10);
@@ -384,25 +385,13 @@ export default function MeuPainel() {
       } else {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const pedidos = (data ?? []) as any[];
-        // "A faturar" = pedidos que ainda NÃO entraram no Sankhya.
-        // Exclui status já tratados: no_sankhya, faturado, parcialmente_faturado,
-        // sem_estoque, devolvido, cancelado (rascunho/cancelado já filtrados na query).
-        const STATUS_FORA_A_FATURAR = new Set([
-          "no_sankhya",
-          "faturado",
-          "parcialmente_faturado",
-          "sem_estoque",
-          "devolvido",
-          "cancelado",
-          "rascunho",
-        ]);
         let entrada = 0, faturado = 0, aFaturar = 0;
         for (const p of pedidos) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
           entrada += total;
           if (p.status === "faturado" || p.status === "parcialmente_faturado") faturado += total;
-          if (!STATUS_FORA_A_FATURAR.has(p.status)) aFaturar += total;
+          if (p.status === "no_sankhya" || p.status === "parcialmente_faturado") aFaturar += total;
         }
         setPeriodTotais({ entrada, faturado, aFaturar });
       }
@@ -588,7 +577,10 @@ export default function MeuPainel() {
           ))}
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Card>
+          <Card
+            className="cursor-pointer hover:border-[#166534] hover:shadow-sm transition"
+            onClick={() => navigate("/meus-pedidos")}
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Entrada de pedidos</CardTitle>
               <ArrowDownToLine className="h-4 w-4 text-muted-foreground" />
@@ -597,19 +589,26 @@ export default function MeuPainel() {
               <div className="text-2xl font-bold">
                 {loadingPeriodo ? <Loader2 className="h-5 w-5 animate-spin" /> : formatBRL(periodTotais.entrada)}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">Clique para ver pedidos</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className="cursor-pointer hover:border-[#166534] hover:shadow-sm transition"
+            onClick={() => navigate("/meus-pedidos", { state: { filtroStatus: "faturado" } })}
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">Faturado (mês)</CardTitle>
               <CheckCheck className="h-4 w-4 text-green-600" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-700">{formatBRL(faturadoMesAtual)}</div>
-              <p className="text-xs text-muted-foreground mt-1">faturamentos do mês atual</p>
+              <p className="text-xs text-muted-foreground mt-1">Clique para ver pedidos</p>
             </CardContent>
           </Card>
-          <Card>
+          <Card
+            className="cursor-pointer hover:border-[#166534] hover:shadow-sm transition"
+            onClick={() => navigate("/meus-pedidos", { state: { filtroStatus: "no_sankhya" } })}
+          >
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">A faturar</CardTitle>
               <Clock className="h-4 w-4 text-blue-600" />
@@ -618,66 +617,14 @@ export default function MeuPainel() {
               <div className="text-2xl font-bold text-blue-700">
                 {loadingPeriodo ? <Loader2 className="h-5 w-5 animate-spin" /> : formatBRL(periodTotais.aFaturar)}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">Clique para ver pedidos</p>
             </CardContent>
           </Card>
         </div>
       </div>
 
-      {/* Produtos indisponíveis — bloco discreto */}
-      {produtosIndisponiveis.length > 0 && (
-        <Card className="border-red-200">
-          <CardHeader className="flex flex-row items-center gap-2 pb-3">
-            <PackageX className="h-4 w-4 text-red-600" />
-            <CardTitle className="text-sm font-medium">Produtos sem estoque disponível para faturar</CardTitle>
-            <Badge variant="destructive" className="ml-auto">{produtosIndisponiveis.length}</Badge>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-1">
-              {produtosIndisponiveis.slice(0, 5).map((p) => (
-                <li key={p.id} className="text-sm text-muted-foreground truncate">
-                  {p.nome}
-                </li>
-              ))}
-            </ul>
-            {produtosIndisponiveis.length > 5 && (
-              <Button
-                variant="link"
-                size="sm"
-                className="h-auto p-0 mt-2 text-xs"
-                onClick={() => setModalIndispOpen(true)}
-              >
-                ver todos ({produtosIndisponiveis.length})
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <Dialog open={modalIndispOpen} onOpenChange={setModalIndispOpen}>
-        <DialogContent className="max-w-md max-h-[80vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Produtos sem estoque disponível para faturar ({produtosIndisponiveis.length})</DialogTitle>
-          </DialogHeader>
-          <ul className="overflow-y-auto space-y-1 rounded-md border p-3">
-            {produtosIndisponiveis.map((p) => (
-              <li key={p.id} className="text-sm">{p.nome}</li>
-            ))}
-          </ul>
-        </DialogContent>
-      </Dialog>
-
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Faturamento do mês</CardTitle>
-            <Receipt className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatBRL(kpis.faturamento)}</div>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Meta mensal</CardTitle>
@@ -812,6 +759,52 @@ export default function MeuPainel() {
               </Table>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Produtos indisponíveis — bloco discreto */}
+      {produtosIndisponiveis.length > 0 && (
+        <Card className="border-red-200">
+          <CardHeader className="flex flex-row items-center gap-2 pb-3">
+            <PackageX className="h-4 w-4 text-red-600" />
+            <CardTitle className="text-sm font-medium">Produtos sem estoque</CardTitle>
+            <Badge variant="destructive" className="ml-auto">{produtosIndisponiveis.length}</Badge>
+          </CardHeader>
+          <CardContent>
+            <p className="text-xs text-muted-foreground mb-3">
+              Esses produtos estão sem estoque, mas podem ser vendidos. Serão faturados quando houver disponibilidade.
+            </p>
+            <ul className="space-y-1">
+              {produtosIndisponiveis.slice(0, 5).map((p) => (
+                <li key={p.id} className="text-sm text-muted-foreground truncate">
+                  {p.nome}
+                </li>
+              ))}
+            </ul>
+            {produtosIndisponiveis.length > 5 && (
+              <Button
+                variant="link"
+                size="sm"
+                className="h-auto p-0 mt-2 text-xs"
+                onClick={() => setModalIndispOpen(true)}
+              >
+                ver todos ({produtosIndisponiveis.length})
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={modalIndispOpen} onOpenChange={setModalIndispOpen}>
+        <DialogContent className="max-w-md max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Produtos sem estoque ({produtosIndisponiveis.length})</DialogTitle>
+          </DialogHeader>
+          <ul className="overflow-y-auto space-y-1 rounded-md border p-3">
+            {produtosIndisponiveis.map((p) => (
+              <li key={p.id} className="text-sm">{p.nome}</li>
+            ))}
+          </ul>
         </DialogContent>
       </Dialog>
 

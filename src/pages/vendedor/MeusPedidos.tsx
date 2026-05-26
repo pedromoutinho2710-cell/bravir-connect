@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -68,11 +68,13 @@ function tempoNoStatus(dt: string | null) {
 export default function MeusPedidos() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const initialFiltroStatus = (location.state as { filtroStatus?: string } | null)?.filtroStatus ?? "todos";
   const [pedidos, setPedidos] = useState<MeuPedido[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [filtroStatus, setFiltroStatus] = useState(initialFiltroStatus);
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroMarca, setFiltroMarca] = useState("todas");
   const [filtroDataInicio, setFiltroDataInicio] = useState("");
