@@ -11,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/format";
-import { Loader2, PlusCircle, Clock, Trash2 } from "lucide-react";
+import { Loader2, PlusCircle, Clock, Trash2, FileText } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { MARCAS } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
+import { GerarPropostaDialog } from "@/components/proposta/GerarPropostaDialog";
 import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 
 type MeuPedido = {
@@ -36,6 +37,7 @@ type MeuPedido = {
   cond_pagamento: string | null;
   motivo: string | null;
   razao_social: string;
+  cliente_id: string;
   marcas: string[];
   total: number;
   responsavel_id: string | null;
@@ -89,6 +91,13 @@ export default function MeusPedidos() {
   const [excluirDevolvido, setExcluirDevolvido] = useState<string | null>(null);
   const [excluindoDevolvido, setExcluindoDevolvido] = useState(false);
 
+  const [propostaDialog, setPropostaDialog] = useState<{
+    pedidoId: string; pedidoNumero: number; clienteId: string;
+    clienteNome: string; condPagamento: string | null;
+  } | null>(null);
+
+  const podeGerarProposta = user?.email === "pedro.menezes@bravir.com.br";
+
   const carregar = () => setRefreshKey((k) => k + 1);
   usePullToRefresh(carregar);
 
@@ -102,7 +111,7 @@ export default function MeusPedidos() {
         .select(`
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, motivo, responsavel_id,
-          clientes(razao_social, nome_parceiro),
+          clientes(id, razao_social, nome_parceiro),
           itens_pedido(total_item, produtos(marca))
         `)
         .eq("vendedor_id", user.id)
@@ -131,6 +140,7 @@ export default function MeusPedidos() {
           cond_pagamento: p.cond_pagamento,
           motivo: p.motivo,
           razao_social: p.clientes?.nome_parceiro || p.clientes?.razao_social || "—",
+          cliente_id: p.clientes?.id ?? "",
           marcas,
           total: itensList.reduce((s: number, i) => s + Number(i.total_item), 0),
           responsavel_id: p.responsavel_id ?? null,
@@ -416,6 +426,27 @@ export default function MeusPedidos() {
                   {p.motivo && (
                     <div className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">{p.motivo}</div>
                   )}
+                  {podeGerarProposta && (p.status === "rascunho" || p.status === "aguardando_faturamento") && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPropostaDialog({
+                          pedidoId: p.id,
+                          pedidoNumero: p.numero_pedido,
+                          clienteId: p.cliente_id,
+                          clienteNome: p.razao_social,
+                          condPagamento: p.cond_pagamento,
+                        });
+                      }}
+                      className="h-7 text-xs"
+                    >
+                      <FileText className="h-3.5 w-3.5 mr-1" />
+                      Gerar proposta
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -434,13 +465,14 @@ export default function MeusPedidos() {
                   <TableHead className="text-right">Total</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>No status há</TableHead>
+                  {podeGerarProposta && <TableHead className="w-8"></TableHead>}
                   <TableHead className="w-8"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {pedidos.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                    <TableCell colSpan={podeGerarProposta ? 10 : 9} className="text-center text-muted-foreground py-12">
                       Nenhum pedido encontrado
                     </TableCell>
                   </TableRow>
@@ -470,6 +502,29 @@ export default function MeusPedidos() {
                     <TableCell className="text-xs text-muted-foreground">
                       {tempoNoStatus(p.status_atualizado_em) ?? "—"}
                     </TableCell>
+                    {podeGerarProposta && (
+                      <TableCell>
+                        {(p.status === "rascunho" || p.status === "aguardando_faturamento") && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPropostaDialog({
+                                pedidoId: p.id,
+                                pedidoNumero: p.numero_pedido,
+                                clienteId: p.cliente_id,
+                                clienteNome: p.razao_social,
+                                condPagamento: p.cond_pagamento,
+                              });
+                            }}
+                            className="p-1 rounded text-muted-foreground/60 hover:text-[#004d1a] hover:bg-[#004d1a]/10 transition-colors"
+                            title="Gerar proposta"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell>
                       {p.responsavel_id === null && (
                         <button
@@ -515,6 +570,14 @@ export default function MeusPedidos() {
           navigate("/novo-pedido", { state: { pedidoId: detalhesId, editando: true } });
         } : undefined}
       />
+
+      {propostaDialog && (
+        <GerarPropostaDialog
+          {...propostaDialog}
+          open={!!propostaDialog}
+          onClose={() => setPropostaDialog(null)}
+        />
+      )}
 
       <AlertDialog open={!!excluirDevolvido} onOpenChange={(o) => { if (!o) setExcluirDevolvido(null); }}>
         <AlertDialogContent>
