@@ -328,7 +328,7 @@ function calcStatus(
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function Campanhas() {
+export function CampanhasContent() {
   const qc = useQueryClient();
   const [dialogAberto, setDialogAberto] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -1706,4 +1706,8 @@ export default function Campanhas() {
       </AlertDialog>
     </div>
   );
+}
+
+export default function Campanhas() {
+  return <CampanhasContent />;
 }

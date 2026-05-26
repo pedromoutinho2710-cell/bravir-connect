@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { Loader2, Plus, Pencil } from "lucide-react";
+import { CampanhasContent } from "@/pages/admin/Campanhas";
 
 type Campanha = {
   id: string;
@@ -45,7 +46,6 @@ const EMPTY = { nome: "", descricao: "", tipo: "desconto", valor: "", data_inici
 export default function TradeCampanhas() {
   const [abaTrade, setAbaTrade] = useState<Aba>("beneficios");
   const [beneficios, setBeneficios] = useState<Campanha[]>([]);
-  const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<{ open: boolean; editing: Campanha | null }>({ open: false, editing: null });
   const [form, setForm] = useState(EMPTY);
@@ -53,23 +53,13 @@ export default function TradeCampanhas() {
 
   const carregar = async () => {
     setLoading(true);
-    const [benRes, campRes] = await Promise.all([
-      supabase
-        .from("campanhas")
-        .select("*")
-        .eq("categoria", "beneficio")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("campanhas")
-        .select("*")
-        .eq("categoria", "campanha")
-        .order("created_at", { ascending: false }),
-    ]);
-    if (benRes.error || campRes.error) toast.error("Erro ao carregar campanhas");
-    else {
-      setBeneficios((benRes.data ?? []) as Campanha[]);
-      setCampanhas((campRes.data ?? []) as Campanha[]);
-    }
+    const { data, error } = await supabase
+      .from("campanhas")
+      .select("*")
+      .eq("categoria", "beneficio")
+      .order("created_at", { ascending: false });
+    if (error) toast.error("Erro ao carregar benefícios");
+    else setBeneficios((data ?? []) as Campanha[]);
     setLoading(false);
   };
 
@@ -96,7 +86,6 @@ export default function TradeCampanhas() {
   const salvar = async () => {
     if (!form.nome.trim()) { toast.error("Nome é obrigatório"); return; }
     setSalvando(true);
-    const categoria = abaTrade === "beneficios" ? "beneficio" : "campanha";
     const payload = {
       nome: form.nome.trim(),
       descricao: form.descricao.trim() || null,
@@ -105,7 +94,7 @@ export default function TradeCampanhas() {
       data_inicio: form.data_inicio || null,
       data_fim: form.data_fim || null,
       ativa: form.ativa,
-      categoria,
+      categoria: "beneficio",
     };
 
     const { error } = dialog.editing
@@ -114,7 +103,7 @@ export default function TradeCampanhas() {
 
     setSalvando(false);
     if (error) { toast.error("Erro: " + error.message); return; }
-    toast.success(dialog.editing ? "Atualizado" : "Criado");
+    toast.success(dialog.editing ? "Benefício atualizado" : "Benefício criado");
     setDialog({ open: false, editing: null });
     carregar();
   };
@@ -126,26 +115,8 @@ export default function TradeCampanhas() {
     carregar();
   };
 
-  const lista = abaTrade === "beneficios" ? beneficios : campanhas;
-  const tituloAba = abaTrade === "beneficios" ? "Benefícios" : "Campanhas";
-  const subtituloAba = abaTrade === "beneficios"
-    ? "Gerencie campanhas de desconto e bonificação"
-    : "Gerencie campanhas comerciais";
-  const botaoLabel = abaTrade === "beneficios" ? "Novo benefício" : "Nova campanha";
-
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">{tituloAba}</h1>
-          <p className="text-sm text-muted-foreground">{subtituloAba}</p>
-        </div>
-        <Button onClick={abrirNova}>
-          <Plus className="h-4 w-4 mr-2" />
-          {botaoLabel}
-        </Button>
-      </div>
-
       <Tabs value={abaTrade} onValueChange={(v) => setAbaTrade(v as Aba)}>
         <TabsList>
           <TabsTrigger value="beneficios">Benefícios</TabsTrigger>
@@ -153,145 +124,158 @@ export default function TradeCampanhas() {
         </TabsList>
       </Tabs>
 
-      {loading ? (
-        <div className="flex h-48 items-center justify-center">
-          <Loader2 className="h-6 w-6 animate-spin text-primary" />
-        </div>
-      ) : lista.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            {abaTrade === "beneficios" ? "Nenhum benefício cadastrado" : "Nenhuma campanha cadastrada"}
-          </CardContent>
-        </Card>
+      {abaTrade === "campanhas" ? (
+        <CampanhasContent />
       ) : (
-        <div className="rounded-md border overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Tipo</TableHead>
-                <TableHead>Valor</TableHead>
-                <TableHead>Validade</TableHead>
-                <TableHead>Ativa</TableHead>
-                <TableHead className="w-16"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {lista.map((c) => (
-                <TableRow key={c.id}>
-                  <TableCell>
-                    <div className="font-medium">{c.nome}</div>
-                    {c.descricao && (
-                      <div className="text-xs text-muted-foreground">{c.descricao}</div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {c.tipo && (
-                      <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${TIPO_COLOR[c.tipo] ?? "bg-gray-100 text-gray-800 border-gray-300"}`}>
-                        {TIPO_LABEL[c.tipo] ?? c.tipo}
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {c.valor != null ? `${c.valor}%` : "—"}
-                  </TableCell>
-                  <TableCell className="text-sm">
-                    {c.data_inicio && c.data_fim
-                      ? `${formatDate(c.data_inicio)} – ${formatDate(c.data_fim)}`
-                      : c.data_fim
-                      ? `até ${formatDate(c.data_fim)}`
-                      : "—"}
-                  </TableCell>
-                  <TableCell>
-                    <Switch checked={c.ativa} onCheckedChange={() => toggleAtiva(c)} />
-                  </TableCell>
-                  <TableCell>
-                    <Button size="sm" variant="outline" onClick={() => abrirEditar(c)}>
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      <Dialog open={dialog.open} onOpenChange={(o) => !o && setDialog({ open: false, editing: null })}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {dialog.editing
-                ? abaTrade === "beneficios" ? "Editar benefício" : "Editar campanha"
-                : abaTrade === "beneficios" ? "Novo benefício" : "Nova campanha"}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Nome *</Label>
-              <Input value={form.nome}
-                onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
-                placeholder="Ex: Black Friday 2025" />
+        <>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">Benefícios</h1>
+              <p className="text-sm text-muted-foreground">Gerencie campanhas de desconto e bonificação</p>
             </div>
-
-            <div className="space-y-1.5">
-              <Label>Descrição</Label>
-              <Textarea rows={2} value={form.descricao}
-                onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))}
-                placeholder="Detalhes…" />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Tipo</Label>
-                <Select value={form.tipo} onValueChange={(v) => setForm((f) => ({ ...f, tipo: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="desconto">Desconto</SelectItem>
-                    <SelectItem value="bonificacao">Bonificação</SelectItem>
-                    <SelectItem value="outro">Outro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Valor (%)</Label>
-                <Input type="number" min={0} step={0.5}
-                  value={form.valor}
-                  onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))}
-                  placeholder="0" />
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>Data início</Label>
-                <Input type="date" value={form.data_inicio}
-                  onChange={(e) => setForm((f) => ({ ...f, data_inicio: e.target.value }))} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Data fim</Label>
-                <Input type="date" value={form.data_fim}
-                  onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))} />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Switch checked={form.ativa}
-                onCheckedChange={(c) => setForm((f) => ({ ...f, ativa: c }))} />
-              <Label className="font-normal">Ativa</Label>
-            </div>
+            <Button onClick={abrirNova}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo benefício
+            </Button>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialog({ open: false, editing: null })}>
-              Cancelar
-            </Button>
-            <Button onClick={salvar} disabled={salvando || !form.nome.trim()}>
-              {salvando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              {dialog.editing ? "Salvar" : "Criar"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+
+          {loading ? (
+            <div className="flex h-48 items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : beneficios.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                Nenhum benefício cadastrado
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Validade</TableHead>
+                    <TableHead>Ativa</TableHead>
+                    <TableHead className="w-16"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {beneficios.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell>
+                        <div className="font-medium">{c.nome}</div>
+                        {c.descricao && (
+                          <div className="text-xs text-muted-foreground">{c.descricao}</div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {c.tipo && (
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${TIPO_COLOR[c.tipo] ?? "bg-gray-100 text-gray-800 border-gray-300"}`}>
+                            {TIPO_LABEL[c.tipo] ?? c.tipo}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {c.valor != null ? `${c.valor}%` : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {c.data_inicio && c.data_fim
+                          ? `${formatDate(c.data_inicio)} – ${formatDate(c.data_fim)}`
+                          : c.data_fim
+                          ? `até ${formatDate(c.data_fim)}`
+                          : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Switch checked={c.ativa} onCheckedChange={() => toggleAtiva(c)} />
+                      </TableCell>
+                      <TableCell>
+                        <Button size="sm" variant="outline" onClick={() => abrirEditar(c)}>
+                          <Pencil className="h-3 w-3" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+
+          <Dialog open={dialog.open} onOpenChange={(o) => !o && setDialog({ open: false, editing: null })}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>{dialog.editing ? "Editar benefício" : "Novo benefício"}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5">
+                  <Label>Nome *</Label>
+                  <Input value={form.nome}
+                    onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
+                    placeholder="Ex: Black Friday 2025" />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Descrição</Label>
+                  <Textarea rows={2} value={form.descricao}
+                    onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))}
+                    placeholder="Detalhes…" />
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Tipo</Label>
+                    <Select value={form.tipo} onValueChange={(v) => setForm((f) => ({ ...f, tipo: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="desconto">Desconto</SelectItem>
+                        <SelectItem value="bonificacao">Bonificação</SelectItem>
+                        <SelectItem value="outro">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Valor (%)</Label>
+                    <Input type="number" min={0} step={0.5}
+                      value={form.valor}
+                      onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))}
+                      placeholder="0" />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>Data início</Label>
+                    <Input type="date" value={form.data_inicio}
+                      onChange={(e) => setForm((f) => ({ ...f, data_inicio: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Data fim</Label>
+                    <Input type="date" value={form.data_fim}
+                      onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))} />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <Switch checked={form.ativa}
+                    onCheckedChange={(c) => setForm((f) => ({ ...f, ativa: c }))} />
+                  <Label className="font-normal">Ativa</Label>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialog({ open: false, editing: null })}>
+                  Cancelar
+                </Button>
+                <Button onClick={salvar} disabled={salvando || !form.nome.trim()}>
+                  {salvando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                  {dialog.editing ? "Salvar" : "Criar"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
     </div>
   );
 }
