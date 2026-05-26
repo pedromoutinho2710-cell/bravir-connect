@@ -2563,39 +2563,43 @@ export default function Faturamento() {
                     {itensSaldo.length > 0 && (
                       <div>
                         <div className="flex items-center gap-2 mb-1">
-                          <div className="h-2 w-2 rounded-full bg-red-500" />
-                          <span className="text-xs font-semibold text-red-700 uppercase tracking-wide">
-                            Saldo pendente
+                          <span
+                            className="text-xs font-semibold uppercase tracking-wide"
+                            style={{ color: "#9a3412" }}
+                          >
+                            📦 Saldo movido para sem estoque
                           </span>
                         </div>
-                        <div className="rounded-md border border-red-300 overflow-x-auto">
+                        <div
+                          className="rounded-md overflow-x-auto border"
+                          style={{ borderColor: "#fed7aa" }}
+                        >
                           <table className="w-full text-xs">
                             <thead>
-                              <tr className="border-b bg-red-50">
-                                <th className="text-left px-3 py-2">Produto</th>
-                                <th className="text-center px-2 py-2">Qtd Pedida</th>
-                                <th className="text-center px-2 py-2">Qtd Lançada</th>
-                                <th className="text-center px-2 py-2">Saldo</th>
-                                <th className="text-right px-3 py-2">Preço Final</th>
-                                <th className="text-right px-3 py-2">Total Saldo</th>
+                              <tr
+                                className="border-b"
+                                style={{ background: "#fff7ed", borderColor: "#fed7aa" }}
+                              >
+                                <th className="text-left px-3 py-2" style={{ color: "#9a3412" }}>Produto</th>
+                                <th className="text-center px-2 py-2" style={{ color: "#9a3412" }}>Saldo</th>
+                                <th className="text-right px-3 py-2" style={{ color: "#9a3412" }}>Total Saldo</th>
                               </tr>
                             </thead>
                             <tbody>
                               {itensSaldo.map((i) => (
-                                <tr key={i.id} className="border-b last:border-0 bg-red-50/50">
+                                <tr
+                                  key={i.id}
+                                  className="border-b last:border-0"
+                                  style={{ background: "#fff7ed", borderColor: "#fed7aa" }}
+                                >
                                   <td className="px-3 py-2">
-                                    <div className="font-medium text-red-900">{i.nome}</div>
-                                    <div className="text-red-700 font-mono">{i.codigo}</div>
+                                    <div className="font-medium" style={{ color: "#9a3412" }}>{i.nome}</div>
+                                    <div className="font-mono" style={{ color: "#9a3412" }}>{i.codigo}</div>
                                   </td>
-                                  <td className="text-center px-2 py-2 text-red-800">{i.quantidade}</td>
-                                  <td className="text-center px-2 py-2 text-red-800">{i.qtd_faturada}</td>
-                                  <td className="text-center px-2 py-2 font-bold text-red-800">
+                                  <td className="text-center px-2 py-2 font-bold" style={{ color: "#9a3412" }}>
                                     {i.quantidade - i.qtd_faturada}
                                   </td>
-                                  <td className="text-right px-3 py-2 text-red-800">
-                                    {formatBRL(i.preco_final)}
-                                  </td>
-                                  <td className="text-right px-3 py-2 font-semibold text-red-800">
+                                  <td className="text-right px-3 py-2 font-semibold" style={{ color: "#9a3412" }}>
                                     {formatBRL((i.quantidade - i.qtd_faturada) * i.preco_final)}
                                   </td>
                                 </tr>
@@ -2609,10 +2613,39 @@ export default function Faturamento() {
                 );
               })()}
 
-              <div className="flex justify-end gap-4 text-sm">
-                <span className="text-muted-foreground">Peso total: {detalhePedido.peso_total.toFixed(2)} kg</span>
-                <span className="font-bold text-green-700">Total: {formatBRL(detalhePedido.total)}</span>
-              </div>
+              {(() => {
+                const pesoLancado = detalhePedido.itens.reduce(
+                  (s, i) => s + i.peso_unitario * i.qtd_faturada,
+                  0
+                );
+                const pesoPendente = detalhePedido.itens.reduce(
+                  (s, i) =>
+                    s + i.peso_unitario * Math.max(0, i.quantidade - i.qtd_faturada),
+                  0
+                );
+                const totalLancado = detalhePedido.itens.reduce(
+                  (s, i) => s + i.qtd_faturada * i.preco_final,
+                  0
+                );
+                return (
+                  <div className="flex flex-col items-end gap-1 text-sm">
+                    <span className="text-muted-foreground">
+                      Peso lançado: {pesoLancado.toFixed(2)} kg
+                    </span>
+                    {pesoPendente > 0 && (
+                      <span className="text-muted-foreground">
+                        Peso pendente: {pesoPendente.toFixed(2)} kg
+                      </span>
+                    )}
+                    <span>Total do pedido: {formatBRL(detalhePedido.total)}</span>
+                    {totalLancado < detalhePedido.total && (
+                      <span style={{ color: "#166534", fontWeight: 500 }}>
+                        Total lançado no Sankhya: {formatBRL(totalLancado)}
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
           <DialogFooter className="flex-col gap-3 sm:flex-row">
