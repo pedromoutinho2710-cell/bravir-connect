@@ -1112,8 +1112,6 @@ export default function Faturamento() {
       return;
     }
 
-    await supabase.from("itens_pedido").delete().in("id", idsSemFat);
-
     await supabase.from("pedidos").update({
       status: "no_sankhya",
       status_atualizado_em: nowIso,
