@@ -104,6 +104,7 @@ export default function MeusPedidos() {
           itens_pedido(total_item, produtos(marca))
         `)
         .eq("vendedor_id", user.id)
+        .is("pedido_origem_id", null)
         .order("created_at", { ascending: false });
 
       if (filtroStatus !== "todos") query = query.eq("status", filtroStatus);
