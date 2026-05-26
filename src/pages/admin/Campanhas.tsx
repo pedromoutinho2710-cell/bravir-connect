@@ -158,6 +158,7 @@ const formVazio = (): FormData => ({
 // ─── Fetch ────────────────────────────────────────────────────────────────────
 
 async function fetchCampanhas(): Promise<Campanha[]> {
+  console.log("[Campanhas] fetchCampanhas iniciado");
   const [campanhasRes, niveisRes, cpRes, metasRes, metasClienteRes] = await Promise.all([
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.from("campanhas") as any).select("*").eq("categoria", "campanha").order("created_at", { ascending: false }),
@@ -170,6 +171,12 @@ async function fetchCampanhas(): Promise<Campanha[]> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (supabase.from("campanha_metas_clientes") as any).select("*"),
   ]);
+  console.log("[Campanhas] resultado da query:", {
+    campanhas: campanhasRes.data,
+    campanhasError: campanhasRes.error,
+    count: (campanhasRes.data ?? []).length,
+  });
+
   if (campanhasRes.error) throw campanhasRes.error;
   if (niveisRes.error) throw niveisRes.error;
   if (cpRes.error) throw cpRes.error;
@@ -364,8 +371,9 @@ export function CampanhasContent() {
   // ── Query campanhas ────────────────────────────────────────────────────────
 
   const { data: campanhas = [], isLoading } = useQuery<Campanha[]>({
-    queryKey: ["campanhas"],
+    queryKey: ["campanhas", "categoria:campanha"],
     queryFn: fetchCampanhas,
+    refetchOnMount: "always",
   });
 
   // ── Query vendedores ───────────────────────────────────────────────────────
