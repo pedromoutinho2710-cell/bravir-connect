@@ -2465,13 +2465,13 @@ export default function Faturamento() {
 
               {(() => {
                 const temAlgumFaturado = detalhePedido.itens.some(
-                  (i) => i.qtd_faturada > 0
+                  (i) => Number(i.qtd_faturada ?? 0) > 0
                 );
                 const itensFaturados = detalhePedido.itens.filter(
-                  (i) => i.qtd_faturada > 0
+                  (i) => Number(i.qtd_faturada ?? 0) > 0
                 );
                 const itensSaldo = detalhePedido.itens.filter(
-                  (i) => i.qtd_faturada < i.quantidade
+                  (i) => Number(i.qtd_faturada ?? 0) < Number(i.quantidade ?? 0)
                 );
 
                 if (!temAlgumFaturado) {
@@ -2597,10 +2597,10 @@ export default function Faturamento() {
                                     <div className="font-mono" style={{ color: "#9a3412" }}>{i.codigo}</div>
                                   </td>
                                   <td className="text-center px-2 py-2 font-bold" style={{ color: "#9a3412" }}>
-                                    {i.quantidade - i.qtd_faturada}
+                                    {Number(i.quantidade ?? 0) - Number(i.qtd_faturada ?? 0)}
                                   </td>
                                   <td className="text-right px-3 py-2 font-semibold" style={{ color: "#9a3412" }}>
-                                    {formatBRL((i.quantidade - i.qtd_faturada) * i.preco_final)}
+                                    {formatBRL((Number(i.quantidade ?? 0) - Number(i.qtd_faturada ?? 0)) * i.preco_final)}
                                   </td>
                                 </tr>
                               ))}
