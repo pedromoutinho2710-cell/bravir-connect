@@ -1578,6 +1578,7 @@ export default function Faturamento() {
       type LinhaPivot = {
         cliente: string;
         numero: number;
+        dataPedido: string;
         totalPedido: number;
         vendedor: string;
         condPagamento: string;
@@ -1599,6 +1600,7 @@ export default function Faturamento() {
         linhas.push({
           cliente: p.razao_social,
           numero: p.numero_pedido,
+          dataPedido: formatDate(p.data_pedido),
           totalPedido: p.total,
           vendedor: profiles[p.vendedor_id] ?? p.vendedor_nome ?? "—",
           condPagamento: p.cond_pagamento ?? "—",
@@ -1629,6 +1631,7 @@ export default function Faturamento() {
       const cabecalho = [
         "Cliente",
         "Pedido",
+        "Data do pedido",
         "Valor total do pedido",
         ...produtos,
         "Total Geral",
@@ -1638,10 +1641,10 @@ export default function Faturamento() {
       ];
 
       // Índices 1-based de colunas com tratamento especial
-      const colValor = 3;
-      const colTotalGeral = 3 + produtos.length + 1; // após as colunas de produto
-      const colProdutoInicio = 4;
-      const colProdutoFim = 3 + produtos.length;
+      const colValor = 4;
+      const colTotalGeral = 4 + produtos.length + 1; // após as colunas de produto
+      const colProdutoInicio = 5;
+      const colProdutoFim = 4 + produtos.length;
 
       ws.addRow(cabecalho);
       const headerRow = ws.getRow(1);
@@ -1664,6 +1667,7 @@ export default function Faturamento() {
         ws.addRow([
           l.cliente,
           l.numero,
+          l.dataPedido,
           l.totalPedido,
           ...linhaProdutos,
           totalGeral,
