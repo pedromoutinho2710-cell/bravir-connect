@@ -2614,6 +2614,25 @@ export default function Faturamento() {
               })()}
 
               {(() => {
+                const ehPedidoFilho =
+                  detalhePedido.itens.every((i) => i.qtd_faturada === 0) &&
+                  detalhePedido.status === "sem_estoque";
+
+                if (ehPedidoFilho) {
+                  const pesoTotal = detalhePedido.itens.reduce(
+                    (s, i) => s + i.peso_unitario * i.quantidade,
+                    0
+                  );
+                  return (
+                    <div className="flex flex-col items-end gap-1 text-sm">
+                      <span className="text-muted-foreground">
+                        Peso total: {pesoTotal.toFixed(2)} kg
+                      </span>
+                      <span>Total: {formatBRL(detalhePedido.total)}</span>
+                    </div>
+                  );
+                }
+
                 const pesoLancado = detalhePedido.itens.reduce(
                   (s, i) => s + i.peso_unitario * i.qtd_faturada,
                   0
