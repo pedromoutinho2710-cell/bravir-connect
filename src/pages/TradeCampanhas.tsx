@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -25,6 +26,8 @@ type Campanha = {
   created_at: string;
 };
 
+type Aba = "beneficios" | "campanhas";
+
 const TIPO_LABEL: Record<string, string> = {
   desconto: "Desconto",
   bonificacao: "Bonificação",
@@ -40,6 +43,8 @@ const TIPO_COLOR: Record<string, string> = {
 const EMPTY = { nome: "", descricao: "", tipo: "desconto", valor: "", data_inicio: "", data_fim: "", ativa: true };
 
 export default function TradeCampanhas() {
+  const [abaTrade, setAbaTrade] = useState<Aba>("beneficios");
+  const [beneficios, setBeneficios] = useState<Campanha[]>([]);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialog, setDialog] = useState<{ open: boolean; editing: Campanha | null }>({ open: false, editing: null });
@@ -48,13 +53,23 @@ export default function TradeCampanhas() {
 
   const carregar = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("campanhas")
-      .select("*")
-      .eq("categoria", "beneficio")
-      .order("created_at", { ascending: false });
-    if (error) toast.error("Erro ao carregar campanhas");
-    else setCampanhas((data ?? []) as Campanha[]);
+    const [benRes, campRes] = await Promise.all([
+      supabase
+        .from("campanhas")
+        .select("*")
+        .eq("categoria", "beneficio")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("campanhas")
+        .select("*")
+        .eq("categoria", "campanha")
+        .order("created_at", { ascending: false }),
+    ]);
+    if (benRes.error || campRes.error) toast.error("Erro ao carregar campanhas");
+    else {
+      setBeneficios((benRes.data ?? []) as Campanha[]);
+      setCampanhas((campRes.data ?? []) as Campanha[]);
+    }
     setLoading(false);
   };
 
@@ -81,6 +96,7 @@ export default function TradeCampanhas() {
   const salvar = async () => {
     if (!form.nome.trim()) { toast.error("Nome é obrigatório"); return; }
     setSalvando(true);
+    const categoria = abaTrade === "beneficios" ? "beneficio" : "campanha";
     const payload = {
       nome: form.nome.trim(),
       descricao: form.descricao.trim() || null,
@@ -89,7 +105,7 @@ export default function TradeCampanhas() {
       data_inicio: form.data_inicio || null,
       data_fim: form.data_fim || null,
       ativa: form.ativa,
-      categoria: "beneficio",
+      categoria,
     };
 
     const { error } = dialog.editing
@@ -98,7 +114,7 @@ export default function TradeCampanhas() {
 
     setSalvando(false);
     if (error) { toast.error("Erro: " + error.message); return; }
-    toast.success(dialog.editing ? "Campanha atualizada" : "Campanha criada");
+    toast.success(dialog.editing ? "Atualizado" : "Criado");
     setDialog({ open: false, editing: null });
     carregar();
   };
@@ -106,31 +122,45 @@ export default function TradeCampanhas() {
   const toggleAtiva = async (c: Campanha) => {
     const { error } = await supabase.from("campanhas").update({ ativa: !c.ativa }).eq("id", c.id);
     if (error) { toast.error("Erro: " + error.message); return; }
-    toast.success(c.ativa ? "Campanha desativada" : "Campanha ativada");
+    toast.success(c.ativa ? "Desativado" : "Ativado");
     carregar();
   };
+
+  const lista = abaTrade === "beneficios" ? beneficios : campanhas;
+  const tituloAba = abaTrade === "beneficios" ? "Benefícios" : "Campanhas";
+  const subtituloAba = abaTrade === "beneficios"
+    ? "Gerencie campanhas de desconto e bonificação"
+    : "Gerencie campanhas comerciais";
+  const botaoLabel = abaTrade === "beneficios" ? "Novo benefício" : "Nova campanha";
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Benefícios</h1>
-          <p className="text-sm text-muted-foreground">Gerencie campanhas de desconto e bonificação</p>
+          <h1 className="text-2xl font-bold">{tituloAba}</h1>
+          <p className="text-sm text-muted-foreground">{subtituloAba}</p>
         </div>
         <Button onClick={abrirNova}>
           <Plus className="h-4 w-4 mr-2" />
-          Nova campanha
+          {botaoLabel}
         </Button>
       </div>
+
+      <Tabs value={abaTrade} onValueChange={(v) => setAbaTrade(v as Aba)}>
+        <TabsList>
+          <TabsTrigger value="beneficios">Benefícios</TabsTrigger>
+          <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
+        </TabsList>
+      </Tabs>
 
       {loading ? (
         <div className="flex h-48 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
-      ) : campanhas.length === 0 ? (
+      ) : lista.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center text-muted-foreground">
-            Nenhuma campanha cadastrada
+            {abaTrade === "beneficios" ? "Nenhum benefício cadastrado" : "Nenhuma campanha cadastrada"}
           </CardContent>
         </Card>
       ) : (
@@ -147,7 +177,7 @@ export default function TradeCampanhas() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {campanhas.map((c) => (
+              {lista.map((c) => (
                 <TableRow key={c.id}>
                   <TableCell>
                     <div className="font-medium">{c.nome}</div>
@@ -190,7 +220,11 @@ export default function TradeCampanhas() {
       <Dialog open={dialog.open} onOpenChange={(o) => !o && setDialog({ open: false, editing: null })}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{dialog.editing ? "Editar campanha" : "Nova campanha"}</DialogTitle>
+            <DialogTitle>
+              {dialog.editing
+                ? abaTrade === "beneficios" ? "Editar benefício" : "Editar campanha"
+                : abaTrade === "beneficios" ? "Novo benefício" : "Nova campanha"}
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -204,7 +238,7 @@ export default function TradeCampanhas() {
               <Label>Descrição</Label>
               <Textarea rows={2} value={form.descricao}
                 onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))}
-                placeholder="Detalhes da campanha…" />
+                placeholder="Detalhes…" />
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -244,7 +278,7 @@ export default function TradeCampanhas() {
             <div className="flex items-center gap-3">
               <Switch checked={form.ativa}
                 onCheckedChange={(c) => setForm((f) => ({ ...f, ativa: c }))} />
-              <Label className="font-normal">Campanha ativa</Label>
+              <Label className="font-normal">Ativa</Label>
             </div>
           </div>
           <DialogFooter>
