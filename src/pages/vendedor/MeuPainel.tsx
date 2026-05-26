@@ -20,6 +20,8 @@ type KPIs = {
   rascunhos: number;
   meta: number;
   aFaturar: number;
+  pedidosSemEstoque: number;
+  valorSemEstoque: number;
 };
 
 type UltimoPedido = {
@@ -153,7 +155,7 @@ export default function MeuPainel() {
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [periodTotais, setPeriodTotais] = useState<PeriodTotais>({ entrada: 0, faturado: 0, aFaturar: 0 });
   const [loadingPeriodo, setLoadingPeriodo] = useState(false);
-  const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0, aFaturar: 0 });
+  const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0, aFaturar: 0, pedidosSemEstoque: 0, valorSemEstoque: 0 });
   const [ultimosPedidos, setUltimosPedidos] = useState<UltimoPedido[]>([]);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [clientesReativar, setClientesReativar] = useState<ClienteReativar[]>([]);
@@ -260,7 +262,7 @@ export default function MeuPainel() {
       const [pedidosRes, rascunhosRes, metasRes, ultimosRes] = await Promise.all([
         supabase
           .from("pedidos")
-          .select("id, itens_pedido(total_item)")
+          .select("id, status, itens_pedido(total_item)")
           .eq("vendedor_id", user.id)
           .gte("data_pedido", mesInicio)
           .lte("data_pedido", mesFim)
@@ -282,24 +284,34 @@ export default function MeuPainel() {
           .select("id, numero_pedido, status, data_pedido, itens_pedido(total_item), clientes(razao_social, nome_parceiro)")
           .eq("vendedor_id", user.id)
           .not("status", "in", '("rascunho")')
-          .order("created_at", { ascending: false })
-          .limit(5),
+          .order("created_at", { ascending: false }),
       ]);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pedidos = (pedidosRes.data ?? []) as any[];
-      const faturamento = pedidos.reduce(
+      let faturamento = 0;
+      let pedidosSemEstoque = 0;
+      let valorSemEstoque = 0;
+      let aFaturar = 0;
+      pedidos.forEach((p) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (s: number, p: any) => s + (p.itens_pedido ?? []).reduce((si: number, i: any) => si + Number(i.total_item), 0),
-        0,
-      );
+        const total = (p.itens_pedido ?? []).reduce((si: number, i: any) => si + Number(i.total_item), 0);
+        faturamento += total;
+        if (p.status === "sem_estoque") {
+          pedidosSemEstoque++;
+          valorSemEstoque += total;
+        }
+        if (p.status === "no_sankhya" || p.status === "parcialmente_faturado") {
+          aFaturar += total;
+        }
+      });
       const numPedidos = pedidos.length;
       const ticketMedio = numPedidos > 0 ? faturamento / numPedidos : 0;
       const rascunhos = rascunhosRes.count ?? 0;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const meta = Number((metasRes.data as any)?.valor_meta_reais ?? 0);
 
-      setKpis({ faturamento, numPedidos, ticketMedio, rascunhos, meta, aFaturar: 0 });
+      setKpis({ faturamento, numPedidos, ticketMedio, rascunhos, meta, aFaturar, pedidosSemEstoque, valorSemEstoque });
 
       // Second wave: campanhas, reativação via RPC, tarefas — all in parallel
       const hoje = agora.toISOString().slice(0, 10);
@@ -666,6 +678,21 @@ export default function MeuPainel() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatBRL(kpis.ticketMedio)}</div>
+          </CardContent>
+        </Card>
+
+        <Card
+          className="cursor-pointer hover:border-[#ea580c] hover:shadow-sm transition"
+          onClick={() => navigate("/meus-pedidos", { state: { filtroStatus: "sem_estoque" } })}
+        >
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Pedidos sem estoque</CardTitle>
+            <PackageX className="h-4 w-4 text-orange-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-700">{kpis.pedidosSemEstoque}</div>
+            <p className="text-xs text-muted-foreground mt-1">{formatBRL(kpis.valorSemEstoque)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Clique para ver pedidos</p>
           </CardContent>
         </Card>
 
