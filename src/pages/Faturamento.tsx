@@ -798,6 +798,73 @@ export default function Faturamento() {
       )
     );
 
+    const itensSaldo = faturarDialog.itens.filter(
+      (item) => (totalFaturadoMap[item.id] ?? 0) < item.quantidade
+    );
+
+    if (itensSaldo.length > 0) {
+      try {
+        const { data: origemPedido, error: errOrig } = await supabase
+          .from("pedidos")
+          .select("cliente_id, vendedor_id, cond_pagamento, tabela_preco, perfil_cliente, agendamento, observacoes, ordem_compra, tipo, vigencia_id")
+          .eq("id", faturarDialog.id)
+          .single();
+        if (errOrig || !origemPedido) throw new Error(errOrig?.message ?? "pedido original não encontrado");
+
+        const nowIsoFilho = new Date().toISOString();
+        const { data: novoPedido, error: errNovo } = await supabase
+          .from("pedidos")
+          .insert({
+            cliente_id: origemPedido.cliente_id,
+            vendedor_id: origemPedido.vendedor_id,
+            cond_pagamento: origemPedido.cond_pagamento,
+            tabela_preco: origemPedido.tabela_preco,
+            perfil_cliente: origemPedido.perfil_cliente,
+            agendamento: origemPedido.agendamento,
+            observacoes: origemPedido.observacoes,
+            ordem_compra: origemPedido.ordem_compra,
+            tipo: origemPedido.tipo,
+            vigencia_id: origemPedido.vigencia_id,
+            status: "sem_estoque",
+            pedido_origem_id: faturarDialog.id,
+            data_pedido: faturarDialog.data_pedido,
+            status_atualizado_em: nowIsoFilho,
+          } as any)
+          .select("id, numero_pedido")
+          .single();
+        if (errNovo || !novoPedido) throw new Error(errNovo?.message ?? "falha ao criar pedido filho");
+
+        const idsSaldo = itensSaldo.map((i) => i.id);
+        const { data: itensOrigem, error: errItens } = await supabase
+          .from("itens_pedido")
+          .select("produto_id, quantidade, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_comercial, desconto_trade, total_item")
+          .in("id", idsSaldo);
+        if (errItens || !itensOrigem) throw new Error(errItens?.message ?? "falha ao buscar itens originais");
+
+        const novosItensPayload = itensOrigem.map((i) => ({
+          pedido_id: novoPedido.id,
+          produto_id: i.produto_id,
+          quantidade: i.quantidade,
+          qtd_faturada: 0,
+          preco_unitario_bruto: i.preco_unitario_bruto,
+          preco_unitario_liquido: i.preco_unitario_liquido,
+          preco_apos_perfil: i.preco_apos_perfil,
+          preco_apos_comercial: i.preco_apos_comercial,
+          preco_final: i.preco_final,
+          desconto_comercial: i.desconto_comercial,
+          desconto_trade: i.desconto_trade,
+          total_item: i.total_item,
+        }));
+        const { error: errInsItens } = await supabase.from("itens_pedido").insert(novosItensPayload);
+        if (errInsItens) throw new Error(errInsItens.message);
+
+        toast.success(`Saldo de ${itensSaldo.length} item(ns) movido para pedido filho #${novoPedido.numero_pedido}`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast.error("Erro ao criar pedido filho com saldo: " + msg);
+      }
+    }
+
     const todosCompletos = faturarDialog.itens.every((item) => (totalFaturadoMap[item.id] ?? 0) >= item.quantidade);
     const novoStatus = todosCompletos ? "no_sankhya" : "parcialmente_faturado";
 
