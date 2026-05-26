@@ -292,6 +292,36 @@ export default function Faturamento() {
 
   // Dialog detalhes
   const [detalhePedido, setDetalhePedido] = useState<PedidoFat | null>(null);
+  const [itensSelecionados, setItensSelecionados] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (detalhePedido) {
+      setItensSelecionados(new Set(detalhePedido.itens.map((i) => i.id)));
+    } else {
+      setItensSelecionados(new Set());
+    }
+  }, [detalhePedido]);
+
+  const toggleItemSelecionado = (id: string) => {
+    setItensSelecionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleTodosSelecionados = (ids: string[], todosMarcados: boolean) => {
+    setItensSelecionados((prev) => {
+      const next = new Set(prev);
+      if (todosMarcados) {
+        ids.forEach((id) => next.delete(id));
+      } else {
+        ids.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
 
   // Dialog faturar NF
   type ItemFat = { marcar: boolean; qtd: number; alreadyFaturado: number };
@@ -2473,11 +2503,21 @@ export default function Faturamento() {
                 );
 
                 if (!temAlgumFaturado) {
+                  const todosIds = detalhePedido.itens.map((i) => i.id);
+                  const marcadosCount = todosIds.filter((id) => itensSelecionados.has(id)).length;
+                  const todosMarcados = marcadosCount === todosIds.length && todosIds.length > 0;
+                  const parcial = marcadosCount > 0 && !todosMarcados;
                   return (
                     <div className="rounded-md border overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="border-b bg-muted/50">
+                            <th className="px-2 py-2 w-8">
+                              <Checkbox
+                                checked={parcial ? "indeterminate" : todosMarcados}
+                                onCheckedChange={() => toggleTodosSelecionados(todosIds, todosMarcados)}
+                              />
+                            </th>
                             <th className="text-left px-3 py-2">Produto</th>
                             <th className="text-center px-2 py-2">Cx</th>
                             <th className="text-center px-2 py-2">Qtd</th>
@@ -2490,22 +2530,31 @@ export default function Faturamento() {
                           </tr>
                         </thead>
                         <tbody>
-                          {detalhePedido.itens.map((i) => (
-                            <tr key={i.id} className="border-b last:border-0">
-                              <td className="px-3 py-2">
-                                <div className="font-medium">{i.nome}</div>
-                                <div className="text-muted-foreground font-mono">{i.codigo}</div>
-                              </td>
-                              <td className="text-center px-2 py-2">{i.cx_embarque}</td>
-                              <td className="text-center px-2 py-2">{i.quantidade}</td>
-                              <td className="text-center px-2 py-2">{(i.desconto_perfil * 100).toFixed(0)}%</td>
-                              <td className="text-center px-2 py-2">{i.desconto_comercial.toFixed(1)}%</td>
-                              <td className="text-center px-2 py-2">{i.desconto_trade.toFixed(1)}%</td>
-                              <td className="text-right px-3 py-2">{formatBRL(i.preco_bruto)}</td>
-                              <td className="text-right px-3 py-2">{formatBRL(i.preco_final)}</td>
-                              <td className="text-right px-3 py-2 font-medium">{formatBRL(i.total)}</td>
-                            </tr>
-                          ))}
+                          {detalhePedido.itens.map((i) => {
+                            const marcado = itensSelecionados.has(i.id);
+                            return (
+                              <tr key={i.id} className={`border-b last:border-0 ${marcado ? "bg-muted/30" : ""}`}>
+                                <td className="px-2 py-2 w-8">
+                                  <Checkbox
+                                    checked={marcado}
+                                    onCheckedChange={() => toggleItemSelecionado(i.id)}
+                                  />
+                                </td>
+                                <td className="px-3 py-2">
+                                  <div className="font-medium">{i.nome}</div>
+                                  <div className="text-muted-foreground font-mono">{i.codigo}</div>
+                                </td>
+                                <td className="text-center px-2 py-2">{i.cx_embarque}</td>
+                                <td className="text-center px-2 py-2">{i.quantidade}</td>
+                                <td className="text-center px-2 py-2">{(i.desconto_perfil * 100).toFixed(0)}%</td>
+                                <td className="text-center px-2 py-2">{i.desconto_comercial.toFixed(1)}%</td>
+                                <td className="text-center px-2 py-2">{i.desconto_trade.toFixed(1)}%</td>
+                                <td className="text-right px-3 py-2">{formatBRL(i.preco_bruto)}</td>
+                                <td className="text-right px-3 py-2">{formatBRL(i.preco_final)}</td>
+                                <td className="text-right px-3 py-2 font-medium">{formatBRL(i.total)}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -2578,30 +2627,53 @@ export default function Faturamento() {
                                 className="border-b"
                                 style={{ background: "#fff7ed", borderColor: "#fed7aa" }}
                               >
+                                <th className="px-2 py-2 w-8">
+                                  {(() => {
+                                    const saldoIds = itensSaldo.map((i) => i.id);
+                                    const marcadosCount = saldoIds.filter((id) => itensSelecionados.has(id)).length;
+                                    const todosMarcados = marcadosCount === saldoIds.length && saldoIds.length > 0;
+                                    const parcial = marcadosCount > 0 && !todosMarcados;
+                                    return (
+                                      <Checkbox
+                                        checked={parcial ? "indeterminate" : todosMarcados}
+                                        onCheckedChange={() => toggleTodosSelecionados(saldoIds, todosMarcados)}
+                                      />
+                                    );
+                                  })()}
+                                </th>
                                 <th className="text-left px-3 py-2" style={{ color: "#9a3412" }}>Produto</th>
                                 <th className="text-center px-2 py-2" style={{ color: "#9a3412" }}>Saldo</th>
                                 <th className="text-right px-3 py-2" style={{ color: "#9a3412" }}>Total Saldo</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {itensSaldo.map((i) => (
-                                <tr
-                                  key={i.id}
-                                  className="border-b last:border-0"
-                                  style={{ background: "#fff7ed", borderColor: "#fed7aa" }}
-                                >
-                                  <td className="px-3 py-2">
-                                    <div className="font-medium" style={{ color: "#9a3412" }}>{i.nome}</div>
-                                    <div className="font-mono" style={{ color: "#9a3412" }}>{i.codigo}</div>
-                                  </td>
-                                  <td className="text-center px-2 py-2 font-bold" style={{ color: "#9a3412" }}>
-                                    {Number(i.quantidade ?? 0) - Number(i.qtd_faturada ?? 0)}
-                                  </td>
-                                  <td className="text-right px-3 py-2 font-semibold" style={{ color: "#9a3412" }}>
-                                    {formatBRL((Number(i.quantidade ?? 0) - Number(i.qtd_faturada ?? 0)) * i.preco_final)}
-                                  </td>
-                                </tr>
-                              ))}
+                              {itensSaldo.map((i) => {
+                                const marcado = itensSelecionados.has(i.id);
+                                return (
+                                  <tr
+                                    key={i.id}
+                                    className="border-b last:border-0"
+                                    style={{ background: marcado ? "#fff7ed" : "#fffaf3", borderColor: "#fed7aa" }}
+                                  >
+                                    <td className="px-2 py-2 w-8">
+                                      <Checkbox
+                                        checked={marcado}
+                                        onCheckedChange={() => toggleItemSelecionado(i.id)}
+                                      />
+                                    </td>
+                                    <td className="px-3 py-2">
+                                      <div className="font-medium" style={{ color: "#9a3412" }}>{i.nome}</div>
+                                      <div className="font-mono" style={{ color: "#9a3412" }}>{i.codigo}</div>
+                                    </td>
+                                    <td className="text-center px-2 py-2 font-bold" style={{ color: "#9a3412" }}>
+                                      {Number(i.quantidade ?? 0) - Number(i.qtd_faturada ?? 0)}
+                                    </td>
+                                    <td className="text-right px-3 py-2 font-semibold" style={{ color: "#9a3412" }}>
+                                      {formatBRL((Number(i.quantidade ?? 0) - Number(i.qtd_faturada ?? 0)) * i.preco_final)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
@@ -2660,6 +2732,33 @@ export default function Faturamento() {
                         Total lançado no Sankhya: {formatBRL(totalLancado)}
                       </span>
                     )}
+                  </div>
+                );
+              })()}
+
+              {(() => {
+                const itensMarcados = detalhePedido.itens.filter((i) => itensSelecionados.has(i.id));
+                if (itensMarcados.length === 0) return null;
+                const subtotal = itensMarcados.reduce((s, i) => s + i.total, 0);
+                return (
+                  <div
+                    style={{
+                      background: "#f0fdf4",
+                      border: "0.5px solid #86efac",
+                      borderRadius: 8,
+                      padding: "10px 14px",
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginTop: 10,
+                    }}
+                  >
+                    <span style={{ fontSize: 11, color: "#166534" }}>
+                      {itensMarcados.length} {itensMarcados.length === 1 ? "item" : "itens"} selecionado(s)
+                    </span>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: "#166534" }}>
+                      Subtotal: {formatBRL(subtotal)}
+                    </span>
                   </div>
                 );
               })()}
