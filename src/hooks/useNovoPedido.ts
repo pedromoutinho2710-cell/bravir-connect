@@ -323,7 +323,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
       }));
       const { error } = await supabase
         .from("itens_pedido")
-        .upsert(itemsPayload, { onConflict: "pedido_id,produto_id" });
+        .insert(itemsPayload);
       if (error) {
         toast.error("Erro ao salvar itens: " + error.message);
         return null;
