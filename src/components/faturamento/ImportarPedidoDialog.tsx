@@ -110,10 +110,18 @@ export default function ImportarPedidoDialog({
       const cel = (row: number, col: number): string =>
         String(aoa[row]?.[col] ?? "").trim();
 
+      // Detectar offset de colunas: alguns formulários têm colunas deslocadas 1 à direita.
+      // Header dos produtos está na linha 18 (índice 17). Procura "JIVA" para identificar o layout.
+      const headerRow = (aoa[17] ?? []) as unknown[];
+      const jivaColIdx = headerRow.findIndex(
+        (v) => typeof v === "string" && v.toUpperCase().includes("JIVA")
+      );
+      const offset = jivaColIdx === 3 ? 1 : 0;
+
       const tabelaRaw = cel(1, 7); // H2
       const tabela_preco = (tabelaRaw.match(/\d+|suframa/i) ?? [""])[0].toLowerCase();
-      const codigo_cliente = cel(2, 11); // L3
-      const cond_pagamento = cel(4, 10); // K5
+      const codigo_cliente = cel(2, 11 + offset); // L3 ou M3
+      const cond_pagamento = cel(4, 10 + offset); // K5 ou L5
 
       // Agendamento: linha 12 (índice 11), coluna E (índice 4) = "X" ou coluna F (índice 5) = "SIM"
       const agendamento = cel(11, 4).toUpperCase() === "X" || cel(11, 5).toUpperCase() === "SIM";
@@ -124,11 +132,11 @@ export default function ImportarPedidoDialog({
       const rawProdutos: ProdutoRow[] = [];
       for (let i = 18; i < aoa.length; i++) {
         const row = aoa[i] as unknown[];
-        const cod = String(row?.[2] ?? "").trim(); // C
+        const cod = String(row?.[2 + offset] ?? "").trim(); // C ou D
         if (!cod) break;
-        const quantidade = Number(row?.[5] ?? 0);   // F
-        const preco_bruto = Number(row?.[8] ?? 0);  // I
-        const dPerfilRaw = Number(row?.[9] ?? 0);   // J — decimal, ex: 0.20
+        const quantidade = Number(row?.[5 + offset] ?? 0);   // F ou G
+        const preco_bruto = Number(row?.[8 + offset] ?? 0);  // I ou J
+        const dPerfilRaw = Number(row?.[9 + offset] ?? 0);   // J ou K — decimal, ex: 0.20
         if (!quantidade || quantidade <= 0) continue;
         rawProdutos.push({
           codigo_jiva: cod,
