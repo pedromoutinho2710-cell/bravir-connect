@@ -233,7 +233,6 @@ export default function NovoPedidoFaturamento() {
       total_item: it.total,
       desconto_comercial: it.desconto,
       desconto_trade: 0,
-      bolsao: 0,
     }));
 
     const { error: itensErr } = await supabase.from("itens_pedido").insert(itensPayload);
