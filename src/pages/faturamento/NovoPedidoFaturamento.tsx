@@ -52,7 +52,7 @@ export default function NovoPedidoFaturamento() {
   // ── Campos do pedido ────────────────────────────────────────────
   const [vendedorNome, setVendedorNome] = useState("");
   const [condPagamento, setCondPagamento] = useState("");
-  const [tipo, setTipo] = useState<"pedido" | "bonificacao">("pedido");
+  const [tipo, setTipo] = useState<"Pedido" | "Bonificação">("Pedido");
   const [ordemCompra, setOrdemCompra] = useState("");
   const [agendamento, setAgendamento] = useState(false);
   const [observacoes, setObservacoes] = useState("");
@@ -397,11 +397,11 @@ export default function NovoPedidoFaturamento() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Tipo</Label>
-                  <Select value={tipo} onValueChange={(v) => setTipo(v as "pedido" | "bonificacao")}>
+                  <Select value={tipo} onValueChange={(v) => setTipo(v as "Pedido" | "Bonificação")}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="pedido">Pedido</SelectItem>
-                      <SelectItem value="bonificacao">Bonificação</SelectItem>
+                      <SelectItem value="Pedido">Pedido</SelectItem>
+                      <SelectItem value="Bonificação">Bonificação</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
