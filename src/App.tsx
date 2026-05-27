@@ -56,6 +56,7 @@ import NovoPedidoGestora from "./pages/gestora/NovoPedidoGestora";
 import PedidosGestora from "./pages/gestora/PedidosGestora";
 import HistoricoFaturamento from "@/pages/gestora/HistoricoFaturamento";
 
+const MeuPipeline = lazy(() => import("./pages/vendedor/MeuPipeline"));
 const PropostaPublica = lazy(() => import("./pages/PropostaPublica"));
 const CalculadoraPublica = lazy(() => import("./pages/CalculadoraPublica"));
 const MinhasPropostas = lazy(() => import("./pages/MinhasPropostas"));
@@ -111,6 +112,7 @@ const App = () => (
               <Route path="/meus-pedidos" element={<MeusPedidos />} />
               <Route path="/meus-clientes" element={<MeusClientes />} />
               <Route path="/cadastrar-cliente" element={<CadastrarCliente />} />
+              <Route path="/meu-pipeline" element={<MeuPipeline />} />
             </Route>
 
             {/* Propostas e Calculadora — vendedor, gestora e admin */}

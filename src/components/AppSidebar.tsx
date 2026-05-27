@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LogOut, FileText, Calculator } from "lucide-react";
+import { LogOut, FileText, Calculator, LayoutTemplate } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -117,6 +117,7 @@ export function AppSidebar() {
   const isPedroMenezes = user?.email === "pedro.menezes@bravir.com.br";
   const extraItems: Item[] = isPedroMenezes
     ? [
+        { title: "Meu Pipeline", url: "/meu-pipeline", icon: LayoutTemplate },
         { title: "Propostas", url: "/propostas", icon: FileText },
         { title: "Calculadora", url: "/calculadora", icon: Calculator },
       ]

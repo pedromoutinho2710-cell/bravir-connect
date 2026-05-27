@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { LogOut, FileText, Calculator } from "lucide-react";
+import { LogOut, FileText, Calculator, LayoutTemplate } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,7 @@ export function MobileNav({ onNavigate }: Props) {
   const isPedroMenezes = user?.email === "pedro.menezes@bravir.com.br";
   const extraItems: Item[] = isPedroMenezes
     ? [
+        { title: "Meu Pipeline", url: "/meu-pipeline", icon: LayoutTemplate },
         { title: "Propostas", url: "/propostas", icon: FileText },
         { title: "Calculadora", url: "/calculadora", icon: Calculator },
       ]
