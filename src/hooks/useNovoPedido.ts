@@ -8,6 +8,8 @@ import type { PdfItem } from "@/lib/pdf";
 import type { DadosCliente } from "@/components/pedido/SecaoCliente";
 import type { ItemPedido, Produto } from "@/components/pedido/SecaoProdutos";
 
+// v2
+
 export type Vigencia = {
   id: string;
   nome: string;
