@@ -483,30 +483,35 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
   }));
 
   const baixarPDF = async () => {
-    const { gerarPedidoPDF } = await import("@/lib/pdf");
-    const doc = gerarPedidoPDF({
-      data: new Date(),
-      tipo: cliente.tipo,
-      cliente: {
-        cnpj: cliente.cnpj,
-        razao_social: cliente.razao_social,
-        cidade: cliente.cidade,
-        uf: cliente.uf,
-        comprador: cliente.comprador,
-      },
-      cluster: cliente.cluster,
-      tabela_preco: cliente.tabela_preco,
-      cond_pagamento: cliente.cond_pagamento,
-      ordem_compra: cliente.ordem_compra || undefined,
-      agendamento: cliente.agendamento,
-      observacoes: cliente.observacoes,
-      itens: itensPdf,
-      vendedor_email: isGestora
-        ? (representanteNome ?? user?.email)
-        : user?.email,
-    });
-    const nomeArquivo = `pedido-${(cliente.razao_social || "rascunho").slice(0, 20)}-${formatDate(new Date()).replace(/\//g, "-")}.pdf`;
-    doc.save(nomeArquivo);
+    try {
+      const { gerarPedidoPDF } = await import("@/lib/pdf");
+      const doc = gerarPedidoPDF({
+        data: new Date(),
+        tipo: cliente.tipo,
+        cliente: {
+          cnpj: cliente.cnpj,
+          razao_social: cliente.razao_social,
+          cidade: cliente.cidade,
+          uf: cliente.uf,
+          comprador: cliente.comprador,
+        },
+        cluster: cliente.cluster,
+        tabela_preco: cliente.tabela_preco,
+        cond_pagamento: cliente.cond_pagamento,
+        ordem_compra: cliente.ordem_compra || undefined,
+        agendamento: cliente.agendamento,
+        observacoes: cliente.observacoes,
+        itens: itensPdf,
+        vendedor_email: isGestora
+          ? (representanteNome ?? user?.email)
+          : user?.email,
+      });
+      const nomeArquivo = `pedido-${(cliente.razao_social || "rascunho").slice(0, 20)}-${formatDate(new Date()).replace(/\//g, "-")}.pdf`;
+      doc.save(nomeArquivo);
+    } catch (err) {
+      console.error("Erro ao gerar PDF:", err);
+      toast.error("Erro ao gerar PDF. Verifique o console.");
+    }
   };
 
   return {
