@@ -261,7 +261,7 @@ export function SecaoProdutos({
         && vigenciaId === "311fd93d-f3d1-4160-bd17-fc08472606c0";
 
       if (usarEspecial) {
-        const dPerfilEspecial = bruto > 0 ? Math.round(Math.max(0, 1 - precoEspecial / bruto) * 10000) / 10000 : 0;
+        const dPerfilEspecial = bruto > 0 ? Math.max(0, 1 - precoEspecial / bruto) : 0;
         const precos_especial = calcularPrecos(bruto, dPerfilEspecial, 0, 0, i.quantidade);
         return {
           ...i,
@@ -468,7 +468,7 @@ export function SecaoProdutos({
                           placeholder="0"
                         />
                       ) : (
-                        <span className="text-[10px] text-muted-foreground">{Math.round(i.desconto_perfil * 10000) / 100}%</span>
+                        <span className="text-[10px] text-muted-foreground">{(i.desconto_perfil * 100).toFixed(2)}%</span>
                       )}
                     </TableCell>
 
