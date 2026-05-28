@@ -6,7 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Loader2, Trash2, Plus, Copy, Check, X } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Trash2, Plus, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
 
@@ -17,12 +20,6 @@ type Produto = {
   codigo_jiva: string;
 };
 
-type ClienteSel = {
-  id: string;
-  razao_social: string;
-  tabela_preco: string | null;
-};
-
 type ItemSim = {
   produto_id: string;
   nome: string;
@@ -30,8 +27,6 @@ type ItemSim = {
   custo: number;
   preco_revenda: number | "";
 };
-
-const TABELA_PADRAO = "7";
 
 export default function CalculadoraMargem() {
   const { user } = useAuth();
@@ -41,10 +36,11 @@ export default function CalculadoraMargem() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [precos, setPrecos] = useState<{ produto_id: string; preco_bruto: number; tabela: string }[]>([]);
 
-  // Cliente
-  const [buscaCliente, setBuscaCliente] = useState("");
-  const [resultadosCliente, setResultadosCliente] = useState<ClienteSel[]>([]);
-  const [clienteSelecionado, setClienteSelecionado] = useState<ClienteSel | null>(null);
+  // Apresentação
+  const [nomeProspect, setNomeProspect] = useState("");
+  const [tabela, setTabela] = useState<string>("7");
+  const [cluster, setCluster] = useState("");
+  const [mensagem, setMensagem] = useState("");
 
   // Produtos
   const [buscaProduto, setBuscaProduto] = useState("");
@@ -93,33 +89,13 @@ export default function CalculadoraMargem() {
     })();
   }, []);
 
-  // Busca de clientes (debounced simples)
-  useEffect(() => {
-    const termo = buscaCliente.trim();
-    if (!termo || clienteSelecionado) {
-      setResultadosCliente([]);
-      return;
-    }
-    const t = setTimeout(async () => {
-      const { data } = await supabase
-        .from("clientes")
-        .select("id, razao_social, tabela_preco")
-        .ilike("razao_social", `%${termo}%`)
-        .limit(10);
-      setResultadosCliente((data ?? []) as ClienteSel[]);
-    }, 250);
-    return () => clearTimeout(t);
-  }, [buscaCliente, clienteSelecionado]);
-
-  const tabelaAtual = clienteSelecionado?.tabela_preco?.trim() || TABELA_PADRAO;
-
   const precoPorProduto = useMemo(() => {
     const map = new Map<string, number>();
     for (const p of precos) {
-      if (p.tabela === tabelaAtual) map.set(p.produto_id, Number(p.preco_bruto));
+      if (p.tabela === tabela) map.set(p.produto_id, Number(p.preco_bruto));
     }
     return map;
-  }, [precos, tabelaAtual]);
+  }, [precos, tabela]);
 
   // Recalcular custos quando trocar cliente/tabela
   useEffect(() => {
@@ -151,7 +127,7 @@ export default function CalculadoraMargem() {
     }
     const custo = precoPorProduto.get(p.id);
     if (custo == null) {
-      toast.error(`Sem preço cadastrado para a tabela ${tabelaAtual}.`);
+      toast.error(`Sem preço cadastrado para a tabela ${tabela}.`);
       return;
     }
     setItensSim((prev) => [
@@ -174,18 +150,6 @@ export default function CalculadoraMargem() {
           : it,
       ),
     );
-  };
-
-  const selecionarCliente = (c: ClienteSel) => {
-    setClienteSelecionado(c);
-    setBuscaCliente(c.razao_social);
-    setResultadosCliente([]);
-  };
-
-  const limparCliente = () => {
-    setClienteSelecionado(null);
-    setBuscaCliente("");
-    setResultadosCliente([]);
   };
 
   const podeGerar = itensSim.some(
@@ -226,7 +190,10 @@ export default function CalculadoraMargem() {
       .from("simulacoes_margem")
       .insert({
         vendedor_id: user.id,
-        cliente_id: clienteSelecionado?.id ?? null,
+        tabela_preco: tabela,
+        cluster: cluster || null,
+        nome_prospect: nomeProspect || null,
+        mensagem: mensagem || null,
         itens: JSON.stringify(itensPayload),
       })
       .select("token")
@@ -271,58 +238,59 @@ export default function CalculadoraMargem() {
   return (
     <div className="space-y-6 p-4 md:p-6 max-w-5xl mx-auto">
       <div>
-        <h1 className="text-2xl font-semibold">Calculadora de Margem</h1>
+        <h1 className="text-2xl font-semibold">Apresentação Comercial</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Monte uma simulação de markup e margem por produto e gere um link para enviar ao cliente.
+          Monte uma apresentação personalizada com produtos e margens para enviar ao prospect.
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Cliente (opcional)</CardTitle>
+          <CardTitle className="text-base">Apresentação</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2">
-          {clienteSelecionado ? (
-            <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-              <div className="text-sm">
-                <div className="font-medium">{clienteSelecionado.razao_social}</div>
-                <div className="text-xs text-muted-foreground">
-                  Tabela: {clienteSelecionado.tabela_preco?.trim() || `${TABELA_PADRAO} (padrão)`}
-                </div>
-              </div>
-              <Button variant="ghost" size="sm" onClick={limparCliente}>
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
-            <>
-              <Input
-                placeholder="Buscar cliente por razão social..."
-                value={buscaCliente}
-                onChange={(e) => setBuscaCliente(e.target.value)}
-              />
-              {resultadosCliente.length > 0 && (
-                <div className="border rounded-md divide-y max-h-64 overflow-auto">
-                  {resultadosCliente.map((c) => (
-                    <button
-                      key={c.id}
-                      type="button"
-                      onClick={() => selecionarCliente(c)}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted"
-                    >
-                      <div className="font-medium">{c.razao_social}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Tabela: {c.tabela_preco?.trim() || `${TABELA_PADRAO} (padrão)`}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Sem cliente, será usada a tabela <strong>{TABELA_PADRAO}</strong>.
-              </p>
-            </>
-          )}
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="prospect">Prospect (opcional)</Label>
+            <Input
+              id="prospect"
+              value={nomeProspect}
+              onChange={(e) => setNomeProspect(e.target.value)}
+              placeholder="Ex: José — Lotus Aromatic"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Tabela de preço</Label>
+            <Select value={tabela} onValueChange={setTabela}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">7</SelectItem>
+                <SelectItem value="12">12</SelectItem>
+                <SelectItem value="18">18</SelectItem>
+                <SelectItem value="suframa">suframa</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="cluster">Cluster</Label>
+            <Input
+              id="cluster"
+              value={cluster}
+              onChange={(e) => setCluster(e.target.value)}
+              placeholder="Ex: A, B, C..."
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="mensagem">Mensagem personalizada</Label>
+            <Textarea
+              id="mensagem"
+              value={mensagem}
+              onChange={(e) => setMensagem(e.target.value)}
+              placeholder="Ex: Oi José! Conforme conversamos, segue os produtos Bravir..."
+              rows={3}
+            />
+          </div>
         </CardContent>
       </Card>
 
@@ -368,7 +336,7 @@ export default function CalculadoraMargem() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Itens da simulação</CardTitle>
+          <CardTitle className="text-base">Produtos da apresentação</CardTitle>
         </CardHeader>
         <CardContent>
           {itensSim.length === 0 ? (
@@ -461,7 +429,7 @@ export default function CalculadoraMargem() {
           <div className="flex flex-wrap items-center gap-3">
             <Button onClick={gerarLink} disabled={!podeGerar || gerandoLink}>
               {gerandoLink && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Gerar link para cliente
+              Gerar apresentação
             </Button>
             {linkGerado && (
               <Button variant="outline" onClick={copiarLink}>
