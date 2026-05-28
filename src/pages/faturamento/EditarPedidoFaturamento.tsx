@@ -29,6 +29,8 @@ type ItemEdit = {
   total: number;
 };
 
+type Vendedor = { id: string; nome: string };
+
 type PedidoEdit = {
   id: string;
   numero_pedido: number;
@@ -38,6 +40,7 @@ type PedidoEdit = {
   observacoes: string;
   agendamento: boolean;
   cliente_id: string | null;
+  vendedor_id: string | null;
   razao_social: string;
   cnpj: string;
   cidade: string;
@@ -63,8 +66,26 @@ export default function EditarPedidoFaturamento() {
   const navigate = useNavigate();
 
   const [pedido, setPedido] = useState<PedidoEdit | null>(null);
+  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+
+  useEffect(() => {
+    const load = async () => {
+      const [profRes, rolesRes] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, email"),
+        supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
+      ]);
+      const vendedorIds = new Set((rolesRes.data ?? []).map((r) => r.user_id));
+      setVendedores(
+        (profRes.data ?? [])
+          .filter((p) => vendedorIds.has(p.id))
+          .map((p) => ({ id: p.id, nome: p.full_name || p.email }))
+          .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+      );
+    };
+    load();
+  }, []);
 
   useEffect(() => {
     if (!id) return;
@@ -74,7 +95,7 @@ export default function EditarPedidoFaturamento() {
         .from("pedidos")
         .select(`
           id, numero_pedido, status, tipo, cond_pagamento, observacoes, agendamento,
-          cliente_id, perfil_cliente, tabela_preco,
+          cliente_id, vendedor_id, perfil_cliente, tabela_preco,
           clientes(razao_social, nome_parceiro, cnpj, cidade, uf, comprador, codigo_parceiro, codigo_cliente, email),
           itens_pedido(
             id, produto_id, quantidade,
@@ -108,6 +129,7 @@ export default function EditarPedidoFaturamento() {
         observacoes: p.observacoes ?? "",
         agendamento: p.agendamento ?? false,
         cliente_id: p.cliente_id ?? null,
+        vendedor_id: p.vendedor_id ?? null,
         razao_social: cl?.nome_parceiro || cl?.razao_social || "—",
         cnpj: cl?.cnpj ?? "",
         cidade: cl?.cidade ?? "",
@@ -152,13 +174,23 @@ export default function EditarPedidoFaturamento() {
     if (!pedido) return;
     setSalvando(true);
 
+    const vendedorNome = pedido.vendedor_id
+      ? vendedores.find((v) => v.id === pedido.vendedor_id)?.nome ?? null
+      : null;
+
+    let obs = (pedido.observacoes || "").replace(/\[Vendedor:[^\]]*\]\s*/g, "").trim();
+    if (vendedorNome) {
+      obs = `[Vendedor: ${vendedorNome}]${obs ? `\n${obs}` : ""}`;
+    }
+
     const { error: pedErr } = await supabase
       .from("pedidos")
       .update({
         tipo: pedido.tipo,
         cond_pagamento: pedido.cond_pagamento || null,
-        observacoes: pedido.observacoes || null,
+        observacoes: obs || null,
         agendamento: pedido.agendamento,
+        vendedor_id: pedido.vendedor_id || null,
       })
       .eq("id", pedido.id);
 
@@ -266,6 +298,20 @@ export default function EditarPedidoFaturamento() {
                 placeholder="Ex: 30/60/90 DDL"
               />
             </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Vendedor</Label>
+            <Select
+              value={pedido.vendedor_id ?? ""}
+              onValueChange={(v) => setPedido({ ...pedido, vendedor_id: v })}
+            >
+              <SelectTrigger><SelectValue placeholder="Selecione um vendedor..." /></SelectTrigger>
+              <SelectContent>
+                {vendedores.map((v) => (
+                  <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-center gap-3">
             <Switch
