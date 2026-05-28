@@ -262,17 +262,15 @@ export function SecaoProdutos({
 
       if (usarEspecial) {
         const dPerfilEspecial = bruto > 0 ? Math.max(0, 1 - precoEspecial / bruto) : 0;
-        const precos_especial = calcularPrecos(bruto, dPerfilEspecial, 0, 0, i.quantidade);
+        const precos_especial_com = calcularPrecos(bruto, dPerfilEspecial, i.desconto_comercial, i.desconto_trade, i.quantidade);
         return {
           ...i,
           preco_bruto: bruto,
           desconto_perfil: dPerfilEspecial,
-          desconto_comercial: 0,
-          desconto_trade: 0,
-          preco_apos_perfil: precos_especial.preco_apos_perfil,
-          preco_apos_comercial: precos_especial.preco_apos_comercial,
-          preco_final: precos_especial.preco_final,
-          total: precos_especial.total,
+          preco_apos_perfil: precos_especial_com.preco_apos_perfil,
+          preco_apos_comercial: precos_especial_com.preco_apos_comercial,
+          preco_final: precos_especial_com.preco_final,
+          total: precos_especial_com.total,
         };
       }
 
