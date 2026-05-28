@@ -410,7 +410,9 @@ export function SecaoProdutos({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {itensRecalculados.map((i, idx) => (
+                {itensRecalculados.map((i, idx) => {
+                  const itemOriginal = itens.find(it => it.produto_id === i.produto_id) ?? i;
+                  return (
                   <TableRow
                     key={i.produto_id}
                     style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8faf9' }}
@@ -478,7 +480,7 @@ export function SecaoProdutos({
                       <TableCell className="text-right py-2 align-top">
                         <Input
                           type="number" min={0} max={3} step={0.01}
-                          value={i.desconto_comercial}
+                          value={itemOriginal.desconto_comercial}
                           onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.min(3, Math.max(0, parseFloat(e.target.value) || 0)))}
                           onFocus={(e) => e.target.select()}
                           className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
@@ -492,7 +494,7 @@ export function SecaoProdutos({
                     <TableCell className="text-right py-2 align-top">
                       <Input
                         type="number" min={0} max={100} step={0.01}
-                        value={i.desconto_trade}
+                        value={itemOriginal.desconto_trade}
                         onChange={(e) => atualizarDesconto(i.produto_id, "trade", Math.max(0, parseFloat(e.target.value) || 0))}
                         onFocus={(e) => e.target.select()}
                         className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
@@ -525,7 +527,8 @@ export function SecaoProdutos({
                       </button>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
