@@ -4,6 +4,7 @@ import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -69,6 +70,8 @@ function tempoNoStatus(dt: string | null) {
 
 export default function MeusPedidos() {
   const { user } = useAuth();
+  const { active, userId: impersonatedId } = useImpersonation();
+  const effectiveUserId = active ? impersonatedId : user?.id;
   const navigate = useNavigate();
   const location = useLocation();
   const initialFiltroStatus = (location.state as { filtroStatus?: string } | null)?.filtroStatus ?? "todos";
@@ -114,7 +117,7 @@ export default function MeusPedidos() {
           clientes(id, razao_social, nome_parceiro),
           itens_pedido(total_item, produtos(marca))
         `)
-        .eq("vendedor_id", user.id)
+        .eq("vendedor_id", effectiveUserId ?? "")
         .is("pedido_origem_id", null)
         .order("created_at", { ascending: false });
 
@@ -188,7 +191,7 @@ export default function MeusPedidos() {
     } finally {
       setLoading(false);
     }
-  }, [user, filtroStatus, filtroDataInicio, filtroDataFim, filtroCliente, filtroMarca]);
+  }, [user, active, impersonatedId, effectiveUserId, filtroStatus, filtroDataInicio, filtroDataFim, filtroCliente, filtroMarca]);
 
   useEffect(() => {
     carregarPedidos();
@@ -405,8 +408,9 @@ export default function MeusPedidos() {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setExcluirAlvo({ id: p.id, numero: p.numero_pedido }); }}
-                          className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          title="Excluir pedido"
+                          disabled={active}
+                          className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground/50"
+                          title={active ? "Indisponível no modo visualização" : "Excluir pedido"}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -530,8 +534,9 @@ export default function MeusPedidos() {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); setExcluirAlvo({ id: p.id, numero: p.numero_pedido }); }}
-                          className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                          title="Excluir pedido"
+                          disabled={active}
+                          className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground/50"
+                          title={active ? "Indisponível no modo visualização" : "Excluir pedido"}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>

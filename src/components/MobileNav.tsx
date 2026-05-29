@@ -2,6 +2,7 @@
 import { NavLink } from "react-router-dom";
 import { LogOut, FileText, Calculator, LayoutTemplate } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,27 +17,29 @@ import {
 type Props = { onNavigate: () => void };
 
 export function MobileNav({ onNavigate }: Props) {
-  const { role, user, fullName, signOut } = useAuth();
+  const { role: realRole, user, fullName, signOut } = useAuth();
+  const { active, userRole } = useImpersonation();
+  const role = active ? userRole : realRole;
   const [semPerfilCount, setSemPerfilCount] = useState(0);
   const [leadsNovosCount, setLeadsNovosCount] = useState(0);
 
   useEffect(() => {
-    if (role !== "faturamento" && role !== "admin") return;
+    if (realRole !== "faturamento" && realRole !== "admin") return;
     supabase
       .from("clientes")
       .select("id", { count: "exact", head: true })
       .is("cluster", null)
       .then(({ count }) => setSemPerfilCount(count ?? 0));
-  }, [role]);
+  }, [realRole]);
 
   useEffect(() => {
-    if (role !== "gestora" && role !== "admin") return;
+    if (realRole !== "gestora" && realRole !== "admin") return;
     (supabase as any)
       .from("leads_evento")
       .select("id", { count: "exact", head: true })
       .eq("status", "novo")
       .then(({ count }: { count: number | null }) => setLeadsNovosCount(count ?? 0));
-  }, [role]);
+  }, [realRole]);
 
   const faturamentoItems: Item[] = BASE_FATURAMENTO_ITEMS.map((item) =>
     item.url === "/faturamento/clientes" && semPerfilCount > 0
@@ -118,7 +121,7 @@ export function MobileNav({ onNavigate }: Props) {
       <div className="border-b border-sidebar-border px-5 py-5">
         <div className="text-lg font-bold tracking-tight">Bravir CRM</div>
         <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/70 mt-0.5">
-          {role ? ROLE_LABEL[role] : ""}
+          {active && userRole ? `${userRole} — visualização` : (role ? ROLE_LABEL[role] : "")}
         </div>
       </div>
 

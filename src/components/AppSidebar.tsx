@@ -14,6 +14,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
@@ -49,28 +50,30 @@ function NavItem({ item, pathname }: { item: Item; pathname: string }) {
 }
 
 export function AppSidebar() {
-  const { role, user, signOut } = useAuth();
+  const { role: realRole, user, signOut } = useAuth();
+  const { active, userRole } = useImpersonation();
+  const role = active ? userRole : realRole;
   const { pathname } = useLocation();
   const [semPerfilCount, setSemPerfilCount] = useState(0);
   const [leadsNovosCount, setLeadsNovosCount] = useState(0);
 
   useEffect(() => {
-    if (role !== "faturamento" && role !== "admin") return;
+    if (realRole !== "faturamento" && realRole !== "admin") return;
     supabase
       .from("clientes")
       .select("id", { count: "exact", head: true })
       .is("cluster", null)
       .then(({ count }) => setSemPerfilCount(count ?? 0));
-  }, [role]);
+  }, [realRole]);
 
   useEffect(() => {
-    if (role !== "gestora" && role !== "admin") return;
+    if (realRole !== "gestora" && realRole !== "admin") return;
     (supabase as any)
       .from("leads_evento")
       .select("id", { count: "exact", head: true })
       .eq("status", "novo")
       .then(({ count }: { count: number | null }) => setLeadsNovosCount(count ?? 0));
-  }, [role]);
+  }, [realRole]);
 
   const faturamentoItems: Item[] = BASE_FATURAMENTO_ITEMS.map((item) =>
     item.url === "/faturamento/clientes" && semPerfilCount > 0
@@ -131,7 +134,7 @@ export function AppSidebar() {
             Bravir CRM
           </span>
           <span className="text-[11px] uppercase tracking-wider text-sidebar-foreground/70">
-            {role ? ROLE_LABEL[role] : ""}
+            {active && userRole ? `${userRole} — visualização` : (role ? ROLE_LABEL[role] : "")}
           </span>
         </div>
       </SidebarHeader>

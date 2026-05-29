@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -100,6 +101,8 @@ function abcBadge(abc: "A" | "B" | "C") {
 
 export default function MeusClientes() {
   const { user } = useAuth();
+  const { active, userId: impersonatedId } = useImpersonation();
+  const effectiveUserId = active ? impersonatedId : user?.id;
   const navigate = useNavigate();
   const [clientes, setClientes] = useState<ClienteAgregado[]>([]);
   const [loading, setLoading] = useState(true);
@@ -136,12 +139,12 @@ export default function MeusClientes() {
             itens_pedido(total_item, produtos(marca)),
             clientes(razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf)
           `)
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId ?? "")
           .not("status", "in", '("rascunho","cancelado")'),
         supabase
           .from("clientes")
           .select("id, razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf")
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId ?? "")
           .eq("status", "ativo"),
       ]);
 
@@ -284,12 +287,12 @@ export default function MeusClientes() {
       const cadastrosRes = await supabase
         .from("cadastros_pendentes")
         .select("id, nome_cliente, razao_social, cnpj, status, motivo_reprovacao, created_at")
-        .eq("vendedor_id", user.id)
+        .eq("vendedor_id", effectiveUserId ?? "")
         .in("status", ["pendente_cadastro", "pendente_sankhya", "devolvido"])
         .order("created_at", { ascending: false });
       setCadastrosPendentes((cadastrosRes.data ?? []) as CadastroPendente[]);
     })().finally(() => setLoading(false));
-  }, [user]);
+  }, [user, active, impersonatedId, effectiveUserId]);
 
   const abrirSheet = async (c: ClienteAgregado) => {
     setSheetCliente(c);
@@ -514,8 +517,9 @@ export default function MeusClientes() {
                             <Button
                               size="sm"
                               variant="ghost"
+                              disabled={active}
                               className="h-7 w-7 p-0 text-primary hover:bg-primary/10 shrink-0"
-                              title="Novo pedido para este cliente"
+                              title={active ? "Indisponível no modo visualização" : "Novo pedido para este cliente"}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 novoPedidoParaCliente(c.cliente_id);
@@ -674,7 +678,9 @@ export default function MeusClientes() {
                 <Button
                   size="sm"
                   variant="outline"
+                  disabled={active}
                   className="text-red-600 border-red-300 hover:bg-red-50"
+                  title={active ? "Indisponível no modo visualização" : undefined}
                   onClick={() => sheetCliente && setRemoverCliente(sheetCliente)}
                 >
                   <UserMinus className="h-3.5 w-3.5 mr-1" />
@@ -781,7 +787,8 @@ export default function MeusClientes() {
                     <Button
                       size="sm"
                       onClick={adicionarTarefa}
-                      disabled={!novaTarefaTitulo.trim() || salvandoTarefa}
+                      disabled={!novaTarefaTitulo.trim() || salvandoTarefa || active}
+                      title={active ? "Indisponível no modo visualização" : undefined}
                     >
                       {salvandoTarefa
                         ? <Loader2 className="h-3 w-3 animate-spin" />

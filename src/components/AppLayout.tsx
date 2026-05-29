@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "./AppSidebar";
 import { MobileNav } from "./MobileNav";
 import { NotificationsBadge } from "./NotificationsBadge";
+import { ImpersonationBar } from "./ImpersonationBar";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function AppLayout() {
@@ -57,6 +58,8 @@ export default function AppLayout() {
 
             <NotificationsBadge />
           </header>
+
+          <ImpersonationBar />
 
           <main className="flex-1 p-4 md:p-6">
             <Outlet />
