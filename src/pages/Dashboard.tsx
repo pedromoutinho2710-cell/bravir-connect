@@ -204,20 +204,6 @@ export default function Dashboard() {
     const kpiInicio = effectiveInicio;
     const kpiFim = mesmoDia ? `${effectiveFim}T23:59:59` : effectiveFim;
 
-    // Meses (mes/ano) contidos no período selecionado — para somar o histórico Sankhya faturado
-    const periodoMeses: { mes: number; ano: number }[] = [];
-    {
-      const [iy, im] = effectiveInicio.split("-").map(Number);
-      const [fy, fm] = effectiveFim.split("-").map(Number);
-      let y = iy;
-      let m = im;
-      while (y < fy || (y === fy && m <= fm)) {
-        periodoMeses.push({ mes: m, ano: y });
-        m++;
-        if (m > 12) { m = 1; y++; }
-      }
-    }
-
     (async () => {
       try {
         const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, mensaisRes, fatPeriodoRes] = await Promise.all([
@@ -262,21 +248,28 @@ export default function Dashboard() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any).from("campanhas").select("*, campanha_niveis(*)").eq("ativa", true).maybeSingle(),
           // Faturamento mensal — últimos 6 meses (dados reais do Sankhya)
-          supabase
-            .from("historico_faturamento")
-            .select("mes, ano, valor_total")
-            .or(meses6.map((m) => `and(mes.eq.${m.mes},ano.eq.${m.ano})`).join(",")),
-          // Total faturado (histórico Sankhya) dentro do período selecionado
-          supabase
-            .from("historico_faturamento")
-            .select("valor_total")
-            .or(periodoMeses.map((m) => `and(mes.eq.${m.mes},ano.eq.${m.ano})`).join(",")),
+          // TODO: adicionar faturamentos_sankhya ao types.ts
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("faturamentos_sankhya")
+            .select("data_faturamento, valor_liquido, tipo_operacao")
+            .gte("data_faturamento", meses6[0].inicio)
+            .lte("data_faturamento", meses6[meses6.length - 1].fim)
+            .not("tipo_operacao", "ilike", "%devolução%"),
+          // Total faturado (Sankhya) dentro do período selecionado
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("faturamentos_sankhya")
+            .select("valor_liquido, tipo_operacao")
+            .gte("data_faturamento", effectiveInicio)
+            .lte("data_faturamento", effectiveFim)
+            .not("tipo_operacao", "ilike", "%devolução%"),
         ]);
 
-        // Total faturado do período (soma do histórico Sankhya)
+        // Total faturado do período (soma do Sankhya)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const fatFaturadoSum = ((fatPeriodoRes.data ?? []) as any[]).reduce(
-          (s: number, r: any) => s + Number(r.valor_total),
+          (s: number, r: any) => s + Number(r.valor_liquido ?? 0),
           0,
         );
         setFatFaturadoPeriodo(fatFaturadoSum);
@@ -541,15 +534,18 @@ export default function Dashboard() {
           setEntradaMarca({});
         }
 
-        // Faturamento mensal — mapear dados do historico_faturamento com labels dos meses
+        // Faturamento mensal — agrupar valor_liquido por mês usando data_faturamento
         const fatMensalArr = meses6.map((m) => ({
           mes: m.label,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           valor: ((mensaisRes.data ?? []) as any[])
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .filter((r: any) => r.mes === m.mes && r.ano === m.ano)
+            .filter((r: any) => {
+              if (!r.data_faturamento) return false;
+              return r.data_faturamento >= m.inicio && r.data_faturamento <= m.fim;
+            })
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .reduce((s: number, r: any) => s + Number(r.valor_total), 0),
+            .reduce((s: number, r: any) => s + Number(r.valor_liquido ?? 0), 0),
         }));
         setFatMensal(fatMensalArr);
       } catch {

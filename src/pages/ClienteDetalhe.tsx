@@ -108,6 +108,17 @@ type PedidoLinha = {
 
 type Vendedor = { id: string; nome: string };
 
+type FaturamentoSankhya = {
+  id: string;
+  numero_nota: string;
+  data_faturamento: string | null;
+  descricao_produto: string | null;
+  codigo_produto: string | null;
+  quantidade: number | null;
+  valor_liquido: number | null;
+  tipo_operacao: string | null;
+};
+
 type MetaTrade = {
   id: string;
   campanha_id: string;
@@ -149,6 +160,8 @@ export default function ClienteDetalhe() {
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [loading, setLoading] = useState(true);
   const [metasTrade, setMetasTrade] = useState<MetaTrade[]>([]);
+  const [faturamentos, setFaturamentos] = useState<FaturamentoSankhya[]>([]);
+  const [loadingFaturamentos, setLoadingFaturamentos] = useState(false);
 
   // Edit modal
   const [editOpen, setEditOpen] = useState(false);
@@ -342,6 +355,37 @@ export default function ClienteDetalhe() {
   };
 
   useEffect(() => { carregar(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!cliente?.codigo_parceiro) { setFaturamentos([]); return; }
+    let cancelado = false;
+    setLoadingFaturamentos(true);
+    (async () => {
+      // TODO: adicionar faturamentos_sankhya ao types.ts
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("faturamentos_sankhya")
+        .select("id, numero_nota, data_faturamento, descricao_produto, codigo_produto, quantidade, valor_liquido, tipo_operacao")
+        .eq("codigo_parceiro", cliente.codigo_parceiro)
+        .order("data_faturamento", { ascending: false })
+        .limit(500);
+      if (cancelado) return;
+      if (error) {
+        console.error(error);
+        setFaturamentos([]);
+      } else {
+        setFaturamentos((data ?? []) as FaturamentoSankhya[]);
+      }
+      setLoadingFaturamentos(false);
+    })();
+    return () => { cancelado = true; };
+  }, [cliente?.codigo_parceiro]);
+
+  const totalFaturadoSankhya = useMemo(() => {
+    return faturamentos
+      .filter((f) => !(f.tipo_operacao && /devolu/i.test(f.tipo_operacao)))
+      .reduce((s, f) => s + Number(f.valor_liquido ?? 0), 0);
+  }, [faturamentos]);
 
   // Financial calculations
   const agora = new Date();
@@ -544,6 +588,7 @@ export default function ClienteDetalhe() {
           <TabsTrigger value="metas">Metas</TabsTrigger>
           <TabsTrigger value="obs">Observações</TabsTrigger>
           <TabsTrigger value="tabela">Tabela de Preços</TabsTrigger>
+          <TabsTrigger value="faturamento">Histórico de Faturamento</TabsTrigger>
         </TabsList>
 
         {/* ABA 1 — Dados cadastrais */}
@@ -720,6 +765,71 @@ export default function ClienteDetalhe() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ABA — Histórico de Faturamento (Sankhya) */}
+        <TabsContent value="faturamento" className="mt-4 space-y-3">
+          {!cliente.codigo_parceiro ? (
+            <Card>
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                Código do parceiro não cadastrado — não é possível carregar o histórico.
+              </CardContent>
+            </Card>
+          ) : loadingFaturamentos ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : faturamentos.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                Nenhum faturamento Sankhya importado para este cliente.
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <StatCard label="Total faturado (Sankhya, excl. devoluções)" value={formatBRL(totalFaturadoSankhya)} />
+                <StatCard label="Total de linhas" value={String(faturamentos.length)} />
+              </div>
+              <Card>
+                <CardContent className="p-0 overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr className="text-left">
+                        <th className="px-3 py-2 font-medium">Data</th>
+                        <th className="px-3 py-2 font-medium">Nº Nota</th>
+                        <th className="px-3 py-2 font-medium">Produto</th>
+                        <th className="px-3 py-2 font-medium text-right">Qtd</th>
+                        <th className="px-3 py-2 font-medium text-right">Valor Líquido</th>
+                        <th className="px-3 py-2 font-medium">Tipo de Operação</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {faturamentos.map((f) => {
+                        const isDev = !!(f.tipo_operacao && /devolu/i.test(f.tipo_operacao));
+                        return (
+                          <tr key={f.id} className={`border-t ${isDev ? "bg-red-50 text-red-700" : ""}`}>
+                            <td className="px-3 py-2">{f.data_faturamento ? formatDate(f.data_faturamento) : "—"}</td>
+                            <td className="px-3 py-2 font-mono text-xs">{f.numero_nota}</td>
+                            <td className="px-3 py-2 text-xs">{f.descricao_produto ?? f.codigo_produto ?? "—"}</td>
+                            <td className="px-3 py-2 text-right">{f.quantidade ?? "—"}</td>
+                            <td className="px-3 py-2 text-right">{f.valor_liquido != null ? formatBRL(f.valor_liquido) : "—"}</td>
+                            <td className="px-3 py-2 text-xs">
+                              {isDev ? (
+                                <Badge variant="outline" className="bg-red-100 text-red-700 border-red-300">Devolução</Badge>
+                              ) : (
+                                f.tipo_operacao ?? "—"
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </CardContent>
+              </Card>
+            </>
+          )}
         </TabsContent>
 
         {/* ABA — Tabela de Preços */}

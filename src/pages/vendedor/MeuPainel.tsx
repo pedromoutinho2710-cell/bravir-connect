@@ -170,6 +170,9 @@ export default function MeuPainel() {
   const [campanhaEntradaPorMarca, setCampanhaEntradaPorMarca] = useState<Record<string, number>>({});
   const [campanhaMetaVendedor, setCampanhaMetaVendedor] = useState<number | null>(null);
   const [faturadoMesAtual, setFaturadoMesAtual] = useState(0);
+  const [faturamentoRealMes, setFaturamentoRealMes] = useState<number | null>(null);
+  const [faturamentoRealMesAnterior, setFaturamentoRealMesAnterior] = useState<number | null>(null);
+  const [vendedorFullName, setVendedorFullName] = useState<string | null>(null);
   const [produtosIndisponiveis, setProdutosIndisponiveis] = useState<{ id: string; nome: string }[]>([]);
   const [modalIndispOpen, setModalIndispOpen] = useState(false);
 
@@ -412,28 +415,64 @@ export default function MeuPainel() {
     return () => { cancelado = true; };
   }, [user, periodo]);
 
-  // Faturado do mês — vem da tabela faturamentos_externos (importada pelo trade).
-  // Soma valores onde vendedor_id = logado e faturado_em dentro do mês atual.
+  // Faturado do mês — agora vem de faturamentos_sankhya casado por nome_vendedor.
+  // Busca profiles.full_name → ILIKE em faturamentos_sankhya.nome_vendedor.
   useEffect(() => {
     if (!user) return;
     let cancelado = false;
     (async () => {
+      const { data: prof } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      const fullName = prof?.full_name?.trim() || null;
+      if (cancelado) return;
+      setVendedorFullName(fullName);
+
+      if (!fullName) {
+        setFaturadoMesAtual(0);
+        setFaturamentoRealMes(null);
+        setFaturamentoRealMesAnterior(null);
+        return;
+      }
+
       const agora = new Date();
       const mesInicio = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-01`;
       const mesFim = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
-      const { data, error } = await supabase
-        .from("faturamentos_externos")
-        .select("valor")
-        .eq("vendedor_id", user.id)
-        .gte("faturado_em", mesInicio)
-        .lte("faturado_em", mesFim);
+      const antAno = agora.getMonth() === 0 ? agora.getFullYear() - 1 : agora.getFullYear();
+      const antMes = agora.getMonth() === 0 ? 12 : agora.getMonth();
+      const antInicio = `${antAno}-${String(antMes).padStart(2, "0")}-01`;
+      const antFim = new Date(antAno, antMes, 0).toISOString().slice(0, 10);
+
+      // TODO: adicionar faturamentos_sankhya ao types.ts
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const [atualRes, antRes] = await Promise.all([
+        (supabase as any)
+          .from("faturamentos_sankhya")
+          .select("valor_liquido")
+          .ilike("nome_vendedor", `%${fullName}%`)
+          .gte("data_faturamento", mesInicio)
+          .lte("data_faturamento", mesFim)
+          .not("tipo_operacao", "ilike", "%devolução%"),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase as any)
+          .from("faturamentos_sankhya")
+          .select("valor_liquido")
+          .ilike("nome_vendedor", `%${fullName}%`)
+          .gte("data_faturamento", antInicio)
+          .lte("data_faturamento", antFim)
+          .not("tipo_operacao", "ilike", "%devolução%"),
+      ]);
       if (cancelado) return;
-      if (error) {
-        setFaturadoMesAtual(0);
-        return;
-      }
-      const total = (data ?? []).reduce((s, r) => s + Number(r.valor ?? 0), 0);
-      setFaturadoMesAtual(total);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sumAtual = ((atualRes.data ?? []) as any[]).reduce((s, r) => s + Number(r.valor_liquido ?? 0), 0);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sumAnt = ((antRes.data ?? []) as any[]).reduce((s, r) => s + Number(r.valor_liquido ?? 0), 0);
+      setFaturadoMesAtual(sumAtual);
+      setFaturamentoRealMes(sumAtual);
+      setFaturamentoRealMesAnterior(sumAnt);
     })();
     return () => { cancelado = true; };
   }, [user]);
@@ -634,6 +673,32 @@ export default function MeuPainel() {
           </Card>
         </div>
       </div>
+
+      {/* Meu Faturamento Real (Sankhya) */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Meu Faturamento Real (Sankhya)</CardTitle>
+          <CheckCheck className="h-4 w-4 text-green-700" />
+        </CardHeader>
+        <CardContent>
+          {!vendedorFullName ? (
+            <p className="text-sm text-muted-foreground">
+              Configure seu nome completo no perfil para ver o faturamento real.
+            </p>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs text-muted-foreground">Mês atual</p>
+                <p className="text-2xl font-bold text-green-700">{formatBRL(faturamentoRealMes ?? 0)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Mês anterior</p>
+                <p className="text-2xl font-bold">{formatBRL(faturamentoRealMesAnterior ?? 0)}</p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

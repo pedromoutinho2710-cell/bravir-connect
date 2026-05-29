@@ -5,26 +5,40 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Upload, Download, FileSpreadsheet, CheckCircle2, XCircle } from "lucide-react";
-import { formatBRL, formatCNPJ, onlyDigits } from "@/lib/format";
+import { Loader2, Upload, Download, FileSpreadsheet, CheckCircle2 } from "lucide-react";
+import { formatBRL, formatDate } from "@/lib/format";
 import { useAuth } from "@/hooks/useAuth";
 
 type Etapa = "upload" | "preview" | "importando" | "concluido";
 
-type LinhaRaw = {
-  identificador: string;
-  valor: string;
-};
-
-type LinhaPreview = {
-  identificador_raw: string;
-  valor_raw: string;
-  cliente_id: string | null;
-  razao_social: string | null;
-  cnpj: string | null;
-  vendedor_id: string | null;
-  valor: number;
-  erro: string | null;
+type LinhaSankhya = {
+  numero_nota: string;
+  tipo_operacao: string | null;
+  data_faturamento: string | null;
+  codigo_parceiro: string | null;
+  nome_parceiro: string | null;
+  grupo_cliente: string | null;
+  segmento: string | null;
+  cidade: string | null;
+  uf: string | null;
+  codigo_produto: string | null;
+  descricao_produto: string | null;
+  quantidade: number | null;
+  valor_total_itens: number | null;
+  valor_liquido: number | null;
+  valor_st: number | null;
+  base_st: number | null;
+  aliq_ipi: number | null;
+  ipi: number | null;
+  valor_fem: number | null;
+  valor_destaque: number | null;
+  controle: string | null;
+  cod_grupo: string | null;
+  grupo: string | null;
+  nome_vendedor: string | null;
+  razao_social_empresa: string | null;
+  tipo_negociacao: string | null;
+  recebimento_pedido: string | null;
 };
 
 function normalizar(s: string): string {
@@ -35,49 +49,112 @@ function normalizar(s: string): string {
     .replace(/[̀-ͯ]/g, "");
 }
 
-function detectarColuna(header: string): "identificador" | "valor" | null {
-  const n = normalizar(header);
-  if (n.includes("cnpj") || (n.includes("codigo") && n.includes("cliente")) || n === "identificador") {
-    return "identificador";
-  }
-  if (n.includes("valor") || n.includes("faturado") || n.includes("faturamento")) {
-    return "valor";
-  }
-  return null;
+function parseNumero(raw: unknown): number | null {
+  if (raw == null || raw === "") return null;
+  if (typeof raw === "number") return Number.isFinite(raw) ? raw : null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  const limpo = s.replace(/[R$\s]/gi, "").replace(/\./g, "").replace(",", ".");
+  const n = Number(limpo);
+  return Number.isFinite(n) ? n : null;
 }
 
-function parseValor(raw: string): number {
-  if (raw == null) return NaN;
+function parseData(raw: unknown): string | null {
+  if (raw == null || raw === "") return null;
+  if (raw instanceof Date) return raw.toISOString().slice(0, 10);
+  if (typeof raw === "number") {
+    const epoch = new Date(Date.UTC(1899, 11, 30));
+    const ms = raw * 86400000;
+    return new Date(epoch.getTime() + ms).toISOString().slice(0, 10);
+  }
   const s = String(raw).trim();
-  if (!s) return NaN;
-  const limpo = s
-    .replace(/[R$\s]/gi, "")
-    .replace(/\./g, "")
-    .replace(",", ".");
-  const n = Number(limpo);
-  return Number.isFinite(n) ? n : NaN;
+  if (!s) return null;
+  const br = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (br) {
+    const [, d, m, y] = br;
+    return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[0];
+  const dt = new Date(s);
+  return Number.isFinite(dt.getTime()) ? dt.toISOString().slice(0, 10) : null;
+}
+
+type ColunaKey =
+  | "numero_nota" | "tipo_operacao" | "data_faturamento"
+  | "codigo_parceiro" | "nome_parceiro" | "grupo_segmento" | "grupo_cliente" | "segmento"
+  | "cidade_uf" | "cidade" | "uf"
+  | "codigo_produto" | "descricao_produto" | "quantidade"
+  | "valor_total_itens" | "valor_liquido" | "valor_st" | "base_st"
+  | "aliq_ipi" | "ipi" | "valor_fem" | "valor_destaque"
+  | "controle" | "cod_grupo" | "grupo" | "nome_vendedor"
+  | "razao_social_empresa" | "tipo_negociacao" | "recebimento_pedido";
+
+function detectarColuna(header: string): ColunaKey | null {
+  const n = normalizar(header);
+  if (!n) return null;
+  if (n.includes("numero") && n.includes("nota")) return "numero_nota";
+  if (n === "nota" || n.includes("nº nota") || n.includes("n nota")) return "numero_nota";
+  if (n.includes("tipo") && n.includes("operacao")) return "tipo_operacao";
+  if (n.includes("data") && n.includes("faturamento")) return "data_faturamento";
+  if (n.includes("recebimento") && n.includes("pedido")) return "recebimento_pedido";
+  if (n.includes("codigo") && n.includes("parceiro")) return "codigo_parceiro";
+  if (n.includes("nome") && n.includes("parceiro")) return "nome_parceiro";
+  if (n.includes("grupo") && n.includes("cliente") && n.includes("segmento")) return "grupo_segmento";
+  if (n.includes("grupo") && n.includes("cliente")) return "grupo_cliente";
+  if (n === "segmento") return "segmento";
+  if (n.includes("cidade") && n.includes("uf")) return "cidade_uf";
+  if (n === "cidade") return "cidade";
+  if (n === "uf" || n === "estado") return "uf";
+  if (n.includes("codigo") && n.includes("produto")) return "codigo_produto";
+  if (n.includes("descricao") && n.includes("produto")) return "descricao_produto";
+  if (n.includes("quantidade")) return "quantidade";
+  if (n.includes("valor") && n.includes("total") && n.includes("liquido")) return "valor_liquido";
+  if (n.includes("vlr") && n.includes("total") && n.includes("liquido")) return "valor_liquido";
+  if (n.includes("valor") && n.includes("liquido")) return "valor_liquido";
+  if (n.includes("valor") && n.includes("total") && n.includes("item")) return "valor_total_itens";
+  if (n === "valor st" || (n.includes("valor") && n.includes("st") && !n.includes("base"))) return "valor_st";
+  if (n.includes("base") && n.includes("st")) return "base_st";
+  if (n.includes("aliq") && n.includes("ipi")) return "aliq_ipi";
+  if (n === "ipi") return "ipi";
+  if (n.includes("valor") && n.includes("fem")) return "valor_fem";
+  if (n.includes("valor") && n.includes("destaque")) return "valor_destaque";
+  if (n === "controle") return "controle";
+  if (n.includes("cod") && n.includes("grupo")) return "cod_grupo";
+  if (n === "grupo") return "grupo";
+  if (n.includes("nome") && n.includes("vendedor")) return "nome_vendedor";
+  if (n.includes("razao") && n.includes("empresa")) return "razao_social_empresa";
+  if (n.includes("tipo") && n.includes("negociacao")) return "tipo_negociacao";
+  return null;
 }
 
 export default function ImportarFaturamento() {
   const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
   const [etapa, setEtapa] = useState<Etapa>("upload");
-  const [linhas, setLinhas] = useState<LinhaPreview[]>([]);
+  const [linhas, setLinhas] = useState<LinhaSankhya[]>([]);
   const [carregando, setCarregando] = useState(false);
   const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
-  const [resultado, setResultado] = useState({ ok: 0, erro: 0 });
+  const [resultado, setResultado] = useState({ inseridos: 0, duplicados: 0 });
 
   const baixarModelo = async () => {
     const XLSX = await import("xlsx");
     const ws = XLSX.utils.aoa_to_sheet([
-      ["CNPJ ou Codigo Cliente", "Valor Faturado"],
-      ["00.000.000/0001-00", 1500.5],
-      ["12345", 2300],
+      [
+        "Número da Nota", "Tipo de Operação", "Data do Faturamento",
+        "Código do Parceiro", "Nome do Parceiro",
+        "Grupo Cliente / Segmento", "Cidade / UF",
+        "Código do Produto", "Descrição do Produto",
+        "Quantidade total de itens", "Valor Total dos Itens",
+        "Vlr Total Liquido Itens",
+        "Valor ST", "Base ST", "Aliq. IPI", "IPI", "Valor FEM", "Valor Destaque",
+        "Controle", "Cód. Grupo", "Grupo", "Nome do Vendedor",
+        "Razão Social da Empresa", "Tipo de Negociação", "Recebimento do Pedido",
+      ],
     ]);
-    ws["!cols"] = [{ wch: 28 }, { wch: 18 }];
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Faturamento");
-    XLSX.writeFile(wb, "modelo-importar-faturamento.xlsx");
+    XLSX.utils.book_append_sheet(wb, ws, "Faturamento Sankhya");
+    XLSX.writeFile(wb, "modelo-importar-faturamento-sankhya.xlsx");
   };
 
   const handleArquivo = async (file: File) => {
@@ -85,7 +162,7 @@ export default function ImportarFaturamento() {
     try {
       const XLSX = await import("xlsx");
       const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
+      const wb = XLSX.read(buf, { type: "array", cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "", raw: true });
       if (rows.length === 0) {
@@ -95,93 +172,86 @@ export default function ImportarFaturamento() {
       }
 
       const headers = Object.keys(rows[0]);
-      let colId: string | null = null;
-      let colValor: string | null = null;
+      const mapeamento = new Map<string, ColunaKey>();
       for (const h of headers) {
         const tipo = detectarColuna(h);
-        if (tipo === "identificador" && !colId) colId = h;
-        if (tipo === "valor" && !colValor) colValor = h;
+        if (tipo && !Array.from(mapeamento.values()).includes(tipo)) {
+          mapeamento.set(h, tipo);
+        }
       }
-      if (!colId || !colValor) {
-        toast.error("Não encontrei colunas de CNPJ/Código e Valor");
+
+      if (!Array.from(mapeamento.values()).includes("numero_nota")) {
+        toast.error("Não encontrei a coluna 'Número da Nota' na planilha");
         setCarregando(false);
         return;
       }
 
-      const raws: LinhaRaw[] = rows
-        .map((r) => ({
-          identificador: String(r[colId!] ?? "").trim(),
-          valor: String(r[colValor!] ?? "").trim(),
-        }))
-        .filter((r) => r.identificador || r.valor);
+      const get = (row: Record<string, unknown>, key: ColunaKey): unknown => {
+        for (const [h, k] of mapeamento) if (k === key) return row[h];
+        return "";
+      };
 
-      const cnpjs = new Set<string>();
-      const codigos = new Set<string>();
-      for (const r of raws) {
-        const digitos = onlyDigits(r.identificador);
-        if (digitos.length === 14) cnpjs.add(digitos);
-        else if (r.identificador) codigos.add(r.identificador);
-      }
+      const parsed: LinhaSankhya[] = [];
+      for (const row of rows) {
+        const numero_nota = String(get(row, "numero_nota") ?? "").trim();
+        if (!numero_nota) continue;
 
-      const clientesPorCnpj = new Map<string, { id: string; razao_social: string; cnpj: string; vendedor_id: string | null }>();
-      const clientesPorCodigo = new Map<string, { id: string; razao_social: string; cnpj: string; vendedor_id: string | null }>();
+        let grupo_cliente: string | null = (String(get(row, "grupo_cliente") ?? "").trim() || null);
+        let segmento: string | null = (String(get(row, "segmento") ?? "").trim() || null);
+        const gs = String(get(row, "grupo_segmento") ?? "").trim();
+        if (gs && (!grupo_cliente || !segmento)) {
+          const [g, s] = gs.split("/").map((x) => x.trim());
+          if (!grupo_cliente) grupo_cliente = g || null;
+          if (!segmento) segmento = s || null;
+        }
 
-      if (cnpjs.size > 0) {
-        const { data } = await supabase
-          .from("clientes")
-          .select("id, razao_social, cnpj, vendedor_id, codigo_cliente")
-          .in("cnpj", Array.from(cnpjs));
-        (data ?? []).forEach((c) => {
-          clientesPorCnpj.set(onlyDigits(c.cnpj), {
-            id: c.id,
-            razao_social: c.razao_social,
-            cnpj: c.cnpj,
-            vendedor_id: c.vendedor_id,
-          });
+        let cidade: string | null = (String(get(row, "cidade") ?? "").trim() || null);
+        let uf: string | null = (String(get(row, "uf") ?? "").trim() || null);
+        const cu = String(get(row, "cidade_uf") ?? "").trim();
+        if (cu && (!cidade || !uf)) {
+          const [c, u] = cu.split("/").map((x) => x.trim());
+          if (!cidade) cidade = c || null;
+          if (!uf) uf = u || null;
+        }
+
+        parsed.push({
+          numero_nota,
+          tipo_operacao: String(get(row, "tipo_operacao") ?? "").trim() || null,
+          data_faturamento: parseData(get(row, "data_faturamento")),
+          codigo_parceiro: String(get(row, "codigo_parceiro") ?? "").trim() || null,
+          nome_parceiro: String(get(row, "nome_parceiro") ?? "").trim() || null,
+          grupo_cliente,
+          segmento,
+          cidade,
+          uf,
+          codigo_produto: String(get(row, "codigo_produto") ?? "").trim() || null,
+          descricao_produto: String(get(row, "descricao_produto") ?? "").trim() || null,
+          quantidade: parseNumero(get(row, "quantidade")),
+          valor_total_itens: parseNumero(get(row, "valor_total_itens")),
+          valor_liquido: parseNumero(get(row, "valor_liquido")),
+          valor_st: parseNumero(get(row, "valor_st")),
+          base_st: parseNumero(get(row, "base_st")),
+          aliq_ipi: parseNumero(get(row, "aliq_ipi")),
+          ipi: parseNumero(get(row, "ipi")),
+          valor_fem: parseNumero(get(row, "valor_fem")),
+          valor_destaque: parseNumero(get(row, "valor_destaque")),
+          controle: String(get(row, "controle") ?? "").trim() || null,
+          cod_grupo: String(get(row, "cod_grupo") ?? "").trim() || null,
+          grupo: String(get(row, "grupo") ?? "").trim() || null,
+          nome_vendedor: String(get(row, "nome_vendedor") ?? "").trim() || null,
+          razao_social_empresa: String(get(row, "razao_social_empresa") ?? "").trim() || null,
+          tipo_negociacao: String(get(row, "tipo_negociacao") ?? "").trim() || null,
+          recebimento_pedido: parseData(get(row, "recebimento_pedido")),
         });
       }
-      if (codigos.size > 0) {
-        const { data } = await supabase
-          .from("clientes")
-          .select("id, razao_social, cnpj, vendedor_id, codigo_cliente")
-          .in("codigo_cliente", Array.from(codigos));
-        (data ?? []).forEach((c) => {
-          if (c.codigo_cliente) {
-            clientesPorCodigo.set(c.codigo_cliente, {
-              id: c.id,
-              razao_social: c.razao_social,
-              cnpj: c.cnpj,
-              vendedor_id: c.vendedor_id,
-            });
-          }
-        });
+
+      if (parsed.length === 0) {
+        toast.error("Nenhuma linha com Número da Nota válido encontrada");
+        setCarregando(false);
+        return;
       }
 
-      const preview: LinhaPreview[] = raws.map((r) => {
-        const valor = parseValor(r.valor);
-        const digitos = onlyDigits(r.identificador);
-        let match: { id: string; razao_social: string; cnpj: string; vendedor_id: string | null } | undefined;
-        if (digitos.length === 14) match = clientesPorCnpj.get(digitos);
-        if (!match && r.identificador) match = clientesPorCodigo.get(r.identificador);
-
-        let erro: string | null = null;
-        if (!r.identificador) erro = "Identificador vazio";
-        else if (!match) erro = "Cliente não encontrado";
-        else if (!Number.isFinite(valor) || valor <= 0) erro = "Valor inválido";
-
-        return {
-          identificador_raw: r.identificador,
-          valor_raw: r.valor,
-          cliente_id: match?.id ?? null,
-          razao_social: match?.razao_social ?? null,
-          cnpj: match?.cnpj ?? null,
-          vendedor_id: match?.vendedor_id ?? null,
-          valor: Number.isFinite(valor) ? valor : 0,
-          erro,
-        };
-      });
-
-      setLinhas(preview);
+      setLinhas(parsed);
       setEtapa("preview");
     } catch (err) {
       console.error(err);
@@ -192,57 +262,53 @@ export default function ImportarFaturamento() {
   };
 
   const confirmar = async () => {
-    const validas = linhas.filter((l) => !l.erro && l.cliente_id);
-    if (validas.length === 0) {
-      toast.error("Nenhuma linha válida para importar");
-      return;
-    }
+    if (linhas.length === 0) return;
     setEtapa("importando");
-    setProgresso({ feitos: 0, total: validas.length });
-    let ok = 0;
-    let erro = 0;
+    setProgresso({ feitos: 0, total: linhas.length });
+    let inseridos = 0;
 
     const lote = 200;
-    for (let i = 0; i < validas.length; i += lote) {
-      const slice = validas.slice(i, i + lote);
+    for (let i = 0; i < linhas.length; i += lote) {
+      const slice = linhas.slice(i, i + lote);
       const payload = slice.map((l) => ({
-        cliente_id: l.cliente_id!,
-        vendedor_id: l.vendedor_id,
-        valor: l.valor,
+        ...l,
         importado_por: user?.id ?? null,
       }));
-      const { error } = await supabase.from("faturamentos_externos").insert(payload);
+      // TODO: adicionar faturamentos_sankhya ao types.ts e remover o cast
+      const { data, error } = await (supabase as any)
+        .from("faturamentos_sankhya")
+        .upsert(payload, { onConflict: "numero_nota,codigo_produto", ignoreDuplicates: true })
+        .select("id");
       if (error) {
-        erro += slice.length;
+        console.error(error);
+        toast.error(`Erro no lote ${i / lote + 1}: ${error.message}`);
       } else {
-        ok += slice.length;
+        inseridos += (data ?? []).length;
       }
-      setProgresso({ feitos: Math.min(i + slice.length, validas.length), total: validas.length });
+      setProgresso({ feitos: Math.min(i + slice.length, linhas.length), total: linhas.length });
     }
-    setResultado({ ok, erro });
+
+    const duplicados = linhas.length - inseridos;
+    setResultado({ inseridos, duplicados });
     setEtapa("concluido");
-    if (erro === 0) toast.success(`${ok} faturamento(s) importado(s)`);
-    else toast.error(`${ok} ok, ${erro} com erro`);
+    toast.success(`${inseridos} registros importados, ${duplicados} já existiam`);
   };
 
   const reiniciar = () => {
     setLinhas([]);
-    setResultado({ ok: 0, erro: 0 });
+    setResultado({ inseridos: 0, duplicados: 0 });
     setProgresso({ feitos: 0, total: 0 });
     setEtapa("upload");
     if (inputRef.current) inputRef.current.value = "";
   };
 
-  const validas = linhas.filter((l) => !l.erro).length;
-  const invalidas = linhas.length - validas;
-
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Importar Faturamento</h1>
+          <h1 className="text-2xl font-bold">Importar Faturamento Sankhya</h1>
           <p className="text-sm text-muted-foreground">
-            Suba uma planilha Excel com CNPJ ou Código do Cliente e o valor faturado.
+            Suba o relatório Excel exportado do Sankhya. Duplicatas (mesma nota + produto) são ignoradas automaticamente.
           </p>
         </div>
         <Button variant="outline" onClick={baixarModelo}>
@@ -255,7 +321,7 @@ export default function ImportarFaturamento() {
           <CardContent className="flex flex-col items-center justify-center gap-4 p-12">
             <FileSpreadsheet className="h-12 w-12 text-muted-foreground" />
             <p className="text-center text-sm text-muted-foreground">
-              Formato esperado: 2 colunas — <strong>CNPJ ou Código Cliente</strong> e <strong>Valor Faturado</strong>.
+              Arquivos aceitos: <strong>.xls</strong> e <strong>.xlsx</strong> com o layout padrão do Sankhya.
             </p>
             <input
               ref={inputRef}
@@ -280,20 +346,15 @@ export default function ImportarFaturamento() {
           <Card>
             <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
               <div className="flex gap-3">
-                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-                  {validas} válida(s)
+                <Badge variant="outline">Total: {linhas.length} linha(s)</Badge>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
+                  Prévia das primeiras 10
                 </Badge>
-                {invalidas > 0 && (
-                  <Badge variant="outline" className="bg-red-50 text-red-700 border-red-300">
-                    {invalidas} com erro
-                  </Badge>
-                )}
-                <Badge variant="outline">Total: {linhas.length}</Badge>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={reiniciar}>Cancelar</Button>
-                <Button onClick={confirmar} disabled={validas === 0}>
-                  Confirmar importação ({validas})
+                <Button onClick={confirmar}>
+                  Confirmar Importação ({linhas.length})
                 </Button>
               </div>
             </CardContent>
@@ -304,33 +365,25 @@ export default function ImportarFaturamento() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Identificador</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>CNPJ</TableHead>
-                    <TableHead className="text-right">Valor</TableHead>
-                    <TableHead>Status</TableHead>
+                    <TableHead>Nota</TableHead>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Cód. Parceiro</TableHead>
+                    <TableHead>Nome Parceiro</TableHead>
+                    <TableHead>Produto</TableHead>
+                    <TableHead className="text-right">Qtd</TableHead>
+                    <TableHead className="text-right">Valor Líquido</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {linhas.map((l, i) => (
-                    <TableRow key={i} className={l.erro ? "bg-red-50/50" : undefined}>
-                      <TableCell className="font-mono text-xs">{l.identificador_raw}</TableCell>
-                      <TableCell>{l.razao_social ?? "—"}</TableCell>
-                      <TableCell className="font-mono text-xs">{l.cnpj ? formatCNPJ(l.cnpj) : "—"}</TableCell>
-                      <TableCell className="text-right">
-                        {Number.isFinite(l.valor) && l.valor > 0 ? formatBRL(l.valor) : "—"}
-                      </TableCell>
-                      <TableCell>
-                        {l.erro ? (
-                          <span className="inline-flex items-center gap-1 text-xs text-red-700">
-                            <XCircle className="h-3 w-3" /> {l.erro}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 text-xs text-green-700">
-                            <CheckCircle2 className="h-3 w-3" /> OK
-                          </span>
-                        )}
-                      </TableCell>
+                  {linhas.slice(0, 10).map((l, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="font-mono text-xs">{l.numero_nota}</TableCell>
+                      <TableCell className="text-xs">{l.data_faturamento ? formatDate(l.data_faturamento) : "—"}</TableCell>
+                      <TableCell className="font-mono text-xs">{l.codigo_parceiro ?? "—"}</TableCell>
+                      <TableCell className="text-xs">{l.nome_parceiro ?? "—"}</TableCell>
+                      <TableCell className="text-xs">{l.descricao_produto ?? l.codigo_produto ?? "—"}</TableCell>
+                      <TableCell className="text-right text-xs">{l.quantidade ?? "—"}</TableCell>
+                      <TableCell className="text-right text-xs">{l.valor_liquido != null ? formatBRL(l.valor_liquido) : "—"}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -358,7 +411,7 @@ export default function ImportarFaturamento() {
             <div className="text-center">
               <p className="text-lg font-semibold">Importação concluída</p>
               <p className="text-sm text-muted-foreground">
-                {resultado.ok} sucesso(s){resultado.erro > 0 ? `, ${resultado.erro} erro(s)` : ""}
+                {resultado.inseridos} registros importados, {resultado.duplicados} já existiam e foram ignorados
               </p>
             </div>
             <Button onClick={reiniciar}>Nova importação</Button>
