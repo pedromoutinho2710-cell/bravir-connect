@@ -303,9 +303,10 @@ export function gerarFormularioPDF(d: FormularioPdfData): jsPDF {
   doc.setFont("helvetica", "bold"); doc.setFontSize(5.5); doc.setTextColor(80);
   doc.text("OBSERVACOES:", xC, yC + 2.5);
   doc.setFont("helvetica", "normal"); doc.setFontSize(7); doc.setTextColor(0);
-  doc.text(doc.splitTextToSize(n(d.observacoes), cC - 1)[0] ?? "", xC, yC + fH - 1.5);
+  const obsLines = doc.splitTextToSize(n(d.observacoes), cC - 1);
+  doc.text(obsLines, xC, yC + fH - 1.5);
   dotLine(xC, yC + fH, cC);
-  yC += fH + 1;
+  yC += fH + (obsLines.length - 1) * 4.5 + 1;
 
   // ══════════════════════════════════════════════════════════════════════════
   // COLUNA DIREITA
