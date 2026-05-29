@@ -51,8 +51,7 @@ function NavItem({ item, pathname }: { item: Item; pathname: string }) {
 
 export function AppSidebar() {
   const { role: realRole, user, signOut } = useAuth();
-  const { active, userRole, userId, setImpersonation, clearImpersonation } = useImpersonation();
-  const role = active ? userRole : realRole;
+  const { active, userId, setImpersonation, clearImpersonation } = useImpersonation();
   const { pathname } = useLocation();
   const [semPerfilCount, setSemPerfilCount] = useState(0);
   const [leadsNovosCount, setLeadsNovosCount] = useState(0);
@@ -114,9 +113,9 @@ export function AppSidebar() {
   );
 
   const getFlatMenu = (): Item[] => {
-    if (role === "faturamento") return faturamentoItems;
-    if (role === "gestora") return gestoraItems;
-    return FLAT_MENU_STATIC[role as AppRole] ?? [];
+    if (realRole === "faturamento") return faturamentoItems;
+    if (realRole === "gestora") return gestoraItems;
+    return FLAT_MENU_STATIC[realRole as AppRole] ?? [];
   };
 
   const adminSections: Section[] = ADMIN_SECTIONS.map((section) => {
@@ -169,7 +168,7 @@ export function AppSidebar() {
       </SidebarHeader>
 
       <SidebarContent>
-        {role === "admin" ? (
+        {realRole === "admin" ? (
           <>
             {adminSections.map((section) => (
               <SidebarGroup key={section.label}>
