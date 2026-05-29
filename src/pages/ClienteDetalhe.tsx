@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { CLUSTERS, TABELAS_PRECO } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { BadgeNegativado } from "@/components/BadgeNegativado";
+import { TabelaPrecos } from "@/components/cliente/TabelaPrecos";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
@@ -93,6 +94,7 @@ type ClienteInfo = {
   suframa: boolean | null;
   vendedor_id: string | null;
   observacoes_trade: string | null;
+  desconto_adicional: number | null;
 };
 
 type PedidoLinha = {
@@ -201,7 +203,7 @@ export default function ClienteDetalhe() {
     const [cRes, pRes, profRes, roleRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade")
+        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional")
         .eq("id", id)
         .single(),
       supabase
@@ -239,6 +241,7 @@ export default function ClienteDetalhe() {
         suframa: c.suframa ?? null,
         vendedor_id: c.vendedor_id,
         observacoes_trade: c.observacoes_trade,
+        desconto_adicional: c.desconto_adicional ?? null,
       };
       setCliente(info);
       setObsLocal(info.observacoes_trade ?? "");
@@ -540,6 +543,7 @@ export default function ClienteDetalhe() {
           <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
           <TabsTrigger value="metas">Metas</TabsTrigger>
           <TabsTrigger value="obs">Observações</TabsTrigger>
+          <TabsTrigger value="tabela">Tabela de Preços</TabsTrigger>
         </TabsList>
 
         {/* ABA 1 — Dados cadastrais */}
@@ -716,6 +720,22 @@ export default function ClienteDetalhe() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ABA — Tabela de Preços */}
+        <TabsContent value="tabela" className="mt-4">
+          {cliente && (
+            <TabelaPrecos
+              clienteId={cliente.id}
+              clienteRazaoSocial={cliente.razao_social}
+              clienteCnpj={cliente.cnpj}
+              clienteCidade={cliente.cidade}
+              clienteUf={cliente.uf}
+              clienteTabela={cliente.tabela_preco}
+              clienteCluster={cliente.cluster}
+              clienteDescontoAdicional={cliente.desconto_adicional ?? null}
+            />
+          )}
         </TabsContent>
       </Tabs>
 
