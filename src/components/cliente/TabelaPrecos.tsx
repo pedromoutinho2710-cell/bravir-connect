@@ -334,23 +334,30 @@ export function TabelaPrecos({
       });
 
       const totalGeralRow = r;
-      ws.mergeCells(`A${totalGeralRow}:G${totalGeralRow}`);
+      ws.mergeCells(`A${totalGeralRow}:F${totalGeralRow}`);
       const tg = ws.getCell(`A${totalGeralRow}`);
       tg.value = "TOTAL GERAL";
       tg.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
       tg.font = { color: { argb: "FFFFFFFF" }, bold: true };
       tg.alignment = { horizontal: "right", vertical: "middle" };
-      const tgVal = ws.getCell(`H${totalGeralRow}`);
+
+      const tgG = ws.getCell(`G${totalGeralRow}`);
+      const tgH = ws.getCell(`H${totalGeralRow}`);
       if (linhasProduto.length > 0) {
-        const somaParts = linhasProduto.map((n) => `H${n}`).join(",");
-        tgVal.value = { formula: `SUM(${somaParts})` };
+        const partsG = linhasProduto.map((n) => `G${n}`).join(",");
+        const partsH = linhasProduto.map((n) => `H${n}`).join(",");
+        tgG.value = { formula: `SUM(${partsG})` };
+        tgH.value = { formula: `SUM(${partsH})` };
       } else {
-        tgVal.value = 0;
+        tgG.value = 0;
+        tgH.value = 0;
       }
-      tgVal.numFmt = '"R$"#,##0.00';
-      tgVal.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
-      tgVal.font = { color: { argb: "FFFFFFFF" }, bold: true };
-      tgVal.alignment = { horizontal: "right", vertical: "middle" };
+      [tgG, tgH].forEach((cell) => {
+        cell.numFmt = '"R$"#,##0.00';
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
+        cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
+        cell.alignment = { horizontal: "right", vertical: "middle" };
+      });
       for (let c = 1; c <= 8; c++) {
         ws.getCell(totalGeralRow, c).border = {
           top: { style: "thin" },
