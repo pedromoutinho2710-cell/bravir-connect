@@ -118,15 +118,15 @@ export default function ImportarPedidoDialog({
       );
       const offset = jivaColIdx === 3 ? 1 : 0;
 
-      const tabelaRaw = cel(1, 7); // H2
-      const tabela_preco = (tabelaRaw.match(/\d+|suframa/i) ?? [""])[0].toLowerCase();
-      const codigo_cliente = cel(2, 11 + offset); // L3 ou M3
-      const cond_pagamento = cel(4, 10 + offset); // K5 ou L5
+      const tabelaRaw = cel(2, 7); // H3
+      const tabela_preco = tabelaRaw.match(/\d+|suframa/i)?.[0]?.toLowerCase() ?? "";
+      const codigo_cliente = cel(3, 14); // O4
+      const cond_pagamento = cel(5, 14); // O6
 
-      // Agendamento: linha 12 (índice 11), coluna E (índice 4) = "X" ou coluna F (índice 5) = "SIM"
-      const agendamento = cel(11, 4).toUpperCase() === "X" || cel(11, 5).toUpperCase() === "SIM";
+      // Agendamento: linha 13 (índice 12), coluna E (índice 4) = "X" ou coluna F (índice 5) = "SIM"
+      const agendamento = cel(12, 4).toUpperCase() === "X" || cel(12, 5).toUpperCase() === "SIM";
 
-      const observacoes = cel(11, 12); // M12
+      const observacoes = cel(14, 4); // E15
 
       // Produtos: linha 19 em diante (índice 18)
       const rawProdutos: ProdutoRow[] = [];
@@ -176,7 +176,7 @@ export default function ImportarPedidoDialog({
 
       // Buscar cliente
       if (!codigo_cliente) {
-        setErroCliente("Código do cliente não encontrado na planilha (célula L3).");
+        setErroCliente("Código do cliente não encontrado na planilha (célula O4).");
         setDados({
           codigo_cliente,
           cond_pagamento,
