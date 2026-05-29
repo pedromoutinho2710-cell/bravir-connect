@@ -128,12 +128,76 @@ function detectarColuna(header: string): ColunaKey | null {
   return null;
 }
 
+function mapearLinha(
+  row: Record<string, unknown>,
+  mapeamento: Map<string, ColunaKey>,
+): LinhaSankhya | null {
+  const get = (key: ColunaKey): unknown => {
+    for (const [h, k] of mapeamento) if (k === key) return row[h];
+    return "";
+  };
+
+  const numero_nota = String(get("numero_nota") ?? "").trim();
+  if (!numero_nota) return null;
+
+  let grupo_cliente: string | null = (String(get("grupo_cliente") ?? "").trim() || null);
+  let segmento: string | null = (String(get("segmento") ?? "").trim() || null);
+  const gs = String(get("grupo_segmento") ?? "").trim();
+  if (gs && (!grupo_cliente || !segmento)) {
+    const [g, s] = gs.split("/").map((x) => x.trim());
+    if (!grupo_cliente) grupo_cliente = g || null;
+    if (!segmento) segmento = s || null;
+  }
+
+  let cidade: string | null = (String(get("cidade") ?? "").trim() || null);
+  let uf: string | null = (String(get("uf") ?? "").trim() || null);
+  const cu = String(get("cidade_uf") ?? "").trim();
+  if (cu && (!cidade || !uf)) {
+    const [c, u] = cu.split("/").map((x) => x.trim());
+    if (!cidade) cidade = c || null;
+    if (!uf) uf = u || null;
+  }
+
+  return {
+    numero_nota,
+    tipo_operacao: String(get("tipo_operacao") ?? "").trim() || null,
+    data_faturamento: parseData(get("data_faturamento")),
+    codigo_parceiro: String(get("codigo_parceiro") ?? "").trim() || null,
+    nome_parceiro: String(get("nome_parceiro") ?? "").trim() || null,
+    grupo_cliente,
+    segmento,
+    cidade,
+    uf,
+    codigo_produto: String(get("codigo_produto") ?? "").trim() || null,
+    descricao_produto: String(get("descricao_produto") ?? "").trim() || null,
+    quantidade: parseNumero(get("quantidade")),
+    valor_total_itens: parseNumero(get("valor_total_itens")),
+    valor_liquido: parseNumero(get("valor_liquido")),
+    valor_st: parseNumero(get("valor_st")),
+    base_st: parseNumero(get("base_st")),
+    aliq_ipi: parseNumero(get("aliq_ipi")),
+    ipi: parseNumero(get("ipi")),
+    valor_fem: parseNumero(get("valor_fem")),
+    valor_destaque: parseNumero(get("valor_destaque")),
+    controle: String(get("controle") ?? "").trim() || null,
+    cod_grupo: String(get("cod_grupo") ?? "").trim() || null,
+    grupo: String(get("grupo") ?? "").trim() || null,
+    nome_vendedor: String(get("nome_vendedor") ?? "").trim() || null,
+    razao_social_empresa: String(get("razao_social_empresa") ?? "").trim() || null,
+    tipo_negociacao: String(get("tipo_negociacao") ?? "").trim() || null,
+    recebimento_pedido: parseData(get("recebimento_pedido")),
+  };
+}
+
 export default function ImportarFaturamento() {
   const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
+  const rowsBrutasRef = useRef<Record<string, unknown>[]>([]);
+  const mapeamentoRef = useRef<Map<string, ColunaKey>>(new Map());
   const [etapa, setEtapa] = useState<Etapa>("upload");
-  const [linhas, setLinhas] = useState<LinhaSankhya[]>([]);
-  const [carregando, setCarregando] = useState(false);
+  const [previa, setPrevia] = useState<LinhaSankhya[]>([]);
+  const [totalLinhas, setTotalLinhas] = useState(0);
+  const [processando, setProcessando] = useState(false);
   const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
   const [resultado, setResultado] = useState({ inseridos: 0, duplicados: 0 });
 
@@ -158,7 +222,7 @@ export default function ImportarFaturamento() {
   };
 
   const handleArquivo = async (file: File) => {
-    setCarregando(true);
+    setProcessando(true);
     try {
       const XLSX = await import("xlsx");
       const buf = await file.arrayBuffer();
@@ -167,7 +231,7 @@ export default function ImportarFaturamento() {
       const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "", raw: true });
       if (rows.length === 0) {
         toast.error("Planilha vazia");
-        setCarregando(false);
+        setProcessando(false);
         return;
       }
 
@@ -182,120 +246,85 @@ export default function ImportarFaturamento() {
 
       if (!Array.from(mapeamento.values()).includes("numero_nota")) {
         toast.error("Não encontrei a coluna 'Número da Nota' na planilha");
-        setCarregando(false);
+        setProcessando(false);
         return;
       }
 
-      const get = (row: Record<string, unknown>, key: ColunaKey): unknown => {
-        for (const [h, k] of mapeamento) if (k === key) return row[h];
-        return "";
-      };
-
-      const parsed: LinhaSankhya[] = [];
-      for (const row of rows) {
-        const numero_nota = String(get(row, "numero_nota") ?? "").trim();
-        if (!numero_nota) continue;
-
-        let grupo_cliente: string | null = (String(get(row, "grupo_cliente") ?? "").trim() || null);
-        let segmento: string | null = (String(get(row, "segmento") ?? "").trim() || null);
-        const gs = String(get(row, "grupo_segmento") ?? "").trim();
-        if (gs && (!grupo_cliente || !segmento)) {
-          const [g, s] = gs.split("/").map((x) => x.trim());
-          if (!grupo_cliente) grupo_cliente = g || null;
-          if (!segmento) segmento = s || null;
-        }
-
-        let cidade: string | null = (String(get(row, "cidade") ?? "").trim() || null);
-        let uf: string | null = (String(get(row, "uf") ?? "").trim() || null);
-        const cu = String(get(row, "cidade_uf") ?? "").trim();
-        if (cu && (!cidade || !uf)) {
-          const [c, u] = cu.split("/").map((x) => x.trim());
-          if (!cidade) cidade = c || null;
-          if (!uf) uf = u || null;
-        }
-
-        parsed.push({
-          numero_nota,
-          tipo_operacao: String(get(row, "tipo_operacao") ?? "").trim() || null,
-          data_faturamento: parseData(get(row, "data_faturamento")),
-          codigo_parceiro: String(get(row, "codigo_parceiro") ?? "").trim() || null,
-          nome_parceiro: String(get(row, "nome_parceiro") ?? "").trim() || null,
-          grupo_cliente,
-          segmento,
-          cidade,
-          uf,
-          codigo_produto: String(get(row, "codigo_produto") ?? "").trim() || null,
-          descricao_produto: String(get(row, "descricao_produto") ?? "").trim() || null,
-          quantidade: parseNumero(get(row, "quantidade")),
-          valor_total_itens: parseNumero(get(row, "valor_total_itens")),
-          valor_liquido: parseNumero(get(row, "valor_liquido")),
-          valor_st: parseNumero(get(row, "valor_st")),
-          base_st: parseNumero(get(row, "base_st")),
-          aliq_ipi: parseNumero(get(row, "aliq_ipi")),
-          ipi: parseNumero(get(row, "ipi")),
-          valor_fem: parseNumero(get(row, "valor_fem")),
-          valor_destaque: parseNumero(get(row, "valor_destaque")),
-          controle: String(get(row, "controle") ?? "").trim() || null,
-          cod_grupo: String(get(row, "cod_grupo") ?? "").trim() || null,
-          grupo: String(get(row, "grupo") ?? "").trim() || null,
-          nome_vendedor: String(get(row, "nome_vendedor") ?? "").trim() || null,
-          razao_social_empresa: String(get(row, "razao_social_empresa") ?? "").trim() || null,
-          tipo_negociacao: String(get(row, "tipo_negociacao") ?? "").trim() || null,
-          recebimento_pedido: parseData(get(row, "recebimento_pedido")),
-        });
+      const previaParsed: LinhaSankhya[] = [];
+      for (let i = 0; i < rows.length && previaParsed.length < 10; i++) {
+        const linha = mapearLinha(rows[i], mapeamento);
+        if (linha) previaParsed.push(linha);
       }
 
-      if (parsed.length === 0) {
+      if (previaParsed.length === 0) {
         toast.error("Nenhuma linha com Número da Nota válido encontrada");
-        setCarregando(false);
+        setProcessando(false);
         return;
       }
 
-      setLinhas(parsed);
+      rowsBrutasRef.current = rows;
+      mapeamentoRef.current = mapeamento;
+      setPrevia(previaParsed);
+      setTotalLinhas(rows.length);
       setEtapa("preview");
     } catch (err) {
       console.error(err);
       toast.error("Erro ao ler planilha");
     } finally {
-      setCarregando(false);
+      setProcessando(false);
     }
   };
 
   const confirmar = async () => {
-    if (linhas.length === 0) return;
+    const rows = rowsBrutasRef.current;
+    const mapeamento = mapeamentoRef.current;
+    if (rows.length === 0) return;
+
     setEtapa("importando");
-    setProgresso({ feitos: 0, total: linhas.length });
+    setProgresso({ feitos: 0, total: rows.length });
     let inseridos = 0;
+    let processadosTotal = 0;
 
     const lote = 200;
-    for (let i = 0; i < linhas.length; i += lote) {
-      const slice = linhas.slice(i, i + lote);
-      const payload = slice.map((l) => ({
-        ...l,
-        importado_por: user?.id ?? null,
-      }));
-      // TODO: adicionar faturamentos_sankhya ao types.ts e remover o cast
-      const { data, error } = await (supabase as any)
-        .from("faturamentos_sankhya")
-        .upsert(payload, { onConflict: "numero_nota,codigo_produto", ignoreDuplicates: true })
-        .select("id");
-      if (error) {
-        console.error(error);
-        toast.error(`Erro no lote ${i / lote + 1}: ${error.message}`);
-      } else {
-        inseridos += (data ?? []).length;
+    for (let i = 0; i < rows.length; i += lote) {
+      const sliceRows = rows.slice(i, i + lote);
+      const payload: (LinhaSankhya & { importado_por: string | null })[] = [];
+      for (const r of sliceRows) {
+        const linha = mapearLinha(r, mapeamento);
+        if (linha) payload.push({ ...linha, importado_por: user?.id ?? null });
       }
-      setProgresso({ feitos: Math.min(i + slice.length, linhas.length), total: linhas.length });
+
+      if (payload.length > 0) {
+        // TODO: adicionar faturamentos_sankhya ao types.ts e remover o cast
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data, error } = await (supabase as any)
+          .from("faturamentos_sankhya")
+          .upsert(payload, { onConflict: "numero_nota,codigo_produto", ignoreDuplicates: true })
+          .select("id");
+        if (error) {
+          console.error(error);
+          toast.error(`Erro no lote ${i / lote + 1}: ${error.message}`);
+        } else {
+          inseridos += (data ?? []).length;
+        }
+        processadosTotal += payload.length;
+      }
+
+      setProgresso({ feitos: Math.min(i + sliceRows.length, rows.length), total: rows.length });
+      await new Promise((r) => setTimeout(r, 0));
     }
 
-    const duplicados = linhas.length - inseridos;
+    const duplicados = processadosTotal - inseridos;
     setResultado({ inseridos, duplicados });
     setEtapa("concluido");
     toast.success(`${inseridos} registros importados, ${duplicados} já existiam`);
   };
 
   const reiniciar = () => {
-    setLinhas([]);
+    rowsBrutasRef.current = [];
+    mapeamentoRef.current = new Map();
+    setPrevia([]);
+    setTotalLinhas(0);
     setResultado({ inseridos: 0, duplicados: 0 });
     setProgresso({ feitos: 0, total: 0 });
     setEtapa("upload");
@@ -333,9 +362,9 @@ export default function ImportarFaturamento() {
                 if (f) handleArquivo(f);
               }}
             />
-            <Button onClick={() => inputRef.current?.click()} disabled={carregando}>
-              {carregando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-              Selecionar planilha
+            <Button onClick={() => inputRef.current?.click()} disabled={processando}>
+              {processando ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+              {processando ? "Lendo planilha..." : "Selecionar planilha"}
             </Button>
           </CardContent>
         </Card>
@@ -345,16 +374,18 @@ export default function ImportarFaturamento() {
         <>
           <Card>
             <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
-              <div className="flex gap-3">
-                <Badge variant="outline">Total: {linhas.length} linha(s)</Badge>
+              <div className="flex flex-wrap gap-3">
+                <Badge variant="outline">
+                  {totalLinhas.toLocaleString("pt-BR")} linhas encontradas
+                </Badge>
                 <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300">
-                  Prévia das primeiras 10
+                  Primeiras 10 exibidas abaixo
                 </Badge>
               </div>
               <div className="flex gap-2">
                 <Button variant="outline" onClick={reiniciar}>Cancelar</Button>
                 <Button onClick={confirmar}>
-                  Confirmar Importação ({linhas.length})
+                  Confirmar Importação ({totalLinhas.toLocaleString("pt-BR")})
                 </Button>
               </div>
             </CardContent>
@@ -375,7 +406,7 @@ export default function ImportarFaturamento() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {linhas.slice(0, 10).map((l, i) => (
+                  {previa.map((l, i) => (
                     <TableRow key={i}>
                       <TableCell className="font-mono text-xs">{l.numero_nota}</TableCell>
                       <TableCell className="text-xs">{l.data_faturamento ? formatDate(l.data_faturamento) : "—"}</TableCell>
@@ -398,8 +429,14 @@ export default function ImportarFaturamento() {
           <CardContent className="flex flex-col items-center justify-center gap-4 p-12">
             <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              Importando {progresso.feitos} de {progresso.total}...
+              Importando {progresso.feitos.toLocaleString("pt-BR")} de {progresso.total.toLocaleString("pt-BR")}...
             </p>
+            <div className="h-2 w-full max-w-md overflow-hidden rounded bg-muted">
+              <div
+                className="h-full bg-primary transition-all"
+                style={{ width: `${progresso.total > 0 ? (progresso.feitos / progresso.total) * 100 : 0}%` }}
+              />
+            </div>
           </CardContent>
         </Card>
       )}
