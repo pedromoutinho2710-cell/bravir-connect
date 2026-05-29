@@ -12,13 +12,15 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
 import { MARCAS } from "@/lib/constants";
-import { Loader2, Search, CalendarClock, CheckCircle2, Plus, UserMinus, ShoppingCart } from "lucide-react";
+import { Loader2, Search, CalendarClock, CheckCircle2, Plus, UserMinus, ShoppingCart, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
+import { TabelaPrecos } from "@/components/cliente/TabelaPrecos";
 
 type PedidoHistorico = {
   id: string;
@@ -53,6 +55,12 @@ type ClienteAgregado = {
   proxima_compra: Date | null;
   canal: string | null;
   nome_parceiro: string | null;
+  tabela_preco: string | null;
+  cluster: string | null;
+  desconto_adicional: number | null;
+  suframa: boolean | null;
+  cidade: string | null;
+  uf: string | null;
 };
 
 type CadastroPendente = {
@@ -113,6 +121,8 @@ export default function MeusClientes() {
   const [removerCliente, setRemoverCliente] = useState<ClienteAgregado | null>(null);
   const [removendo, setRemovendo] = useState(false);
   const [cadastrosPendentes, setCadastrosPendentes] = useState<CadastroPendente[]>([]);
+  const [tabelaClienteOpen, setTabelaClienteOpen] = useState(false);
+  const [tabelaCliente, setTabelaCliente] = useState<ClienteAgregado | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -124,13 +134,13 @@ export default function MeusClientes() {
             cliente_id,
             data_pedido,
             itens_pedido(total_item, produtos(marca)),
-            clientes(razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro)
+            clientes(razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf)
           `)
           .eq("vendedor_id", user.id)
           .not("status", "in", '("rascunho","cancelado")'),
         supabase
           .from("clientes")
-          .select("id, razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro")
+          .select("id, razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf")
           .eq("vendedor_id", user.id)
           .eq("status", "ativo"),
       ]);
@@ -148,6 +158,12 @@ export default function MeusClientes() {
         aceita_saldo: boolean;
         canal: string | null;
         nome_parceiro: string | null;
+        tabela_preco: string | null;
+        cluster: string | null;
+        desconto_adicional: number | null;
+        suframa: boolean | null;
+        cidade: string | null;
+        uf: string | null;
         ltv: number;
         num_pedidos: number;
         marcas: Set<string>;
@@ -166,6 +182,12 @@ export default function MeusClientes() {
             aceita_saldo: cl?.aceita_saldo ?? false,
             canal: cl?.canal ?? null,
             nome_parceiro: cl?.nome_parceiro ?? null,
+            tabela_preco: cl?.tabela_preco ?? null,
+            cluster: cl?.cluster ?? null,
+            desconto_adicional: cl?.desconto_adicional ?? null,
+            suframa: cl?.suframa ?? null,
+            cidade: cl?.cidade ?? null,
+            uf: cl?.uf ?? null,
             ltv: 0,
             num_pedidos: 0,
             marcas: new Set(),
@@ -193,6 +215,12 @@ export default function MeusClientes() {
           aceita_saldo: cl.aceita_saldo ?? false,
           canal: cl.canal ?? null,
           nome_parceiro: cl.nome_parceiro ?? null,
+          tabela_preco: cl.tabela_preco ?? null,
+          cluster: cl.cluster ?? null,
+          desconto_adicional: cl.desconto_adicional ?? null,
+          suframa: cl.suframa ?? null,
+          cidade: cl.cidade ?? null,
+          uf: cl.uf ?? null,
           ltv: 0,
           num_pedidos: 0,
           marcas: new Set(),
@@ -231,6 +259,12 @@ export default function MeusClientes() {
             aceita_saldo: c.aceita_saldo,
             canal: c.canal,
             nome_parceiro: c.nome_parceiro,
+            tabela_preco: c.tabela_preco,
+            cluster: c.cluster,
+            desconto_adicional: c.desconto_adicional,
+            suframa: c.suframa,
+            cidade: c.cidade,
+            uf: c.uf,
             ltv: c.ltv,
             num_pedidos: c.num_pedidos,
             ticket_medio: c.ticket_medio,
@@ -488,6 +522,19 @@ export default function MeusClientes() {
                               }}
                             >
                               <ShoppingCart className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-muted-foreground hover:bg-muted shrink-0"
+                              title="Ver tabela de preços"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setTabelaCliente(c);
+                                setTabelaClienteOpen(true);
+                              }}
+                            >
+                              <FileText className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         </TableCell>
@@ -776,6 +823,27 @@ export default function MeusClientes() {
         open={detalhesOpen}
         onOpenChange={setDetalhesOpen}
       />
+
+      <Dialog open={tabelaClienteOpen} onOpenChange={setTabelaClienteOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Tabela de Preços — {tabelaCliente?.razao_social}</DialogTitle>
+          </DialogHeader>
+          {tabelaCliente && (
+            <TabelaPrecos
+              clienteId={tabelaCliente.cliente_id}
+              clienteRazaoSocial={tabelaCliente.razao_social}
+              clienteCnpj={tabelaCliente.cnpj ?? ""}
+              clienteCidade={tabelaCliente.cidade}
+              clienteUf={tabelaCliente.uf}
+              clienteTabela={tabelaCliente.tabela_preco}
+              clienteCluster={tabelaCliente.cluster}
+              clienteDescontoAdicional={tabelaCliente.desconto_adicional}
+              suframa={tabelaCliente.suframa}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
