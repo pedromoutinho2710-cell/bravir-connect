@@ -28,19 +28,13 @@ type Produto = {
 
 type LinhaProduto = Produto & {
   precoFinal: number | null;
+  ipi: number;
+  st: number;
 };
 
 const ORDEM_MARCAS = ["Bendita Cânfora", "Alivik", "Bravir", "Laby"];
 const VERDE = "FF1A5C2A";
 const VERDE_HEX = "#1A5C2A";
-
-function getIcmsPct(tabela: string | null, suframa: boolean | null): number {
-  if (suframa === true) return 0;
-  if (tabela === "7") return 0.07;
-  if (tabela === "12") return 0.12;
-  if (tabela === "18") return 0.18;
-  return 0.12;
-}
 
 export function TabelaPrecos({
   clienteId,
@@ -51,14 +45,12 @@ export function TabelaPrecos({
   clienteTabela,
   clienteCluster,
   clienteDescontoAdicional,
-  suframa,
+  suframa: _suframa,
 }: Props) {
   const [loading, setLoading] = useState(true);
   const [linhas, setLinhas] = useState<LinhaProduto[]>([]);
   const [qtds, setQtds] = useState<Record<string, number>>({});
   const [exportando, setExportando] = useState(false);
-
-  const icmsPct = useMemo(() => getIcmsPct(clienteTabela, suframa), [clienteTabela, suframa]);
 
   useEffect(() => {
     let cancelado = false;
@@ -105,6 +97,19 @@ export function TabelaPrecos({
         });
       }
 
+      const impostosMap: Record<string, { ipi: number; st: number }> = {};
+      if (clienteUf && produtos.length > 0) {
+        const codigos = produtos.map((p) => p.codigo_jiva);
+        const { data: impostos } = await supabase
+          .from("impostos_produto")
+          .select("codigo_jiva, ipi, st")
+          .in("codigo_jiva", codigos)
+          .eq("uf", clienteUf);
+        (impostos ?? []).forEach((imp) => {
+          impostosMap[imp.codigo_jiva] = { ipi: Number(imp.ipi), st: Number(imp.st) };
+        });
+      }
+
       const { data: itens } = await supabase
         .from("itens_pedido")
         .select("produto_id, preco_final, pedidos!inner(cliente_id)")
@@ -132,6 +137,8 @@ export function TabelaPrecos({
         return {
           ...p,
           precoFinal: precoFinal === Infinity || precoFinal === 0 ? null : precoFinal,
+          ipi: impostosMap[p.codigo_jiva]?.ipi ?? 0,
+          st: impostosMap[p.codigo_jiva]?.st ?? 0,
         };
       });
 
@@ -153,7 +160,7 @@ export function TabelaPrecos({
     return () => {
       cancelado = true;
     };
-  }, [clienteId, clienteTabela, clienteCluster, clienteDescontoAdicional]);
+  }, [clienteId, clienteTabela, clienteCluster, clienteDescontoAdicional, clienteUf]);
 
   const grupos = useMemo(() => {
     const map: Record<string, LinhaProduto[]> = {};
@@ -178,18 +185,18 @@ export function TabelaPrecos({
   };
 
   const totaisGerais = useMemo(() => {
-    let semIcms = 0;
-    let comIcms = 0;
+    let semST = 0;
+    let comST = 0;
     linhas.forEach((l) => {
       const qtd = qtds[l.id] ?? 0;
       if (l.precoFinal == null || qtd <= 0) return;
-      const precoSem = l.precoFinal;
-      const precoCom = precoSem * (1 + icmsPct);
-      semIcms += precoSem * qtd;
-      comIcms += precoCom * qtd;
+      const precoComIpi = l.precoFinal * (1 + l.ipi);
+      const precoComIpiSt = precoComIpi * (1 + l.st);
+      semST += precoComIpi * qtd;
+      comST += precoComIpiSt * qtd;
     });
-    return { semIcms, comIcms };
-  }, [linhas, qtds, icmsPct]);
+    return { semST, comST };
+  }, [linhas, qtds]);
 
   const exportar = async () => {
     setExportando(true);
@@ -203,6 +210,7 @@ export function TabelaPrecos({
         { width: 15 },
         { width: 15 },
         { width: 40 },
+        { width: 18 },
         { width: 18 },
         { width: 18 },
         { width: 18 },
@@ -223,7 +231,7 @@ export function TabelaPrecos({
         .toLocaleString("pt-BR", { month: "long", year: "numeric" })
         .toUpperCase();
 
-      ws.mergeCells("A4:H4");
+      ws.mergeCells("A4:I4");
       const tituloCell = ws.getCell("A4");
       tituloCell.value = `TABELA DE PREÇOS — ${mesAno}`;
       tituloCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
@@ -254,10 +262,11 @@ export function TabelaPrecos({
         "CX de Embarque",
         "Qtd. Pedida",
         "Descrição do Produto",
-        "Preço s/ ICMS",
-        "Preço c/ ICMS",
-        "Total s/ ICMS",
-        "Total c/ ICMS",
+        "Preço Líq. s/ IPI",
+        "Preço c/ IPI",
+        "Preço c/ IPI+ST",
+        "Total s/ ST",
+        "Total c/ ST",
       ];
       cabecalhos.forEach((h, idx) => {
         const cell = ws.getCell(cabRow, idx + 1);
@@ -276,13 +285,13 @@ export function TabelaPrecos({
       let r = cabRow + 1;
       const linhasProduto: number[] = [];
       grupos.forEach((g) => {
-        ws.mergeCells(`A${r}:H${r}`);
+        ws.mergeCells(`A${r}:I${r}`);
         const gc = ws.getCell(`A${r}`);
         gc.value = g.marca;
         gc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
         gc.font = { color: { argb: "FFFFFFFF" }, bold: true };
         gc.alignment = { horizontal: "left", vertical: "middle" };
-        for (let c = 1; c <= 8; c++) {
+        for (let c = 1; c <= 9; c++) {
           ws.getCell(r, c).border = {
             top: { style: "thin" },
             bottom: { style: "thin" },
@@ -294,8 +303,9 @@ export function TabelaPrecos({
 
         g.itens.forEach((it, idx) => {
           const qtd = qtds[it.id] ?? 0;
-          const precoSem = it.precoFinal ?? 0;
-          const precoCom = precoSem * (1 + icmsPct);
+          const precoLiq = it.precoFinal ?? 0;
+          const precoComIpi = precoLiq * (1 + it.ipi);
+          const precoComIpiSt = precoComIpi * (1 + it.st);
           const zebra = idx % 2 === 1;
           const fill = zebra ? "FFF2F2F2" : "FFFFFFFF";
           const rowNum = r;
@@ -310,10 +320,11 @@ export function TabelaPrecos({
             { col: 2, val: it.cx_embarque, align: "center" },
             { col: 3, val: qtd, align: "center" },
             { col: 4, val: it.nome, align: "left" },
-            { col: 5, val: precoSem, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 6, val: precoCom, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 7, val: { formula: `C${rowNum}*E${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 5, val: precoLiq, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 6, val: precoComIpi, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 7, val: precoComIpiSt, fmt: '"R$"#,##0.00', align: "right" },
             { col: 8, val: { formula: `C${rowNum}*F${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 9, val: { formula: `C${rowNum}*G${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
           ];
           cells.forEach(({ col, val, fmt, align }) => {
             const cell = ws.getCell(r, col);
@@ -334,31 +345,31 @@ export function TabelaPrecos({
       });
 
       const totalGeralRow = r;
-      ws.mergeCells(`A${totalGeralRow}:F${totalGeralRow}`);
+      ws.mergeCells(`A${totalGeralRow}:G${totalGeralRow}`);
       const tg = ws.getCell(`A${totalGeralRow}`);
       tg.value = "TOTAL GERAL";
       tg.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
       tg.font = { color: { argb: "FFFFFFFF" }, bold: true };
       tg.alignment = { horizontal: "right", vertical: "middle" };
 
-      const tgG = ws.getCell(`G${totalGeralRow}`);
       const tgH = ws.getCell(`H${totalGeralRow}`);
+      const tgI = ws.getCell(`I${totalGeralRow}`);
       if (linhasProduto.length > 0) {
-        const partsG = linhasProduto.map((n) => `G${n}`).join(",");
         const partsH = linhasProduto.map((n) => `H${n}`).join(",");
-        tgG.value = { formula: `SUM(${partsG})` };
+        const partsI = linhasProduto.map((n) => `I${n}`).join(",");
         tgH.value = { formula: `SUM(${partsH})` };
+        tgI.value = { formula: `SUM(${partsI})` };
       } else {
-        tgG.value = 0;
         tgH.value = 0;
+        tgI.value = 0;
       }
-      [tgG, tgH].forEach((cell) => {
+      [tgH, tgI].forEach((cell) => {
         cell.numFmt = '"R$"#,##0.00';
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
         cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
         cell.alignment = { horizontal: "right", vertical: "middle" };
       });
-      for (let c = 1; c <= 8; c++) {
+      for (let c = 1; c <= 9; c++) {
         ws.getCell(totalGeralRow, c).border = {
           top: { style: "thin" },
           bottom: { style: "thin" },
@@ -412,11 +423,12 @@ export function TabelaPrecos({
               <th className="px-3 py-2 text-left font-semibold">Cód. Jiva</th>
               <th className="px-3 py-2 text-left font-semibold">Descrição</th>
               <th className="px-3 py-2 text-center font-semibold">CX Embarque</th>
-              <th className="px-3 py-2 text-right font-semibold">Preço s/ ICMS</th>
-              <th className="px-3 py-2 text-right font-semibold">Preço c/ ICMS</th>
+              <th className="px-3 py-2 text-right font-semibold">Preço Líq. s/ IPI</th>
+              <th className="px-3 py-2 text-right font-semibold">Preço c/ IPI</th>
+              <th className="px-3 py-2 text-right font-semibold">Preço c/ IPI+ST</th>
               <th className="px-3 py-2 text-center font-semibold">Qtd.</th>
-              <th className="px-3 py-2 text-right font-semibold">Total s/ ICMS</th>
-              <th className="px-3 py-2 text-right font-semibold">Total c/ ICMS</th>
+              <th className="px-3 py-2 text-right font-semibold">Total s/ ST</th>
+              <th className="px-3 py-2 text-right font-semibold">Total c/ ST</th>
             </tr>
           </thead>
           <tbody>
@@ -426,25 +438,24 @@ export function TabelaPrecos({
                 marca={g.marca}
                 itens={g.itens}
                 qtds={qtds}
-                icmsPct={icmsPct}
                 onChangeQtd={setQtd}
               />
             ))}
           </tbody>
           <tfoot>
             <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
-              <td colSpan={6} className="px-3 py-2 text-right font-bold">
-                Total Geral s/ ICMS
+              <td colSpan={7} className="px-3 py-2 text-right font-bold">
+                Total Geral s/ ST
               </td>
-              <td className="px-3 py-2 text-right font-bold">{formatBRL(totaisGerais.semIcms)}</td>
+              <td className="px-3 py-2 text-right font-bold">{formatBRL(totaisGerais.semST)}</td>
               <td className="px-3 py-2 text-right font-bold">—</td>
             </tr>
             <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
-              <td colSpan={6} className="px-3 py-2 text-right font-bold">
-                Total Geral c/ ICMS
+              <td colSpan={7} className="px-3 py-2 text-right font-bold">
+                Total Geral c/ ST
               </td>
               <td className="px-3 py-2 text-right font-bold">—</td>
-              <td className="px-3 py-2 text-right font-bold">{formatBRL(totaisGerais.comIcms)}</td>
+              <td className="px-3 py-2 text-right font-bold">{formatBRL(totaisGerais.comST)}</td>
             </tr>
           </tfoot>
         </table>
@@ -457,35 +468,35 @@ function GrupoLinhas({
   marca,
   itens,
   qtds,
-  icmsPct,
   onChangeQtd,
 }: {
   marca: string;
   itens: LinhaProduto[];
   qtds: Record<string, number>;
-  icmsPct: number;
   onChangeQtd: (id: string, v: string) => void;
 }) {
   return (
     <>
       <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
-        <td colSpan={8} className="px-3 py-1.5 font-bold text-sm">
+        <td colSpan={9} className="px-3 py-1.5 font-bold text-sm">
           {marca}
         </td>
       </tr>
       {itens.map((it, idx) => {
         const qtd = qtds[it.id] ?? 0;
-        const precoSem = it.precoFinal;
-        const precoCom = precoSem != null ? precoSem * (1 + icmsPct) : null;
-        const totalSem = precoSem != null ? precoSem * qtd : 0;
-        const totalCom = precoCom != null ? precoCom * qtd : 0;
+        const precoLiq = it.precoFinal;
+        const precoComIpi = precoLiq != null ? precoLiq * (1 + it.ipi) : null;
+        const precoComIpiSt = precoComIpi != null ? precoComIpi * (1 + it.st) : null;
+        const totalSemST = precoComIpi != null ? precoComIpi * qtd : 0;
+        const totalComST = precoComIpiSt != null ? precoComIpiSt * qtd : 0;
         return (
           <tr key={it.id} className={idx % 2 === 1 ? "bg-muted/30" : undefined}>
             <td className="px-3 py-1.5 font-mono text-xs">{it.codigo_jiva}</td>
             <td className="px-3 py-1.5">{it.nome}</td>
             <td className="px-3 py-1.5 text-center">{it.cx_embarque}</td>
-            <td className="px-3 py-1.5 text-right">{precoSem != null ? formatBRL(precoSem) : "—"}</td>
-            <td className="px-3 py-1.5 text-right">{precoCom != null ? formatBRL(precoCom) : "—"}</td>
+            <td className="px-3 py-1.5 text-right">{precoLiq != null ? formatBRL(precoLiq) : "—"}</td>
+            <td className="px-3 py-1.5 text-right">{precoComIpi != null ? formatBRL(precoComIpi) : "—"}</td>
+            <td className="px-3 py-1.5 text-right">{precoComIpiSt != null ? formatBRL(precoComIpiSt) : "—"}</td>
             <td className="px-3 py-1.5 text-center">
               <Input
                 type="number"
@@ -496,10 +507,10 @@ function GrupoLinhas({
               />
             </td>
             <td className="px-3 py-1.5 text-right">
-              {precoSem != null && qtd > 0 ? formatBRL(totalSem) : "—"}
+              {precoComIpi != null && qtd > 0 ? formatBRL(totalSemST) : "—"}
             </td>
             <td className="px-3 py-1.5 text-right">
-              {precoCom != null && qtd > 0 ? formatBRL(totalCom) : "—"}
+              {precoComIpiSt != null && qtd > 0 ? formatBRL(totalComST) : "—"}
             </td>
           </tr>
         );
