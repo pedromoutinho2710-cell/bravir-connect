@@ -51,7 +51,7 @@ function NavItem({ item, pathname }: { item: Item; pathname: string }) {
 
 export function AppSidebar() {
   const { role: realRole, user, signOut } = useAuth();
-  const { active, userId, setImpersonation, clearImpersonation } = useImpersonation();
+  const { active, userId, userRole, setImpersonation, clearImpersonation } = useImpersonation();
   const { pathname } = useLocation();
   const [semPerfilCount, setSemPerfilCount] = useState(0);
   const [leadsNovosCount, setLeadsNovosCount] = useState(0);
@@ -113,9 +113,10 @@ export function AppSidebar() {
   );
 
   const getFlatMenu = (): Item[] => {
-    if (realRole === "faturamento") return faturamentoItems;
-    if (realRole === "gestora") return gestoraItems;
-    return FLAT_MENU_STATIC[realRole as AppRole] ?? [];
+    const roleParaMenu = (active && userRole ? userRole : realRole) as AppRole;
+    if (roleParaMenu === "faturamento") return faturamentoItems;
+    if (roleParaMenu === "gestora") return gestoraItems;
+    return FLAT_MENU_STATIC[roleParaMenu] ?? [];
   };
 
   const adminSections: Section[] = ADMIN_SECTIONS.map((section) => {
@@ -161,8 +162,15 @@ export function AppSidebar() {
           <span className="text-[9px] uppercase tracking-widest text-sidebar-foreground/45">
             Cosmética e Farmacêutica
           </span>
-          <span className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 mt-1">
-            {realRole ? ROLE_LABEL[realRole] : ""}
+          <span
+            className={
+              "text-[10px] uppercase tracking-wider mt-1 " +
+              (active ? "text-yellow-300/80" : "text-sidebar-foreground/60")
+            }
+          >
+            {active && userRole
+              ? "visualizando: " + userRole
+              : (realRole ? ROLE_LABEL[realRole] : "")}
           </span>
         </div>
       </SidebarHeader>
@@ -170,18 +178,33 @@ export function AppSidebar() {
       <SidebarContent>
         {realRole === "admin" ? (
           <>
-            {adminSections.map((section) => (
-              <SidebarGroup key={section.label}>
-                <SidebarGroupLabel className="text-sidebar-foreground/60">{section.label}</SidebarGroupLabel>
+            {!active ? (
+              adminSections.map((section) => (
+                <SidebarGroup key={section.label}>
+                  <SidebarGroupLabel className="text-sidebar-foreground/60">{section.label}</SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <SidebarMenu>
+                      {section.items.map((item) => (
+                        <NavItem key={item.url} item={item} pathname={pathname} />
+                      ))}
+                    </SidebarMenu>
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              ))
+            ) : (
+              <SidebarGroup>
+                <SidebarGroupLabel className="text-yellow-300/70 text-[10px]">
+                  Menu — {userRole}
+                </SidebarGroupLabel>
                 <SidebarGroupContent>
                   <SidebarMenu>
-                    {section.items.map((item) => (
+                    {getFlatMenu().map((item) => (
                       <NavItem key={item.url} item={item} pathname={pathname} />
                     ))}
                   </SidebarMenu>
                 </SidebarGroupContent>
               </SidebarGroup>
-            ))}
+            )}
 
             {realRole === "admin" && (
               <>

@@ -54,9 +54,10 @@ export function MobileNav({ onNavigate }: Props) {
   );
 
   const getFlatItems = (): Item[] => {
-    if (role === "faturamento") return faturamentoItems;
-    if (role === "gestora") return gestoraItems;
-    return FLAT_MENU_STATIC[role as AppRole] ?? [];
+    const roleParaMenu = (active && userRole ? userRole : realRole) as AppRole;
+    if (roleParaMenu === "faturamento") return faturamentoItems;
+    if (roleParaMenu === "gestora") return gestoraItems;
+    return FLAT_MENU_STATIC[roleParaMenu] ?? [];
   };
 
   const adminSections: Section[] = ADMIN_SECTIONS.map((section) => {
@@ -132,7 +133,7 @@ export function MobileNav({ onNavigate }: Props) {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-        {role === "admin" ? (
+        {realRole === "admin" && !active ? (
           adminSections.map((section) => (
             <div key={section.label} className="mb-3">
               <div className="px-3 py-1 text-[10px] uppercase tracking-wider text-sidebar-foreground/50 font-semibold">
