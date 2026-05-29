@@ -118,9 +118,14 @@ export function MobileNav({ onNavigate }: Props) {
   return (
     <div className="flex flex-col h-full bg-sidebar text-sidebar-foreground">
       {/* Header */}
-      <div className="border-b border-sidebar-border px-5 py-5">
-        <div className="text-lg font-bold tracking-tight">Bravir CRM</div>
-        <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/70 mt-0.5">
+      <div className="border-b border-sidebar-border px-5 py-5 flex flex-col">
+        <div className="bg-[#1A5C2A] rounded-md px-2 py-0.5 self-start">
+          <span className="text-white font-bold text-sm tracking-widest">BRAVIR</span>
+        </div>
+        <span className="text-[9px] uppercase tracking-widest text-sidebar-foreground/45 mt-0.5">
+          Cosmética e Farmacêutica
+        </span>
+        <div className="text-[11px] uppercase tracking-wider text-sidebar-foreground/70 mt-1">
           {active && userRole ? `${userRole} — visualização` : (role ? ROLE_LABEL[role] : "")}
         </div>
       </div>

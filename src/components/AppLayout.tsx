@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "./AppSidebar";
 import { MobileNav } from "./MobileNav";
 import { NotificationsBadge } from "./NotificationsBadge";
-import { ImpersonationBar } from "./ImpersonationBar";
 import { useAuth } from "@/hooks/useAuth";
 
 export default function AppLayout() {
@@ -45,9 +44,14 @@ export default function AppLayout() {
             </div>
 
             {/* Logo / título */}
-            <span className="font-bold text-primary tracking-tight text-base flex-1">
-              Bravir CRM
-            </span>
+            <div className="flex items-center gap-2 flex-1">
+              <div className="bg-[#1A5C2A] rounded-md px-2 py-0.5 flex items-center">
+                <span className="text-white font-bold text-sm tracking-widest">BRAVIR</span>
+              </div>
+              <span className="text-[10px] uppercase tracking-widest text-muted-foreground hidden sm:block">
+                Cosmética e Farmacêutica
+              </span>
+            </div>
 
             {/* Nome do usuário */}
             {displayName && (
@@ -58,8 +62,6 @@ export default function AppLayout() {
 
             <NotificationsBadge />
           </header>
-
-          <ImpersonationBar />
 
           <main className="flex-1 p-4 md:p-6">
             <Outlet />

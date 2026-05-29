@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LogOut, FileText, Calculator, LayoutTemplate } from "lucide-react";
+import { LogOut, FileText, Calculator, LayoutTemplate, Eye } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -51,11 +51,29 @@ function NavItem({ item, pathname }: { item: Item; pathname: string }) {
 
 export function AppSidebar() {
   const { role: realRole, user, signOut } = useAuth();
-  const { active, userRole } = useImpersonation();
+  const { active, userRole, userId, setImpersonation, clearImpersonation } = useImpersonation();
   const role = active ? userRole : realRole;
   const { pathname } = useLocation();
   const [semPerfilCount, setSemPerfilCount] = useState(0);
   const [leadsNovosCount, setLeadsNovosCount] = useState(0);
+  const [impRole, setImpRole] = useState<AppRole>("vendedor");
+  const [colaboradores, setColaboradores] = useState<{ id: string; nome: string }[]>([]);
+
+  useEffect(() => {
+    if (realRole !== "admin") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (supabase as any)
+      .from("user_roles")
+      .select("user_id, profiles(id, full_name, email)")
+      .eq("role", impRole)
+      .then(({ data }: { data: any[] | null }) => {
+        const lista = (data ?? []).map((r: any) => ({
+          id: r.user_id,
+          nome: r.profiles?.full_name || r.profiles?.email || r.user_id,
+        }));
+        setColaboradores(lista);
+      });
+  }, [impRole, realRole]);
 
   useEffect(() => {
     if (realRole !== "faturamento" && realRole !== "admin") return;
@@ -129,30 +147,109 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border px-4 py-5">
-        <div className="flex flex-col">
-          <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
-            Bravir CRM
+        <div className="flex flex-col gap-1">
+          <div className="bg-[#1A5C2A] rounded-md px-2 py-1 self-start">
+            <span className="text-white font-bold text-base tracking-widest">BRAVIR</span>
+          </div>
+          <span className="text-[9px] uppercase tracking-widest text-sidebar-foreground/45">
+            Cosmética e Farmacêutica
           </span>
-          <span className="text-[11px] uppercase tracking-wider text-sidebar-foreground/70">
-            {active && userRole ? `${userRole} — visualização` : (role ? ROLE_LABEL[role] : "")}
+          <span className="text-[10px] uppercase tracking-wider text-sidebar-foreground/60 mt-1">
+            {realRole ? ROLE_LABEL[realRole] : ""}
           </span>
         </div>
       </SidebarHeader>
 
       <SidebarContent>
         {role === "admin" ? (
-          adminSections.map((section) => (
-            <SidebarGroup key={section.label}>
-              <SidebarGroupLabel className="text-sidebar-foreground/60">{section.label}</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <SidebarMenu>
-                  {section.items.map((item) => (
-                    <NavItem key={item.url} item={item} pathname={pathname} />
-                  ))}
-                </SidebarMenu>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          ))
+          <>
+            {adminSections.map((section) => (
+              <SidebarGroup key={section.label}>
+                <SidebarGroupLabel className="text-sidebar-foreground/60">{section.label}</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {section.items.map((item) => (
+                      <NavItem key={item.url} item={item} pathname={pathname} />
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            ))}
+
+            {realRole === "admin" && (
+              <>
+                <div className="mx-3 my-2 border-t border-sidebar-border/40" />
+
+                <SidebarGroup>
+                  <SidebarGroupLabel className="text-yellow-300/80 flex items-center gap-1.5 text-[10px]">
+                    <Eye className="h-3 w-3" />
+                    Visualizar como
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    <div className="flex flex-wrap gap-1 px-2 pb-2">
+                      {(["vendedor", "faturamento", "logistica", "trade", "gestora"] as AppRole[]).map((r) => {
+                        const label =
+                          r === "vendedor" ? "Vendedor" :
+                          r === "faturamento" ? "Fat." :
+                          r === "logistica" ? "Log." :
+                          r === "trade" ? "Trade" : "Gestora";
+                        return (
+                          <button
+                            key={r}
+                            onClick={() => setImpRole(r)}
+                            className={
+                              "px-2 py-0.5 rounded text-[11px] font-medium border transition-colors " +
+                              (impRole === r
+                                ? "bg-yellow-300 text-[#1A3A1F] border-yellow-300"
+                                : "border-sidebar-border/40 text-sidebar-foreground/50 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground")
+                            }
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {colaboradores.length === 0 ? (
+                      <p className="px-3 py-1 text-[11px] text-sidebar-foreground/40">Nenhum colaborador</p>
+                    ) : (
+                      <div className="px-2 space-y-0.5">
+                        {colaboradores.map((c) => (
+                          <button
+                            key={c.id}
+                            onClick={() => setImpersonation({ active: true, userId: c.id, userName: c.nome, userRole: impRole })}
+                            className={
+                              "w-full text-left px-2 py-1.5 rounded text-[12px] transition-colors flex items-center gap-2 " +
+                              (active && userId === c.id
+                                ? "bg-yellow-300/20 text-yellow-200 font-medium"
+                                : "text-sidebar-foreground/65 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground")
+                            }
+                          >
+                            <span className="w-5 h-5 rounded-full bg-sidebar-accent/60 flex items-center justify-center text-[9px] font-bold flex-shrink-0">
+                              {c.nome.charAt(0).toUpperCase()}
+                            </span>
+                            <span className="truncate">{c.nome}</span>
+                            {active && userId === c.id && (
+                              <Eye className="h-3 w-3 ml-auto flex-shrink-0 text-yellow-300" />
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {active && (
+                      <button
+                        onClick={clearImpersonation}
+                        className="mx-2 mt-2 w-[calc(100%-16px)] py-1 rounded text-[11px] border border-yellow-300/30 text-yellow-300/70 hover:bg-yellow-300/10 transition-colors"
+                      >
+                        Sair da visualização
+                      </button>
+                    )}
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </>
+            )}
+          </>
         ) : (
           <SidebarGroup>
             <SidebarGroupLabel className="text-sidebar-foreground/60">Menu</SidebarGroupLabel>
