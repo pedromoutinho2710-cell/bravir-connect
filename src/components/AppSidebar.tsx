@@ -61,15 +61,23 @@ export function AppSidebar() {
 
   useEffect(() => {
     if (realRole !== "admin") return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (supabase as any)
+    supabase
       .from("user_roles")
-      .select("user_id, profiles(id, full_name, email)")
+      .select("user_id")
       .eq("role", impRole)
-      .then(({ data }: { data: any[] | null }) => {
-        const lista = (data ?? []).map((r: any) => ({
-          id: r.user_id,
-          nome: r.profiles?.full_name || r.profiles?.email || r.user_id,
+      .then(async ({ data: roleData }) => {
+        if (!roleData || roleData.length === 0) {
+          setColaboradores([]);
+          return;
+        }
+        const ids = roleData.map((r: any) => r.user_id);
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", ids);
+        const lista = (profileData ?? []).map((p: any) => ({
+          id: p.id,
+          nome: p.full_name || p.email || p.id,
         }));
         setColaboradores(lista);
       });
@@ -190,8 +198,8 @@ export function AppSidebar() {
                       {(["vendedor", "faturamento", "logistica", "trade", "gestora"] as AppRole[]).map((r) => {
                         const label =
                           r === "vendedor" ? "Vendedor" :
-                          r === "faturamento" ? "Fat." :
-                          r === "logistica" ? "Log." :
+                          r === "faturamento" ? "Faturamento" :
+                          r === "logistica" ? "Logística" :
                           r === "trade" ? "Trade" : "Gestora";
                         return (
                           <button
