@@ -389,6 +389,40 @@ export default function Dashboard() {
             metaMes: metasPorVendedor[vendedor_id] ?? null,
           }))
           .sort((a, b) => b.faturamento - a.faturamento);
+
+        // Incluir todos os vendedores (role vendedor/gestora) mesmo sem pedidos no período
+        const { data: rolesData } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .in("role", ["vendedor", "gestora"]);
+        const todosVendedorIds = (rolesData ?? []).map((r) => r.user_id);
+
+        const idsNovos = todosVendedorIds.filter((id) => !profileMap[id]);
+        if (idsNovos.length > 0) {
+          const { data: novosProfiles } = await supabase
+            .from("profiles")
+            .select("id, full_name, email")
+            .in("id", idsNovos);
+          (novosProfiles ?? []).forEach((p) => {
+            profileMap[p.id] = p.full_name || p.email;
+          });
+        }
+
+        todosVendedorIds.forEach((vendedor_id) => {
+          if (!vendedorAgg[vendedor_id]) {
+            rankingList.push({
+              vendedor_id,
+              nome: profileMap[vendedor_id] ?? "—",
+              faturamento: 0,
+              numPedidos: 0,
+              clientesAtivos: 0,
+              clientesCarteira: clientesCarteiraPorVendedor[vendedor_id] ?? 0,
+              metaMes: metasPorVendedor[vendedor_id] ?? null,
+            });
+          }
+        });
+
+        rankingList.sort((a, b) => b.faturamento - a.faturamento);
         setRanking(rankingList);
 
         // Ranking campanha por vendedor
