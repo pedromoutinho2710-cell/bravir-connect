@@ -248,7 +248,7 @@ export default function MeusPedidos() {
   );
 
   const pedidosSemEstoque = useMemo(() =>
-    pedidos.filter((p) => p.status !== "devolvido" && p.itens_sem_estoque > 0),
+    pedidos.filter((p) => p.status !== "devolvido" && p.tipo !== "Bonificação" && p.itens_sem_estoque > 0),
     [pedidos]
   );
 
