@@ -373,6 +373,7 @@ export function SecaoProdutos({
                       <div className="min-w-0">
                         <div className="font-mono text-xs text-muted-foreground">{p.codigo_jiva}</div>
                         <div className="truncate">{p.nome}</div>
+                        <div className="text-[10px] text-muted-foreground">CX {p.cx_embarque}</div>
                       </div>
                       <Button
                         type="button"
