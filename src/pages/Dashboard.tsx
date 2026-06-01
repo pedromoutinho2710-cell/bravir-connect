@@ -184,8 +184,12 @@ export default function Dashboard() {
     const effectiveInicio = (dataInicio && dataFim) ? dataInicio : periodoInicio;
     const effectiveFim = (dataInicio && dataFim) ? dataFim : periodoFim;
 
+    // Mês/ano derivados do período filtrado (T12:00:00 evita o off-by-one de timezone)
+    const periodoDate = new Date(effectiveInicio + "T12:00:00");
+    const mesFiltro = periodoDate.getMonth() + 1;
+    const anoFiltro = periodoDate.getFullYear();
+
     const now = new Date();
-    const mesAtual = now.getMonth() + 1;
     const anoAtual = now.getFullYear();
     const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -214,12 +218,12 @@ export default function Dashboard() {
             .gte("data_pedido", effectiveInicio)
             .lte("data_pedido", effectiveFim)
             .not("status", "in", '("rascunho")'),
-          // Meta total da empresa do mês atual (inclui vendedor_id para ranking individual)
+          // Meta total da empresa do mês do período filtrado (inclui vendedor_id para ranking individual)
           supabase
             .from("metas")
             .select("vendedor_id, valor_meta_reais")
-            .eq("mes", mesAtual)
-            .eq("ano", anoAtual),
+            .eq("mes", mesFiltro)
+            .eq("ano", anoFiltro),
           // Entrada de pedidos do período para cálculo de % da meta + clientes ativos por vendedor
           supabase
             .from("pedidos")
