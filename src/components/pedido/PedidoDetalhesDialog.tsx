@@ -574,6 +574,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
                         <th className="text-left px-3 py-2 font-medium">Produto</th>
                         <th className="text-right px-3 py-2 font-medium">Qtd</th>
                         <th className="text-right px-3 py-2 font-medium">P. Unit</th>
+                        <th className="text-right px-3 py-2 font-medium">Unit c/ Desc</th>
                         <th className="text-right px-3 py-2 font-medium">Perf%</th>
                         <th className="text-right px-3 py-2 font-medium">Com%</th>
                         <th className="text-right px-3 py-2 font-medium">Trade%</th>
@@ -591,6 +592,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
                           </td>
                           <td className="px-3 py-1.5 text-right">{i.quantidade}</td>
                           <td className="px-3 py-1.5 text-right">{formatBRL(i.preco_bruto)}</td>
+                          <td className="px-3 py-1.5 text-right text-green-700 font-medium">{formatBRL(i.preco_final)}</td>
                           <td className="px-3 py-1.5 text-right text-muted-foreground">{i.desconto_perfil}%</td>
                           <td className="px-3 py-1.5 text-right text-muted-foreground">{i.desconto_comercial}%</td>
                           <td className="px-3 py-1.5 text-right text-muted-foreground">{i.desconto_trade}%</td>
@@ -601,7 +603,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
                     </tbody>
                     <tfoot>
                       <tr className="border-t bg-primary/10">
-                        <td colSpan={8} className="px-3 py-2 text-right font-bold">Total geral</td>
+                        <td colSpan={9} className="px-3 py-2 text-right font-bold">Total geral</td>
                         <td className="px-3 py-2 text-right font-bold text-green-700">{formatBRL(totalGeral)}</td>
                       </tr>
                     </tfoot>
