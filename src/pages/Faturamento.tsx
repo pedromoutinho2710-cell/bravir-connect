@@ -263,6 +263,7 @@ export default function Faturamento() {
   const [filtroClienteGlobal, setFiltroClienteGlobal] = useState("");
   const [filtroVendedorGlobal, setFiltroVendedorGlobal] = useState("todos");
   const [filtroProdutoSemEstoque, setFiltroProdutoSemEstoque] = useState("");
+  const [filtroProdutoPreFat, setFiltroProdutoPreFat] = useState("");
   const [ordenarAlfabetico, setOrdenarAlfabetico] = useState(false);
   const iniciMes = useMemo(() => {
     const d = new Date();
@@ -625,6 +626,17 @@ export default function Faturamento() {
       );
     }
 
+    if ((abaAtiva === "em_aberto" || abaAtiva === "assumidos") && filtroProdutoPreFat.trim()) {
+      const q = filtroProdutoPreFat.trim().toLowerCase();
+      lista = lista.filter((p) =>
+        p.itens.some(
+          (item) =>
+            (item.nome ?? "").toLowerCase().includes(q) ||
+            (item.codigo ?? "").toLowerCase().includes(q)
+        )
+      );
+    }
+
     if (filtroDataInicio) lista = lista.filter((p) => p.data_pedido >= filtroDataInicio);
     if (filtroDataFim) lista = lista.filter((p) => p.data_pedido <= filtroDataFim);
 
@@ -651,7 +663,7 @@ export default function Faturamento() {
     return lista.sort((a, b) =>
       new Date(b.data_pedido).getTime() - new Date(a.data_pedido).getTime()
     );
-  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroClienteGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim, filtroStatusAba, filtroProdutoSemEstoque, ordenarAlfabetico]);
+  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroClienteGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim, filtroStatusAba, filtroProdutoSemEstoque, filtroProdutoPreFat, ordenarAlfabetico]);
 
   // ── Ações ─────────────────────────────────────────────────────────
   const atualizar = async (id: string, updates: Record<string, unknown>): Promise<boolean> => {
@@ -1896,7 +1908,7 @@ export default function Faturamento() {
         onImportado={carregar}
       />
 
-      <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); setFiltroStatusAba("todos"); }}>
+      <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); setFiltroStatusAba("todos"); setFiltroProdutoPreFat(""); }}>
         <TabsList className="w-full grid grid-cols-5">
           {ABAS.map((aba) => {
             const count = pedidos.filter((p) => {
@@ -1960,6 +1972,14 @@ export default function Faturamento() {
                   </Button>
                 ))}
               </div>
+            )}
+            {(abaAtiva === "em_aberto" || abaAtiva === "assumidos") && (
+              <Input
+                placeholder="Filtrar por produto..."
+                value={filtroProdutoPreFat}
+                onChange={(e) => setFiltroProdutoPreFat(e.target.value)}
+                className="max-w-xs"
+              />
             )}
             <Button variant="ghost" size="sm" onClick={() => {
               setFiltroDataInicio(iniciMes);
