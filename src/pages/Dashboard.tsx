@@ -169,6 +169,12 @@ export default function Dashboard() {
   // Filtro de período customizado
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
+  // Valor efetivo aplicado (separado do valor visual digitado nos inputs)
+  const [dataInicioEfetiva, setDataInicioEfetiva] = useState("");
+  const [dataFimEfetiva, setDataFimEfetiva] = useState("");
+  // Mês/ano de referência da meta exibida (derivado do início do período filtrado)
+  const [mesRef, setMesRef] = useState(0);
+  const [anoRef, setAnoRef] = useState(0);
 
   // Drill-down dos cards
   const [cardAberto, setCardAberto] = useState<DrillCardKey | null>(null);
@@ -181,13 +187,15 @@ export default function Dashboard() {
 
     // Determine effective date range
     const { dataInicio: periodoInicio, dataFim: periodoFim } = getDateRange(periodo);
-    const effectiveInicio = (dataInicio && dataFim) ? dataInicio : periodoInicio;
-    const effectiveFim = (dataInicio && dataFim) ? dataFim : periodoFim;
+    const effectiveInicio = (dataInicioEfetiva && dataFimEfetiva) ? dataInicioEfetiva : periodoInicio;
+    const effectiveFim = (dataInicioEfetiva && dataFimEfetiva) ? dataFimEfetiva : periodoFim;
 
     // Mês/ano derivados do período filtrado (T12:00:00 evita o off-by-one de timezone)
     const periodoDate = new Date(effectiveInicio + "T12:00:00");
     const mesFiltro = periodoDate.getMonth() + 1;
     const anoFiltro = periodoDate.getFullYear();
+    setMesRef(mesFiltro);
+    setAnoRef(anoFiltro);
 
     const now = new Date();
     const anoAtual = now.getFullYear();
@@ -556,7 +564,7 @@ export default function Dashboard() {
         toast.error("Erro ao carregar dashboard");
       }
     })().finally(() => setLoading(false));
-  }, [periodo, dataInicio, dataFim]);
+  }, [periodo, dataInicioEfetiva, dataFimEfetiva]);
 
   const metaPct = metaTotal > 0 ? Math.min((fatMesAtual / metaTotal) * 100, 100) : 0;
   const previsaoMes = fatMesAtual + pipelineTotal;
@@ -632,8 +640,8 @@ export default function Dashboard() {
 
   async function carregarDrill(card: DrillCardKey) {
     const { dataInicio: periodoInicio, dataFim: periodoFim } = getDateRange(periodo);
-    const effectiveInicio = (dataInicio && dataFim) ? dataInicio : periodoInicio;
-    const effectiveFim = (dataInicio && dataFim) ? dataFim : periodoFim;
+    const effectiveInicio = (dataInicioEfetiva && dataFimEfetiva) ? dataInicioEfetiva : periodoInicio;
+    const effectiveFim = (dataInicioEfetiva && dataFimEfetiva) ? dataFimEfetiva : periodoFim;
     const mesmoDia = effectiveInicio === effectiveFim;
     const inicio = effectiveInicio;
     const fim = mesmoDia ? `${effectiveFim}T23:59:59` : effectiveFim;
@@ -722,6 +730,8 @@ export default function Dashboard() {
                 setPeriodo(key);
                 setDataInicio("");
                 setDataFim("");
+                setDataInicioEfetiva("");
+                setDataFimEfetiva("");
               }}
               style={periodo === key && !dataInicio ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
             >
@@ -750,17 +760,30 @@ export default function Dashboard() {
             />
             <Button
               size="sm"
-              variant={dataInicio && dataFim ? "default" : "outline"}
-              style={dataInicio && dataFim ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
+              variant={dataInicioEfetiva && dataFimEfetiva ? "default" : "outline"}
+              style={dataInicioEfetiva && dataFimEfetiva ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
               onClick={() => {
-                // dates are already in state; this button confirms intentionally
-                if (dataInicio && dataFim) {
-                  setDataInicio(dataInicio);
-                  setDataFim(dataFim);
+                setDataInicioEfetiva(dataInicio);
+                setDataFimEfetiva(dataFim);
+                // Sem datas válidas, volta ao período padrão (mês)
+                if (!dataInicio || !dataFim) {
+                  setPeriodo("mes");
                 }
               }}
             >
               Aplicar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setDataInicio("");
+                setDataFim("");
+                setDataInicioEfetiva("");
+                setDataFimEfetiva("");
+              }}
+            >
+              Limpar
             </Button>
           </div>
         </div>
@@ -773,7 +796,7 @@ export default function Dashboard() {
           <div className="text-xs text-muted-foreground mb-1">Meta de entrada</div>
           <div className="text-xl font-bold">{formatBRL(metaTotal)}</div>
           <span className="inline-block mt-2 rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-700">
-            Definida manualmente
+            Meta de {MESES_ABREV[mesRef - 1]}/{anoRef}
           </span>
         </div>
 
