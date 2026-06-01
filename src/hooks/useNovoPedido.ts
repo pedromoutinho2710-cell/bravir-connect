@@ -274,6 +274,9 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         status,
       };
       if (isGestora) updatePayload.vendedor_id = pedidoVendedorId;
+      if (status === "pendente_sankhya") {
+        updatePayload.data_pedido = new Date().toISOString().slice(0, 10);
+      }
       const { error } = await supabase.from("pedidos").update(updatePayload).eq("id", id);
       if (error) {
         toast.error("Erro ao atualizar: " + error.message);
@@ -295,6 +298,9 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
           ordem_compra: cliente.ordem_compra || null,
           vigencia_id: vigenciaId || null,
           status,
+          ...(status === "pendente_sankhya"
+            ? { data_pedido: new Date().toISOString().slice(0, 10) }
+            : {}),
         })
         .select("id")
         .single();
