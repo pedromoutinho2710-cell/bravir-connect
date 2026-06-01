@@ -67,7 +67,7 @@ export default function NovoPedidoGestora() {
       const { data: rolesData } = await supabase
         .from("user_roles")
         .select("user_id")
-        .eq("role", "vendedor");
+        .in("role", ["vendedor", "gestora"]);
 
       if (rolesData && rolesData.length > 0) {
         const ids = rolesData.map((r) => r.user_id);
@@ -79,7 +79,12 @@ export default function NovoPedidoGestora() {
           const lista: Vendedor[] = profData
             .map((p) => ({ id: p.id, nome: p.full_name || p.email || "—" }))
             .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-          setRepresentantes(lista);
+          // Gestora logada aparece primeiro; vendedores em ordem alfabética depois
+          const listaOrdenada = [
+            ...lista.filter((r) => r.id === user?.id),
+            ...lista.filter((r) => r.id !== user?.id),
+          ];
+          setRepresentantes(listaOrdenada);
         }
       }
       setRepsLoading(false);
