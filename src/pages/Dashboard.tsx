@@ -26,19 +26,15 @@ function getDateRange(periodo: Periodo): { dataInicio: string; dataFim: string }
     const diffToMonday = day === 0 ? -6 : 1 - day;
     const monday = new Date(today);
     monday.setDate(today.getDate() + diffToMonday);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    return { dataInicio: fmt(monday), dataFim: fmt(sunday) };
+    return { dataInicio: fmt(monday), dataFim: fmt(today) };
   }
   if (periodo === "mes") {
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
-    const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    return { dataInicio: fmt(start), dataFim: fmt(end) };
+    return { dataInicio: fmt(start), dataFim: fmt(today) };
   }
   // ano
   const start = new Date(today.getFullYear(), 0, 1);
-  const end = new Date(today.getFullYear(), 11, 31);
-  return { dataInicio: fmt(start), dataFim: fmt(end) };
+  return { dataInicio: fmt(start), dataFim: fmt(today) };
 }
 
 type DrillCardKey = "recebidos" | "agFaturamento" | "semEstoque" | "faturado" | "problemas";
@@ -167,11 +163,13 @@ export default function Dashboard() {
   const [vendedorExpandido, setVendedorExpandido] = useState<string | null>(null);
 
   // Filtro de período customizado
-  const [dataInicio, setDataInicio] = useState("");
-  const [dataFim, setDataFim] = useState("");
+  const initialRange = getDateRange("mes");
+  const [dataInicio, setDataInicio] = useState(initialRange.dataInicio);
+  const [dataFim, setDataFim] = useState(initialRange.dataFim);
   // Valor efetivo aplicado (separado do valor visual digitado nos inputs)
   const [dataInicioEfetiva, setDataInicioEfetiva] = useState("");
   const [dataFimEfetiva, setDataFimEfetiva] = useState("");
+  const [mostrarPersonalizar, setMostrarPersonalizar] = useState(false);
   // Mês/ano de referência da meta exibida (derivado do início do período filtrado)
   const [mesRef, setMesRef] = useState(0);
   const [anoRef, setAnoRef] = useState(0);
@@ -724,72 +722,90 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-[#1A6B3A]">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Visão geral do negócio</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {PERIODOS.map(({ key, label }) => (
-            <Button
-              key={key}
-              variant={periodo === key && !dataInicio ? "default" : "outline"}
-              size="sm"
-              onClick={() => {
-                setPeriodo(key);
-                setDataInicio("");
-                setDataFim("");
-                setDataInicioEfetiva("");
-                setDataFimEfetiva("");
-              }}
-              style={periodo === key && !dataInicio ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
-            >
-              {label}
-            </Button>
-          ))}
+        <div className="flex flex-col items-end gap-2">
+          {/* Linha 1: botões rápidos + personalizar */}
+          <div className="flex flex-wrap items-center gap-2">
+            {PERIODOS.map(({ key, label }) => (
+              <Button
+                key={key}
+                variant={periodo === key && !dataInicioEfetiva ? "default" : "outline"}
+                size="sm"
+                onClick={() => {
+                  setPeriodo(key);
+                  setDataInicio("");
+                  setDataFim("");
+                  setDataInicioEfetiva("");
+                  setDataFimEfetiva("");
+                  setMostrarPersonalizar(false);
+                  const range = getDateRange(key);
+                  setDataInicio(range.dataInicio);
+                  setDataFim(range.dataFim);
+                }}
+                style={periodo === key && !dataInicioEfetiva ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
+              >
+                {label}
+              </Button>
+            ))}
 
-          {/* Separador */}
-          <div className="border-l h-6 mx-1" />
+            <div className="border-l h-6 mx-1" />
 
-          {/* Filtro customizado */}
-          <div className="flex items-center gap-1.5">
-            <span className="text-xs text-muted-foreground">De:</span>
-            <input
-              type="date"
-              value={dataInicio}
-              onChange={(e) => setDataInicio(e.target.value)}
-              className="text-xs border rounded px-2 py-1 h-8 bg-background"
-            />
-            <span className="text-xs text-muted-foreground">Até:</span>
-            <input
-              type="date"
-              value={dataFim}
-              onChange={(e) => setDataFim(e.target.value)}
-              className="text-xs border rounded px-2 py-1 h-8 bg-background"
-            />
             <Button
               size="sm"
               variant={dataInicioEfetiva && dataFimEfetiva ? "default" : "outline"}
               style={dataInicioEfetiva && dataFimEfetiva ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
-              onClick={() => {
-                setDataInicioEfetiva(dataInicio);
-                setDataFimEfetiva(dataFim);
-                // Sem datas válidas, volta ao período padrão (mês)
-                if (!dataInicio || !dataFim) {
-                  setPeriodo("mes");
-                }
-              }}
+              onClick={() => setMostrarPersonalizar(!mostrarPersonalizar)}
             >
-              Aplicar
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setDataInicio("");
-                setDataFim("");
-                setDataInicioEfetiva("");
-                setDataFimEfetiva("");
-              }}
-            >
-              Limpar
+              Personalizar {mostrarPersonalizar ? "▲" : "▼"}
             </Button>
           </div>
+
+          {/* Linha 2: painel personalizar — só aparece se mostrarPersonalizar */}
+          {mostrarPersonalizar && (
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-muted-foreground">De:</span>
+              <input
+                type="date"
+                value={dataInicio}
+                onChange={(e) => setDataInicio(e.target.value)}
+                className="text-xs border rounded px-2 py-1 h-8 bg-background"
+              />
+              <span className="text-xs text-muted-foreground">Até:</span>
+              <input
+                type="date"
+                value={dataFim}
+                onChange={(e) => setDataFim(e.target.value)}
+                className="text-xs border rounded px-2 py-1 h-8 bg-background"
+              />
+              <Button
+                size="sm"
+                variant="default"
+                style={{ backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" }}
+                onClick={() => {
+                  if (dataInicio && dataFim) {
+                    setDataInicioEfetiva(dataInicio);
+                    setDataFimEfetiva(dataFim);
+                  }
+                }}
+              >
+                Aplicar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const range = getDateRange("mes");
+                  setDataInicio(range.dataInicio);
+                  setDataFim(range.dataFim);
+                  setDataInicioEfetiva("");
+                  setDataFimEfetiva("");
+                  setPeriodo("mes");
+                  setMostrarPersonalizar(false);
+                }}
+              >
+                Limpar
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 
