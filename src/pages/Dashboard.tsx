@@ -410,12 +410,16 @@ export default function Dashboard() {
             ((campanhaProdutosData ?? []) as any[]).filter((cp: any) => cp.tipo === "produto").map((cp: any) => cp.produto_id as string)
           );
 
+          // Período efetivo da campanha = interseção entre o filtro do dashboard e o intervalo da campanha
+          const campInicio = effectiveInicio > campanha.data_inicio ? effectiveInicio : campanha.data_inicio;
+          const campFim = effectiveFim < campanha.data_fim ? effectiveFim : campanha.data_fim;
+
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data: pedCampDetalhe } = await (supabase as any)
             .from("pedidos")
             .select("vendedor_id, itens_pedido(total_item, produto_id, produto:produtos(marca))")
-            .gte("data_pedido", campanha.data_inicio)
-            .lte("data_pedido", campanha.data_fim)
+            .gte("data_pedido", campInicio)
+            .lte("data_pedido", campFim)
             .not("status", "in", '("cancelado","devolvido","rascunho")');
 
           let entradaFiltrada = 0;
