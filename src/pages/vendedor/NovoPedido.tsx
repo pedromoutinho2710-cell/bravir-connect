@@ -111,7 +111,7 @@ export default function NovoPedido() {
         cidade: cl.cidade ?? "",
         uf: cl.uf ?? "",
         cep: cl.cep ? formatCEP(cl.cep) : "",
-        comprador: ped.perfil_cliente ?? cl.comprador ?? "",
+        comprador: cl.comprador ?? "",
         cluster: cl.cluster ?? "",
         tabela_preco: cl.tabela_preco ?? "",
         cond_pagamento: ped.cond_pagamento ?? "",
