@@ -35,6 +35,7 @@ export default function NovoPedido() {
 
   const [pedidoMinimo, setPedidoMinimo] = useState(5000);
   const [pedidoMinimoLoading, setPedidoMinimoLoading] = useState(true);
+  const [corrigindo, setCorrigindo] = useState(false);
 
   const {
     cliente, setCliente,
@@ -146,6 +147,9 @@ export default function NovoPedido() {
 
       setPedidoId(pedidoId);
       if (ped.vigencia_id) setVigenciaId(ped.vigencia_id);
+
+      const estaCorrigindo = (location.state as any)?.corrigindo === true;
+      if (estaCorrigindo) setCorrigindo(true);
     })();
   }, [hookLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -234,6 +238,7 @@ export default function NovoPedido() {
         descontoLivre={descontoLivre}
         bloqueado={!camposObrigatoriosOk}
         codigoParceiro={cliente.codigo_cliente ?? ""}
+        preservarDescontos={corrigindo}
       />
 
       <ResumoFinanceiro itens={itens} uf={cliente.uf} tabela_preco={cliente.tabela_preco} />

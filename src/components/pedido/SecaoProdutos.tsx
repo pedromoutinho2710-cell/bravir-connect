@@ -75,6 +75,7 @@ type Props = {
   descontoLivre?: boolean;
   bloqueado?: boolean;
   codigoParceiro?: string;
+  preservarDescontos?: boolean;
 };
 
 export function SecaoProdutos({
@@ -89,6 +90,7 @@ export function SecaoProdutos({
   descontoLivre = false,
   bloqueado = false,
   codigoParceiro = "",
+  preservarDescontos = false,
 }: Props) {
   const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
@@ -248,15 +250,16 @@ export function SecaoProdutos({
   const itensRecalculados = useMemo(() => {
     return itens.map((i) => {
       const bruto = precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto;
-      const dPerfil = descontoLivre
+      const dPerfil = (descontoLivre || preservarDescontos)
         ? i.desconto_perfil
         : (descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_perfil);
-      const dCom = descontoLivre ? 0 : i.desconto_comercial;
+      const dCom = (descontoLivre || preservarDescontos) ? i.desconto_comercial : i.desconto_comercial;
       const precos_calc = calcularPrecos(bruto, dPerfil, dCom, i.desconto_trade, i.quantidade);
 
       const produto = produtos.find((p) => p.id === i.produto_id);
       const precoEspecial = produto?.codigo_jiva ? precosEspeciais[produto.codigo_jiva] : undefined;
-      const usarEspecial = precoEspecial !== undefined
+      const usarEspecial = !preservarDescontos
+        && precoEspecial !== undefined
         && precoEspecial > precos_calc.preco_final
         && vigenciaId === "311fd93d-f3d1-4160-bd17-fc08472606c0";
 
@@ -285,7 +288,7 @@ export function SecaoProdutos({
         total: precos_calc.total,
       };
     });
-  }, [itens, precos, descontos, tabelaPreco, perfilCliente, descontoLivre, precosEspeciais]);
+  }, [itens, precos, descontos, tabelaPreco, perfilCliente, descontoLivre, precosEspeciais, preservarDescontos]);
 
   // Sincroniza recálculo (apenas quando os números efetivamente mudam)
   useMemoEffect(itensRecalculados, itens, onChange);
