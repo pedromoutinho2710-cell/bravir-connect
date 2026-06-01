@@ -9,6 +9,8 @@ import { Loader2, ArrowRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
+import { exportDashboardExcel } from "@/lib/exportDashboardExcel";
+import { Download } from "lucide-react";
 
 type Periodo = "hoje" | "semana" | "mes" | "ano";
 
@@ -706,6 +708,35 @@ export default function Dashboard() {
     }
   }
 
+  async function handleExportExcel() {
+    const { dataInicio: periodoInicio, dataFim: periodoFim } = getDateRange(periodo);
+    const effectiveInicio = (dataInicioEfetiva && dataFimEfetiva) ? dataInicioEfetiva : periodoInicio;
+    const effectiveFim = (dataInicioEfetiva && dataFimEfetiva) ? dataFimEfetiva : periodoFim;
+    try {
+      await exportDashboardExcel({
+        periodo,
+        dataInicio: formatDate(effectiveInicio),
+        dataFim: formatDate(effectiveFim),
+        metaTotal,
+        fatMesAtual,
+        fatFaturadoPeriodo,
+        pipelineTotal,
+        kpis,
+        ranking,
+        topSkus,
+        topSkusValor,
+        fatMensal,
+        entradaMarca,
+        campanhaAtiva,
+        rankingCampanha,
+        entradaCampanha,
+        metaTotalCampanha,
+      });
+    } catch {
+      toast.error("Erro ao exportar Excel");
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -756,6 +787,13 @@ export default function Dashboard() {
               onClick={() => setMostrarPersonalizar(!mostrarPersonalizar)}
             >
               Personalizar {mostrarPersonalizar ? "▲" : "▼"}
+            </Button>
+
+            <div className="border-l h-6 mx-1" />
+
+            <Button size="sm" variant="outline" onClick={handleExportExcel}>
+              <Download className="h-4 w-4 mr-1.5" />
+              Exportar Excel
             </Button>
           </div>
 
