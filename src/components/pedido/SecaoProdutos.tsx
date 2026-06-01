@@ -428,21 +428,23 @@ export function SecaoProdutos({
                     <TableCell className="text-right py-2 align-top">
                       {isVendedorLivre ? (
                         <Input
+                          key={i.produto_id + "-qtd-livre"}
                           type="number" min={1}
                           value={i.quantidade}
                           onChange={(e) => atualizarQtd(i.produto_id, Math.max(1, Number(e.target.value) || 1))}
-                          className={cn("w-16 ml-auto h-7 text-xs")}
+                          className={cn("w-20 ml-auto h-7 text-xs")}
                         />
                       ) : (
                         <div className="space-y-0.5">
                           <Input
+                            key={i.produto_id + "-qtd-cx"}
                             type="number" min={1} step={1}
                             value={Math.round(i.quantidade / i.cx_embarque)}
                             onChange={(e) => {
                               const caixas = Math.max(1, Math.floor(Number(e.target.value) || 1));
                               atualizarQtd(i.produto_id, caixas * i.cx_embarque);
                             }}
-                            className={cn("w-16 ml-auto h-7 text-xs")}
+                            className={cn("w-20 ml-auto h-7 text-xs")}
                           />
                           <div className="text-[10px] text-muted-foreground text-right leading-none">
                             Cx:{i.cx_embarque} · {i.quantidade}un

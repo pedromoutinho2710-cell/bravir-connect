@@ -149,6 +149,16 @@ export default function NovoPedido() {
     })();
   }, [hookLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (hookLoading) return;
+    const fc = (location.state as any)?.fromCliente;
+    const pedidoId = (location.state as any)?.pedidoId;
+    // Se não veio de nenhum fluxo específico, limpar o rascunho e resetar
+    if (!fc && !pedidoId) {
+      limparPedido();
+    }
+  }, [hookLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const atingiuMinimo = cliente.tipo === "Bonificação" || totalGeral >= pedidoMinimo;
   const progresso = pedidoMinimo > 0 ? Math.min(100, (totalGeral / pedidoMinimo) * 100) : 100;
   const progressoColor = progresso >= 100 ? "bg-green-500" : progresso >= 70 ? "bg-yellow-400" : "bg-red-500";
