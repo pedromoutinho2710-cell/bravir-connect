@@ -2895,8 +2895,13 @@ export default function Faturamento() {
                   </tbody>
                 </table>
               </div>
-              <div className="text-right text-sm text-muted-foreground">
-                Peso total faturado: <strong>{prodFatDialog.itens.reduce((s, i) => s + i.peso_unitario * (prodFatQtds[i.id] ?? 0), 0).toFixed(2)} kg</strong>
+              <div className="text-right text-sm text-muted-foreground space-y-0.5">
+                <div>
+                  Volume faturado: <strong>{prodFatDialog.itens.reduce((s, i) => s + (prodFatQtds[i.id] ?? 0), 0)} cx</strong>
+                </div>
+                <div>
+                  Peso total faturado: <strong>{prodFatDialog.itens.reduce((s, i) => s + i.peso_unitario * (prodFatQtds[i.id] ?? 0), 0).toFixed(2)} kg</strong>
+                </div>
               </div>
             </div>
           )}
