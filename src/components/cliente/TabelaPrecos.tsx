@@ -61,7 +61,7 @@ export function TabelaPrecos({
         .from("tabelas_vigencia")
         .select("id")
         .eq("ativa", true)
-        .ilike("nome", "%Junho%")
+        .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
@@ -91,7 +91,7 @@ export function TabelaPrecos({
         const { data: descs } = await supabase
           .from("descontos")
           .select("produto_id, percentual_desconto")
-          .eq("cluster", clienteCluster);
+          .eq("perfil_cliente", clienteCluster);
         (descs ?? []).forEach((d) => {
           descontosMap[d.produto_id] = Number(d.percentual_desconto);
         });
@@ -120,7 +120,7 @@ export function TabelaPrecos({
         if (i.preco_final == null) return;
         const v = Number(i.preco_final);
         if (!Number.isFinite(v) || v <= 0) return;
-        if (historicoMap[i.produto_id] == null || v < historicoMap[i.produto_id]) {
+        if (historicoMap[i.produto_id] == null || v > historicoMap[i.produto_id]) {
           historicoMap[i.produto_id] = v;
         }
       });
@@ -132,11 +132,11 @@ export function TabelaPrecos({
         if (clienteDescontoAdicional != null) {
           precoCluster = precoCluster * (1 - clienteDescontoAdicional);
         }
-        const precoHist = historicoMap[p.id] ?? Infinity;
-        const precoFinal = Math.min(precoCluster || Infinity, precoHist);
+        const precoHist = historicoMap[p.id] ?? 0;
+        const precoFinal = Math.max(precoCluster, precoHist);
         return {
           ...p,
-          precoFinal: precoFinal === Infinity || precoFinal === 0 ? null : precoFinal,
+          precoFinal: precoFinal === 0 ? null : precoFinal,
           ipi: impostosMap[p.codigo_jiva]?.ipi ?? 0,
           st: impostosMap[p.codigo_jiva]?.st ?? 0,
         };

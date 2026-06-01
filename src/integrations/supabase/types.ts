@@ -391,19 +391,19 @@ export type Database = {
         Row: {
           id: string
           percentual_desconto: number
-          cluster: string
+          perfil_cliente: string
           produto_id: string
         }
         Insert: {
           id?: string
           percentual_desconto?: number
-          cluster: string
+          perfil_cliente: string
           produto_id: string
         }
         Update: {
           id?: string
           percentual_desconto?: number
-          cluster?: string
+          perfil_cliente?: string
           produto_id?: string
         }
         Relationships: [
