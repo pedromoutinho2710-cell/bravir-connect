@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -43,6 +43,8 @@ type MeuPedido = {
   total: number;
   responsavel_id: string | null;
   responsavel_nome: string | null;
+  itens_sem_estoque: number;
+  itens_raw: { nome: string; quantidade: number; qtd_faturada: number; preco_final: number }[];
 };
 
 import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
@@ -78,6 +80,8 @@ export default function MeusPedidos() {
   const [pedidos, setPedidos] = useState<MeuPedido[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const [abaAtiva, setAbaAtiva] = useState<"pedidos" | "devolvidos" | "sem_estoque" | "bonificacoes">("pedidos");
 
   const [filtroStatus, setFiltroStatus] = useState(initialFiltroStatus);
   const [filtroCliente, setFiltroCliente] = useState("");
@@ -115,13 +119,12 @@ export default function MeusPedidos() {
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, motivo, responsavel_id,
           clientes(id, razao_social, nome_parceiro),
-          itens_pedido(total_item, produtos(marca))
+          itens_pedido(total_item, quantidade, qtd_faturada, produto_id, preco_final, produtos(marca, nome))
         `)
         .eq("vendedor_id", effectiveUserId ?? "")
         .is("pedido_origem_id", null)
         .order("created_at", { ascending: false });
 
-      if (filtroStatus !== "todos") query = query.eq("status", filtroStatus);
       if (filtroDataInicio) query = query.gte("data_pedido", filtroDataInicio);
       if (filtroDataFim) query = query.lte("data_pedido", filtroDataFim);
 
@@ -133,6 +136,9 @@ export default function MeusPedidos() {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const itensList = (p.itens_pedido ?? []) as any[];
         const marcas = [...new Set(itensList.map((i) => i.produtos?.marca).filter(Boolean))] as string[];
+        const itensSemEstoque = itensList.filter(
+          (i) => Number(i.qtd_faturada) === 0 && Number(i.quantidade) > 0
+        ).length;
         return {
           id: p.id,
           numero_pedido: p.numero_pedido,
@@ -148,6 +154,13 @@ export default function MeusPedidos() {
           total: itensList.reduce((s: number, i) => s + Number(i.total_item), 0),
           responsavel_id: p.responsavel_id ?? null,
           responsavel_nome: null,
+          itens_sem_estoque: itensSemEstoque,
+          itens_raw: itensList.map((i) => ({
+            nome: i.produtos?.nome ?? "—",
+            quantidade: Number(i.quantidade),
+            qtd_faturada: Number(i.qtd_faturada),
+            preco_final: Number(i.preco_final),
+          })),
         };
       });
 
@@ -191,7 +204,7 @@ export default function MeusPedidos() {
     } finally {
       setLoading(false);
     }
-  }, [user, active, impersonatedId, effectiveUserId, filtroStatus, filtroDataInicio, filtroDataFim, filtroCliente, filtroMarca]);
+  }, [user, active, impersonatedId, effectiveUserId, filtroDataInicio, filtroDataFim, filtroCliente, filtroMarca]);
 
   useEffect(() => {
     carregarPedidos();
@@ -219,6 +232,30 @@ export default function MeusPedidos() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [user]);
+
+  const pedidosPrincipais = useMemo(() =>
+    pedidos.filter((p) =>
+      p.status !== "devolvido" &&
+      p.tipo !== "Bonificação" &&
+      (filtroStatus === "todos" || p.status === filtroStatus)
+    ),
+    [pedidos, filtroStatus]
+  );
+
+  const pedidosDevolvidos = useMemo(() =>
+    pedidos.filter((p) => p.status === "devolvido"),
+    [pedidos]
+  );
+
+  const pedidosSemEstoque = useMemo(() =>
+    pedidos.filter((p) => p.status !== "devolvido" && p.itens_sem_estoque > 0),
+    [pedidos]
+  );
+
+  const pedidosBonificacoes = useMemo(() =>
+    pedidos.filter((p) => p.tipo === "Bonificação"),
+    [pedidos]
+  );
 
   const limparFiltros = () => {
     setFiltroStatus("todos");
@@ -305,6 +342,358 @@ export default function MeusPedidos() {
     );
   }
 
+  function SubBadgeSemEstoque({ qtd }: { qtd: number }) {
+    if (qtd <= 0) return null;
+    return (
+      <div className="flex items-center gap-1 mt-1">
+        <span className="text-[11px] text-amber-700 font-medium">
+          ⚠️ {qtd} {qtd === 1 ? "item sem estoque" : "itens sem estoque"}
+        </span>
+      </div>
+    );
+  }
+
+  function renderLista(lista: MeuPedido[]) {
+    return (
+      <>
+        {/* Mobile: cards */}
+        <div className="grid gap-3 md:hidden">
+          {lista.length === 0 && (
+            <p className="text-center text-muted-foreground py-12">Nenhum pedido encontrado</p>
+          )}
+          {lista.map((p) => (
+            <Card key={p.id} className="cursor-pointer active:opacity-70" onClick={() => abrirDetalhes(p.id)}>
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
+                    <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <StatusBadge status={p.status} />
+                      <SubBadgeSemEstoque qtd={p.itens_sem_estoque} />
+                      {p.responsavel_nome && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                          Assumido por: <span className="font-medium">{p.responsavel_nome}</span>
+                        </div>
+                      )}
+                      <ProgressoEtapas status={p.status} />
+                    </div>
+                    {p.responsavel_id === null && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setExcluirAlvo({ id: p.id, numero: p.numero_pedido }); }}
+                        disabled={active}
+                        className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground/50"
+                        title={active ? "Indisponível no modo visualização" : "Excluir pedido"}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{formatDate(p.data_pedido)} · {p.tipo}</span>
+                  <span className="font-semibold text-foreground">{formatBRL(p.total)}</span>
+                </div>
+                {p.status_atualizado_em && (
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    {tempoNoStatus(p.status_atualizado_em)}
+                  </div>
+                )}
+                {p.motivo && (
+                  <div className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">{p.motivo}</div>
+                )}
+                {podeGerarProposta && (p.status === "rascunho" || p.status === "aguardando_faturamento") && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPropostaDialog({
+                        pedidoId: p.id,
+                        pedidoNumero: p.numero_pedido,
+                        clienteId: p.cliente_id,
+                        clienteNome: p.razao_social,
+                        condPagamento: p.cond_pagamento,
+                      });
+                    }}
+                    className="h-7 text-xs"
+                  >
+                    <FileText className="h-3.5 w-3.5 mr-1" />
+                    Gerar proposta
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Desktop: tabela */}
+        <div className="hidden md:block rounded-md border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-16">#</TableHead>
+                <TableHead>Data</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Tipo</TableHead>
+                <TableHead>Pagamento</TableHead>
+                <TableHead className="text-right">Total</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>No status há</TableHead>
+                {podeGerarProposta && <TableHead className="w-8"></TableHead>}
+                <TableHead className="w-8"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {lista.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={podeGerarProposta ? 10 : 9} className="text-center text-muted-foreground py-12">
+                    Nenhum pedido encontrado
+                  </TableCell>
+                </TableRow>
+              )}
+              {lista.map((p) => (
+                <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => abrirDetalhes(p.id)}>
+                  <TableCell className="font-mono font-semibold text-sm">#{p.numero_pedido}</TableCell>
+                  <TableCell className="text-sm">{formatDate(p.data_pedido)}</TableCell>
+                  <TableCell className="font-medium text-sm">{p.razao_social}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{p.tipo}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{p.cond_pagamento || "—"}</TableCell>
+                  <TableCell className="text-right font-semibold text-sm">{formatBRL(p.total)}</TableCell>
+                  <TableCell>
+                    <StatusBadge status={p.status} />
+                    <SubBadgeSemEstoque qtd={p.itens_sem_estoque} />
+                    {p.responsavel_nome && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        Assumido por: <span className="font-medium">{p.responsavel_nome}</span>
+                      </div>
+                    )}
+                    <ProgressoEtapas status={p.status} />
+                    {p.motivo && (
+                      <div className="text-xs text-muted-foreground mt-1 max-w-[200px] truncate" title={p.motivo}>
+                        {p.motivo}
+                      </div>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {tempoNoStatus(p.status_atualizado_em) ?? "—"}
+                  </TableCell>
+                  {podeGerarProposta && (
+                    <TableCell>
+                      {(p.status === "rascunho" || p.status === "aguardando_faturamento") && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPropostaDialog({
+                              pedidoId: p.id,
+                              pedidoNumero: p.numero_pedido,
+                              clienteId: p.cliente_id,
+                              clienteNome: p.razao_social,
+                              condPagamento: p.cond_pagamento,
+                            });
+                          }}
+                          className="p-1 rounded text-muted-foreground/60 hover:text-[#004d1a] hover:bg-[#004d1a]/10 transition-colors"
+                          title="Gerar proposta"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </TableCell>
+                  )}
+                  <TableCell>
+                    {p.responsavel_id === null && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setExcluirAlvo({ id: p.id, numero: p.numero_pedido }); }}
+                        disabled={active}
+                        className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground/50"
+                        title={active ? "Indisponível no modo visualização" : "Excluir pedido"}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </>
+    );
+  }
+
+  function renderDevolvidos() {
+    return (
+      <>
+        {/* Mobile: cards */}
+        <div className="grid gap-3 md:hidden">
+          {pedidosDevolvidos.length === 0 && (
+            <p className="text-center text-muted-foreground py-12">Nenhum pedido devolvido</p>
+          )}
+          {pedidosDevolvidos.map((p) => (
+            <Card key={p.id} className="cursor-pointer active:opacity-70" onClick={() => abrirDetalhes(p.id)}>
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
+                    <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{formatDate(p.data_pedido)}</span>
+                </div>
+                {p.motivo && (
+                  <div className="text-xs text-red-700 bg-red-50 rounded px-2 py-1">{p.motivo}</div>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate("/novo-pedido", { state: { pedidoId: p.id, corrigindo: true } });
+                  }}
+                  className="w-full border-red-300 text-red-700 hover:bg-red-50"
+                >
+                  Corrigir
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+
+        {/* Desktop: tabela */}
+        <div className="hidden md:block rounded-md border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-16">#</TableHead>
+                <TableHead>Data</TableHead>
+                <TableHead>Cliente</TableHead>
+                <TableHead>Motivo</TableHead>
+                <TableHead className="w-28">Ação</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pedidosDevolvidos.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground py-12">
+                    Nenhum pedido devolvido
+                  </TableCell>
+                </TableRow>
+              )}
+              {pedidosDevolvidos.map((p) => (
+                <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => abrirDetalhes(p.id)}>
+                  <TableCell className="font-mono font-semibold text-sm">#{p.numero_pedido}</TableCell>
+                  <TableCell className="text-sm">{formatDate(p.data_pedido)}</TableCell>
+                  <TableCell className="font-medium text-sm">{p.razao_social}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground max-w-[300px]">{p.motivo || "—"}</TableCell>
+                  <TableCell>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate("/novo-pedido", { state: { pedidoId: p.id, corrigindo: true } });
+                      }}
+                      className="h-8 border-red-300 text-red-700 hover:bg-red-50"
+                    >
+                      Corrigir
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </>
+    );
+  }
+
+  function renderSemEstoque() {
+    return (
+      <>
+        {/* Mobile: cards */}
+        <div className="grid gap-3 md:hidden">
+          {pedidosSemEstoque.length === 0 && (
+            <p className="text-center text-muted-foreground py-12">Nenhum item sem estoque</p>
+          )}
+          {pedidosSemEstoque.map((p) => {
+            const itens = p.itens_raw.filter((i) => i.qtd_faturada === 0);
+            return (
+              <Card key={p.id} className="cursor-pointer active:opacity-70" onClick={() => abrirDetalhes(p.id)}>
+                <CardContent className="p-4 space-y-2">
+                  <div>
+                    <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
+                    <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
+                  </div>
+                  <div className="space-y-1">
+                    {itens.map((i, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-xs">
+                        <span className="text-foreground">{i.nome}</span>
+                        <span className="text-muted-foreground">
+                          {i.quantidade} un · {formatBRL(i.quantidade * i.preco_final)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+
+        {/* Desktop: tabela */}
+        <div className="hidden md:block rounded-md border overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Produto</TableHead>
+                <TableHead className="text-right">Qtd pedida</TableHead>
+                <TableHead className="text-right">Saldo</TableHead>
+                <TableHead className="text-right">Total saldo</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {pedidosSemEstoque.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-12">
+                    Nenhum item sem estoque
+                  </TableCell>
+                </TableRow>
+              )}
+              {pedidosSemEstoque.map((p) => {
+                const itens = p.itens_raw.filter((i) => i.qtd_faturada === 0);
+                return (
+                  <Fragment key={p.id}>
+                    <TableRow className="bg-muted/50 hover:bg-muted/50 cursor-pointer" onClick={() => abrirDetalhes(p.id)}>
+                      <TableCell colSpan={4} className="font-semibold text-sm">
+                        #{p.numero_pedido} — {p.razao_social}
+                      </TableCell>
+                    </TableRow>
+                    {itens.map((i, idx) => (
+                      <TableRow key={`${p.id}-${idx}`} className="cursor-pointer hover:bg-muted/30" onClick={() => abrirDetalhes(p.id)}>
+                        <TableCell className="text-sm">{i.nome}</TableCell>
+                        <TableCell className="text-right text-sm">{i.quantidade}</TableCell>
+                        <TableCell className="text-right text-sm">{i.quantidade}</TableCell>
+                        <TableCell className="text-right font-semibold text-sm">{formatBRL(i.quantidade * i.preco_final)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </Fragment>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      </>
+    );
+  }
+
   return (
     <div className="space-y-6 pb-24 md:pb-0">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -323,6 +712,7 @@ export default function MeusPedidos() {
       </div>
 
       {/* Filtros */}
+      {abaAtiva === "pedidos" && (
       <div className="flex flex-wrap items-center gap-3">
         <Select value={filtroStatus} onValueChange={setFiltroStatus}>
           <SelectTrigger className="w-[180px]">
@@ -374,180 +764,48 @@ export default function MeusPedidos() {
           </Button>
         )}
       </div>
+      )}
+
+      {/* Abas */}
+      <div className="flex gap-1 border-b">
+        {[
+          { key: "pedidos", label: "Pedidos" },
+          { key: "devolvidos", label: "Devolvidos", count: pedidosDevolvidos.length, cor: "bg-red-100 text-red-700" },
+          { key: "sem_estoque", label: "Sem estoque", count: pedidosSemEstoque.length, cor: "bg-amber-100 text-amber-700" },
+          { key: "bonificacoes", label: "Bonificações", count: pedidosBonificacoes.length, cor: "bg-blue-100 text-blue-700" },
+        ].map((aba) => (
+          <button
+            key={aba.key}
+            type="button"
+            onClick={() => setAbaAtiva(aba.key as typeof abaAtiva)}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              abaAtiva === aba.key
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {aba.label}
+            {aba.count !== undefined && aba.count > 0 && (
+              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${aba.cor}`}>
+                {aba.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
       {loading ? (
         <div className="flex h-48 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
+      ) : abaAtiva === "devolvidos" ? (
+        renderDevolvidos()
+      ) : abaAtiva === "sem_estoque" ? (
+        renderSemEstoque()
+      ) : abaAtiva === "bonificacoes" ? (
+        renderLista(pedidosBonificacoes)
       ) : (
-        <>
-          {/* Mobile: cards */}
-          <div className="grid gap-3 md:hidden">
-            {pedidos.length === 0 && (
-              <p className="text-center text-muted-foreground py-12">Nenhum pedido encontrado</p>
-            )}
-            {pedidos.map((p) => (
-              <Card key={p.id} className="cursor-pointer active:opacity-70" onClick={() => abrirDetalhes(p.id)}>
-                <CardContent className="p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
-                      <div className="font-medium text-sm mt-0.5">{p.razao_social}</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <div>
-                        <StatusBadge status={p.status} />
-                        {p.responsavel_nome && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Assumido por: <span className="font-medium">{p.responsavel_nome}</span>
-                          </div>
-                        )}
-                        <ProgressoEtapas status={p.status} />
-                      </div>
-                      {p.responsavel_id === null && (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setExcluirAlvo({ id: p.id, numero: p.numero_pedido }); }}
-                          disabled={active}
-                          className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground/50"
-                          title={active ? "Indisponível no modo visualização" : "Excluir pedido"}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>{formatDate(p.data_pedido)} · {p.tipo}</span>
-                    <span className="font-semibold text-foreground">{formatBRL(p.total)}</span>
-                  </div>
-                  {p.status_atualizado_em && (
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3" />
-                      {tempoNoStatus(p.status_atualizado_em)}
-                    </div>
-                  )}
-                  {p.motivo && (
-                    <div className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">{p.motivo}</div>
-                  )}
-                  {podeGerarProposta && (p.status === "rascunho" || p.status === "aguardando_faturamento") && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setPropostaDialog({
-                          pedidoId: p.id,
-                          pedidoNumero: p.numero_pedido,
-                          clienteId: p.cliente_id,
-                          clienteNome: p.razao_social,
-                          condPagamento: p.cond_pagamento,
-                        });
-                      }}
-                      className="h-7 text-xs"
-                    >
-                      <FileText className="h-3.5 w-3.5 mr-1" />
-                      Gerar proposta
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          {/* Desktop: tabela */}
-          <div className="hidden md:block rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-16">#</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Pagamento</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>No status há</TableHead>
-                  {podeGerarProposta && <TableHead className="w-8"></TableHead>}
-                  <TableHead className="w-8"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pedidos.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={podeGerarProposta ? 10 : 9} className="text-center text-muted-foreground py-12">
-                      Nenhum pedido encontrado
-                    </TableCell>
-                  </TableRow>
-                )}
-                {pedidos.map((p) => (
-                  <TableRow key={p.id} className="cursor-pointer hover:bg-muted/50" onClick={() => abrirDetalhes(p.id)}>
-                    <TableCell className="font-mono font-semibold text-sm">#{p.numero_pedido}</TableCell>
-                    <TableCell className="text-sm">{formatDate(p.data_pedido)}</TableCell>
-                    <TableCell className="font-medium text-sm">{p.razao_social}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{p.tipo}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{p.cond_pagamento || "—"}</TableCell>
-                    <TableCell className="text-right font-semibold text-sm">{formatBRL(p.total)}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={p.status} />
-                      {p.responsavel_nome && (
-                        <div className="text-xs text-muted-foreground mt-1">
-                          Assumido por: <span className="font-medium">{p.responsavel_nome}</span>
-                        </div>
-                      )}
-                      <ProgressoEtapas status={p.status} />
-                      {p.motivo && (
-                        <div className="text-xs text-muted-foreground mt-1 max-w-[200px] truncate" title={p.motivo}>
-                          {p.motivo}
-                        </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {tempoNoStatus(p.status_atualizado_em) ?? "—"}
-                    </TableCell>
-                    {podeGerarProposta && (
-                      <TableCell>
-                        {(p.status === "rascunho" || p.status === "aguardando_faturamento") && (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPropostaDialog({
-                                pedidoId: p.id,
-                                pedidoNumero: p.numero_pedido,
-                                clienteId: p.cliente_id,
-                                clienteNome: p.razao_social,
-                                condPagamento: p.cond_pagamento,
-                              });
-                            }}
-                            className="p-1 rounded text-muted-foreground/60 hover:text-[#004d1a] hover:bg-[#004d1a]/10 transition-colors"
-                            title="Gerar proposta"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      {p.responsavel_id === null && (
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setExcluirAlvo({ id: p.id, numero: p.numero_pedido }); }}
-                          disabled={active}
-                          className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-muted-foreground/50"
-                          title={active ? "Indisponível no modo visualização" : "Excluir pedido"}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </>
+        renderLista(pedidosPrincipais)
       )}
 
       {/* FAB mobile */}
