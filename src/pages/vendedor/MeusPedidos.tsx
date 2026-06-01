@@ -122,7 +122,7 @@ export default function MeusPedidos() {
           itens_pedido(total_item, quantidade, qtd_faturada, produto_id, preco_final, produtos(marca, nome))
         `)
         .eq("vendedor_id", effectiveUserId ?? "")
-        .is("pedido_origem_id", null)
+        .or("pedido_origem_id.is.null,status.eq.devolvido")
         .order("created_at", { ascending: false });
 
       if (filtroDataInicio) query = query.gte("data_pedido", filtroDataInicio);
