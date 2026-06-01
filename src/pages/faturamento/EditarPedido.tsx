@@ -103,9 +103,9 @@ export default function EditarPedido() {
         (fp: { produto_id: string }) => fp.produto_id,
       ) ?? [];
 
-      let prodQuery = supabase.from("produtos").select("*").eq("ativo", true).order("marca").order("nome");
+      let prodQuery = supabase.from("produtos").select("*").eq("ativo", true).eq("disponivel", true).order("marca").order("nome");
       if (fpIds.length > 0) {
-        prodQuery = supabase.from("produtos").select("*").in("id", fpIds).order("marca").order("nome");
+        prodQuery = supabase.from("produtos").select("*").in("id", fpIds).eq("disponivel", true).order("marca").order("nome");
       }
 
       const [pedidoRes, prodsRes, descsRes, fatRes] = await Promise.all([

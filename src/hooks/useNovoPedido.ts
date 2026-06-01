@@ -89,11 +89,11 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         .eq("ativo", true)
         .maybeSingle();
 
-      let prodQuery = supabase.from("produtos").select("*").eq("ativo", true).order("marca").order("nome");
+      let prodQuery = supabase.from("produtos").select("*").eq("ativo", true).eq("disponivel", true).order("marca").order("nome");
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const fpIds: string[] = (formRes.data as any)?.formulario_produtos?.map((fp: { produto_id: string }) => fp.produto_id) ?? [];
       if (fpIds.length > 0) {
-        prodQuery = supabase.from("produtos").select("*").in("id", fpIds).order("marca").order("nome");
+        prodQuery = supabase.from("produtos").select("*").in("id", fpIds).eq("disponivel", true).order("marca").order("nome");
       }
 
       const [pRes, dRes, vigRes] = await Promise.all([

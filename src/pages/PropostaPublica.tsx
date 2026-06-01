@@ -104,6 +104,7 @@ export default function PropostaPublica() {
                 .from("produtos")
                 .select("id, nome, marca")
                 .eq("id", prop.order_bump_produto_id)
+                .eq("disponivel", true)
                 .single()
             : Promise.resolve({ data: null, error: null } as any),
         ]);

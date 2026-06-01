@@ -75,6 +75,7 @@ export default function CalculadoraMargem() {
           .from("produtos")
           .select("id, nome, marca, codigo_jiva")
           .eq("ativo", true)
+          .eq("disponivel", true)
           .order("marca")
           .order("nome"),
         supabase
