@@ -66,23 +66,28 @@ export default function NovoPedidoGestora() {
     (async () => {
       const { data: rolesData } = await supabase
         .from("user_roles")
-        .select("user_id")
+        .select("user_id, role")
         .in("role", ["vendedor", "gestora"]);
 
       if (rolesData && rolesData.length > 0) {
         const ids = rolesData.map((r) => r.user_id);
+        const idsGestoras = new Set(
+          rolesData.filter((r) => r.role === "gestora").map((r) => r.user_id)
+        );
         const { data: profData } = await supabase
           .from("profiles")
           .select("id, full_name, email")
           .in("id", ids);
         if (profData) {
           const lista: Vendedor[] = profData
-            .map((p) => ({ id: p.id, nome: p.full_name || p.email || "—" }))
-            .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
-          // Gestora logada aparece primeiro; vendedores em ordem alfabética depois
+            .filter((p) => p.full_name || p.email)
+            .map((p) => ({ id: p.id, nome: p.full_name || p.email || "—" }));
+          // Todas as gestoras aparecem primeiro; vendedores em ordem alfabética depois
+          const gestoras = lista.filter((r) => idsGestoras.has(r.id));
+          const vendedores = lista.filter((r) => !idsGestoras.has(r.id));
           const listaOrdenada = [
-            ...lista.filter((r) => r.id === user?.id),
-            ...lista.filter((r) => r.id !== user?.id),
+            ...gestoras.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+            ...vendedores.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
           ];
           setRepresentantes(listaOrdenada);
         }
