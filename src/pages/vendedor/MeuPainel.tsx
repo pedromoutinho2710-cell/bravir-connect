@@ -282,12 +282,12 @@ export default function MeuPainel() {
     if (!user) return;
     (async () => {
       const agora = new Date();
-      const mesInicio = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-01`;
-      const mesFim = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
+
+      // Período efetivo dos KPIs: filtro personalizado ou período selecionado
+      const { inicio: kpiInicio, fim: kpiFim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
 
       // Mês/ano da meta derivado do período filtrado (filtrar maio → meta de maio)
-      const { inicio: periodoInicio } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
-      const periodoDate = new Date(periodoInicio + "T12:00:00");
+      const periodoDate = new Date(kpiInicio + "T12:00:00");
       const mesFiltro = periodoDate.getMonth() + 1;
       const anoFiltro = periodoDate.getFullYear();
 
@@ -296,8 +296,8 @@ export default function MeuPainel() {
           .from("pedidos")
           .select("id, status, itens_pedido(total_item)")
           .eq("vendedor_id", user.id)
-          .gte("data_pedido", mesInicio)
-          .lte("data_pedido", mesFim)
+          .gte("data_pedido", kpiInicio)
+          .lte("data_pedido", kpiFim)
           .not("status", "in", '("rascunho","cancelado")'),
         supabase
           .from("pedidos")
