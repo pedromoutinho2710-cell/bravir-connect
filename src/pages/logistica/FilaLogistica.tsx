@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -143,6 +144,12 @@ export default function FilaLogistica() {
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [abaAtiva, setAbaAtiva] = useState("a_faturar");
+
+  // Filtros
+  const [buscaCliente, setBuscaCliente] = useState("");
+  const [valorMin, setValorMin] = useState("");
+  const [valorMax, setValorMax] = useState("");
+  const [filtroPagamento, setFiltroPagamento] = useState("todos");
 
   // Dialog de detalhes / confirmação
   const [selecionado, setSelecionado] = useState<Pedido | null>(null);
@@ -334,9 +341,38 @@ export default function FilaLogistica() {
     carregar();
   };
 
+  // Formas de pagamento distintas presentes nos pedidos carregados
+  const formasPagamento = Array.from(
+    new Set(pedidos.map((p) => p.cond_pagamento).filter(Boolean) as string[])
+  ).sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  const matchFiltros = (p: Pedido) => {
+    if (buscaCliente.trim()) {
+      const q = buscaCliente.trim().toLowerCase();
+      const qDigits = buscaCliente.replace(/\D/g, "");
+      const cnpjDigits = p.cnpj.replace(/\D/g, "");
+      const matchNome = p.razao_social.toLowerCase().includes(q);
+      const matchCnpj = qDigits.length > 0 && cnpjDigits.includes(qDigits);
+      if (!matchNome && !matchCnpj) return false;
+    }
+    if (valorMin && p.total < Number(valorMin)) return false;
+    if (valorMax && p.total > Number(valorMax)) return false;
+    if (filtroPagamento !== "todos" && (p.cond_pagamento ?? "") !== filtroPagamento) return false;
+    return true;
+  };
+
+  const limparFiltros = () => {
+    setBuscaCliente("");
+    setValorMin("");
+    setValorMax("");
+    setFiltroPagamento("todos");
+  };
+
+  const temFiltro = !!buscaCliente || !!valorMin || !!valorMax || filtroPagamento !== "todos";
+
   const pedidosFiltrados = pedidos.filter((p) => {
     const aba = ABAS_LOGISTICA.find((a) => a.key === abaAtiva);
-    return aba?.status.includes(p.status) ?? false;
+    return (aba?.status.includes(p.status) ?? false) && matchFiltros(p);
   });
 
   const atualizarStatusEntrega = async (novoStatus: string) => {
@@ -458,9 +494,58 @@ export default function FilaLogistica() {
         </div>
       ) : (
         <Tabs value={abaAtiva} onValueChange={setAbaAtiva}>
+          <div className="flex flex-wrap items-end gap-3 mb-4">
+            <div className="flex-1 min-w-[180px]">
+              <Label className="text-xs text-muted-foreground">Cliente</Label>
+              <Input
+                placeholder="Buscar por nome ou CNPJ…"
+                value={buscaCliente}
+                onChange={(e) => setBuscaCliente(e.target.value)}
+              />
+            </div>
+            <div className="w-32">
+              <Label className="text-xs text-muted-foreground">Valor mín.</Label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={valorMin}
+                onChange={(e) => setValorMin(e.target.value)}
+              />
+            </div>
+            <div className="w-32">
+              <Label className="text-xs text-muted-foreground">Valor máx.</Label>
+              <Input
+                type="number"
+                min={0}
+                placeholder="∞"
+                value={valorMax}
+                onChange={(e) => setValorMax(e.target.value)}
+              />
+            </div>
+            <div className="w-52">
+              <Label className="text-xs text-muted-foreground">Forma de pagamento</Label>
+              <Select value={filtroPagamento} onValueChange={setFiltroPagamento}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Todas" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas</SelectItem>
+                  {formasPagamento.map((f) => (
+                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {temFiltro && (
+              <Button variant="ghost" size="sm" onClick={limparFiltros}>
+                Limpar filtros
+              </Button>
+            )}
+          </div>
           <TabsList className="w-full grid grid-cols-4">
             {ABAS_LOGISTICA.map((aba) => {
-              const count = pedidos.filter((p) => aba.status.includes(p.status)).length;
+              const count = pedidos.filter((p) => aba.status.includes(p.status) && matchFiltros(p)).length;
               return (
                 <TabsTrigger key={aba.key} value={aba.key}>
                   {aba.label}
