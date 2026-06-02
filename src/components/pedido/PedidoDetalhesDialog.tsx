@@ -7,7 +7,7 @@ import {
 } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
-import { AlertCircle, CheckCircle2, Clock, Download, PackageX, User } from "lucide-react";
+import { AlertCircle, CheckCircle2, Clock, Download, FileDown, PackageX, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 import { formatDistanceToNow, differenceInHours } from "date-fns";
@@ -311,6 +311,45 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
   const totalGeral = pedido?.itens.reduce((s, i) => s + i.total, 0) ?? 0;
   const etapa = pedido ? tempoNaEtapa(pedido.status_atualizado_em) : null;
 
+  const baixarPDF = async () => {
+    if (!pedido) return;
+    try {
+      const { gerarPedidoPDF } = await import("@/lib/pdf");
+      const doc = gerarPedidoPDF({
+        data: new Date(pedido.data_pedido + "T12:00:00"),
+        tipo: pedido.tipo,
+        cliente: {
+          cnpj: pedido.cnpj,
+          razao_social: pedido.razao_social,
+          cidade: pedido.cidade ?? "",
+          uf: pedido.uf ?? "",
+          comprador: pedido.comprador ?? "",
+        },
+        cluster: pedido.cluster,
+        tabela_preco: pedido.tabela_preco,
+        cond_pagamento: pedido.cond_pagamento ?? "",
+        agendamento: pedido.agendamento,
+        observacoes: pedido.observacoes ?? "",
+        itens: pedido.itens.map((i) => ({
+          marca: i.marca,
+          codigo: i.codigo,
+          nome: i.nome,
+          quantidade: i.quantidade,
+          preco_bruto: i.preco_bruto,
+          desconto_perfil: i.desconto_perfil,
+          desconto_comercial: i.desconto_comercial,
+          desconto_trade: i.desconto_trade,
+          preco_final: i.preco_final,
+          total: i.total,
+        })),
+      });
+      const nome = `pedido-${pedido.numero_pedido}-${pedido.razao_social.slice(0, 20).replace(/\s/g, "-")}.pdf`;
+      doc.save(nome);
+    } catch {
+      toast.error("Erro ao gerar PDF");
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -354,6 +393,13 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
                 <span className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-0.5">
                   {pedido.motivo}
                 </span>
+              )}
+
+              {pedido && (
+                <Button size="sm" variant="outline" onClick={baixarPDF}>
+                  <FileDown className="h-3.5 w-3.5 mr-1" />
+                  Baixar PDF
+                </Button>
               )}
 
               {pedido.status === "devolvido" && onCorrigir && (
