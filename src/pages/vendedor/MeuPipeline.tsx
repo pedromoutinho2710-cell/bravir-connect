@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { LayoutTemplate, Plus, MoreVertical, AlertTriangle, Pencil, Phone, Loader2, GripVertical } from "lucide-react";
+import { LayoutTemplate, Plus, MoreVertical, AlertTriangle, Pencil, Phone, Loader2, GripVertical, CheckCircle2, Circle, Calendar, Package, TrendingUp, Activity, ChevronDown, ChevronUp, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -32,6 +32,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -76,6 +80,50 @@ type Card = {
   pipeline_updated_at: string | null;
   marcas_interesse: string[] | null;
   produtos_interesse: string | null;
+};
+
+type ContatoPipeline = {
+  id: string;
+  tipo: string;
+  nota: string | null;
+  created_at: string;
+};
+
+type PedidoHistorico = {
+  id: string;
+  numero_pedido: number;
+  data_pedido: string;
+  status: string;
+  total: number;
+};
+
+type TarefaCliente = {
+  id: string;
+  titulo: string;
+  descricao: string | null;
+  tipo: string;
+  data_vencimento: string | null;
+  concluida: boolean;
+};
+
+type ProdutoTop = {
+  produto_id: string;
+  nome: string;
+  marca: string;
+  quantidade_total: number;
+  valor_total: number;
+};
+
+type FichaCliente = {
+  contatos: ContatoPipeline[];
+  pedidos: PedidoHistorico[];
+  tarefas: TarefaCliente[];
+  produtosTop: ProdutoTop[];
+  cicloMedio: number | null;
+  ticketMedio: number | null;
+  sazonalidade: Record<string, number>;
+  scoreNome: "verde" | "amarelo" | "vermelho";
+  scoreLabel: string;
 };
 
 // ───────────────────────────────────────────────────────────────────────
@@ -309,6 +357,162 @@ export default function MeuPipeline() {
   const [excluirColuna, setExcluirColuna] = useState<ColunaConfig | null>(null);
   const [addCol, setAddCol] = useState<ColunaConfig | null>(null);
 
+  // Ficha lateral do cliente
+  const [fichaClienteId, setFichaClienteId] = useState<string | null>(null);
+  const [ficha, setFicha] = useState<FichaCliente | null>(null);
+  const [fichaLoading, setFichaLoading] = useState(false);
+  const [pedidosExpandidos, setPedidosExpandidos] = useState(false);
+  const [novaT, setNovaT] = useState({ titulo: "", tipo: "tarefa", data_vencimento: "", descricao: "" });
+  const [salvandoTarefa, setSalvandoTarefa] = useState(false);
+
+  const carregarFicha = async (cliente_id: string) => {
+    setFichaLoading(true);
+    setFicha(null);
+    try {
+      const [contatosRes, pedidosRes, tarefasRes] = await Promise.all([
+        (supabase as any)
+          .from("pipeline_contatos")
+          .select("id, tipo, nota, created_at")
+          .eq("cliente_id", cliente_id)
+          .order("created_at", { ascending: false })
+          .limit(50),
+        supabase
+          .from("pedidos")
+          .select("id, numero_pedido, data_pedido, status, itens_pedido(total_item)")
+          .eq("cliente_id", cliente_id)
+          .not("status", "in", '("rascunho","cancelado")')
+          .order("data_pedido", { ascending: false })
+          .limit(100),
+        (supabase as any)
+          .from("tarefas")
+          .select("id, titulo, descricao, tipo, data_vencimento, concluida")
+          .eq("cliente_id", cliente_id)
+          .eq("vendedor_id", user!.id)
+          .order("concluida", { ascending: true })
+          .order("data_vencimento", { ascending: true }),
+      ]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pedidos: PedidoHistorico[] = (pedidosRes.data ?? []).map((p: any) => ({
+        id: p.id,
+        numero_pedido: p.numero_pedido,
+        data_pedido: p.data_pedido,
+        status: p.status,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        total: (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0),
+      }));
+
+      // Ciclo médio entre pedidos
+      let cicloMedio: number | null = null;
+      if (pedidos.length >= 2) {
+        const datas = pedidos.map((p) => new Date(p.data_pedido).getTime()).sort((a, b) => a - b);
+        const intervalos: number[] = [];
+        for (let i = 1; i < datas.length; i++) {
+          intervalos.push(Math.floor((datas[i] - datas[i - 1]) / 86400000));
+        }
+        cicloMedio = Math.round(intervalos.reduce((s, v) => s + v, 0) / intervalos.length);
+      }
+
+      // Ticket médio
+      const pedidosFaturados = pedidos.filter((p) => ["faturado", "no_sankhya", "parcialmente_faturado"].includes(p.status));
+      const ticketMedio = pedidosFaturados.length > 0
+        ? Math.round(pedidosFaturados.reduce((s, p) => s + p.total, 0) / pedidosFaturados.length)
+        : null;
+
+      // Sazonalidade (contagem de pedidos por mês abreviado)
+      const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+      const sazonalidade: Record<string, number> = {};
+      pedidos.forEach((p) => {
+        const mes = MESES[new Date(p.data_pedido).getMonth()];
+        sazonalidade[mes] = (sazonalidade[mes] ?? 0) + 1;
+      });
+
+      // Produtos mais comprados
+      const prodMap: Record<string, { nome: string; marca: string; qtd: number; valor: number }> = {};
+      if (pedidos.length > 0) {
+        const { data: itensData } = await supabase
+          .from("itens_pedido")
+          .select("produto_id, quantidade, total_item, produtos(nome, marca)")
+          .in("pedido_id", pedidos.slice(0, 50).map((p) => p.id));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (itensData ?? []).forEach((i: any) => {
+          if (!i.produto_id) return;
+          if (!prodMap[i.produto_id]) {
+            prodMap[i.produto_id] = { nome: i.produtos?.nome ?? "—", marca: i.produtos?.marca ?? "—", qtd: 0, valor: 0 };
+          }
+          prodMap[i.produto_id].qtd += Number(i.quantidade);
+          prodMap[i.produto_id].valor += Number(i.total_item);
+        });
+      }
+      const produtosTop: ProdutoTop[] = Object.entries(prodMap)
+        .map(([produto_id, v]) => ({ produto_id, nome: v.nome, marca: v.marca, quantidade_total: v.qtd, valor_total: v.valor }))
+        .sort((a, b) => b.valor_total - a.valor_total)
+        .slice(0, 8);
+
+      // Score de saúde
+      const card = (cardsQ.data ?? []).find((c) => c.cliente_id === cliente_id);
+      const dias = card?.dias_sem_comprar ?? null;
+      const ciclo = cicloMedio;
+      let scoreNome: "verde" | "amarelo" | "vermelho" = "verde";
+      let scoreLabel = "Saudável";
+      if (dias != null && ciclo != null) {
+        if (dias > ciclo * 1.5) { scoreNome = "vermelho"; scoreLabel = "Em risco"; }
+        else if (dias > ciclo * 1.1) { scoreNome = "amarelo"; scoreLabel = "Atenção"; }
+      } else if (dias != null) {
+        if (dias > 90) { scoreNome = "vermelho"; scoreLabel = "Inativo"; }
+        else if (dias > 30) { scoreNome = "amarelo"; scoreLabel = "Atenção"; }
+      }
+
+      setFicha({
+        contatos: contatosRes.data ?? [],
+        pedidos,
+        tarefas: tarefasRes.data ?? [],
+        produtosTop,
+        cicloMedio,
+        ticketMedio,
+        sazonalidade,
+        scoreNome,
+        scoreLabel,
+      });
+    } catch (e) {
+      toast.error("Erro ao carregar ficha do cliente");
+    } finally {
+      setFichaLoading(false);
+    }
+  };
+
+  const criarTarefa = async (cliente_id: string) => {
+    if (!novaT.titulo.trim()) { toast.error("Informe o título da tarefa"); return; }
+    setSalvandoTarefa(true);
+    const { error } = await (supabase as any).from("tarefas").insert({
+      vendedor_id: user!.id,
+      cliente_id,
+      titulo: novaT.titulo.trim(),
+      descricao: novaT.descricao.trim() || null,
+      tipo: novaT.tipo,
+      data_vencimento: novaT.data_vencimento || null,
+      concluida: false,
+    });
+    setSalvandoTarefa(false);
+    if (error) { toast.error("Erro ao criar tarefa"); return; }
+    setNovaT({ titulo: "", tipo: "tarefa", data_vencimento: "", descricao: "" });
+    if (fichaClienteId) carregarFicha(fichaClienteId);
+  };
+
+  const concluirTarefa = async (tarefa_id: string) => {
+    await (supabase as any).from("tarefas").update({ concluida: true }).eq("id", tarefa_id);
+    if (fichaClienteId) carregarFicha(fichaClienteId);
+  };
+
+  useEffect(() => {
+    if (fichaClienteId) {
+      carregarFicha(fichaClienteId);
+      setPedidosExpandidos(false);
+      setNovaT({ titulo: "", tipo: "tarefa", data_vencimento: "", descricao: "" });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fichaClienteId]);
+
   // Agrupar cards por coluna
   const cardsPorColuna = useMemo(() => {
     const m = new Map<string, Card[]>();
@@ -457,6 +661,7 @@ export default function MeuPipeline() {
                       onDragStart={(e) => onDragStart(e, card.cliente_id)}
                       onEdit={() => setEditCard(card)}
                       onContato={() => setContatoCard(card)}
+                      onAbrirFicha={() => setFichaClienteId(card.cliente_id)}
                     />
                   ))}
                 </div>
@@ -490,6 +695,276 @@ export default function MeuPipeline() {
           </div>
         </div>
       )}
+
+      {/* Ficha lateral do cliente */}
+      {fichaClienteId && (() => {
+        const card = (cardsQ.data ?? []).find((c) => c.cliente_id === fichaClienteId);
+        const hoje = hojeISO();
+        const SCORE_CLS = {
+          verde: "bg-green-100 text-green-800 border-green-300",
+          amarelo: "bg-yellow-100 text-yellow-800 border-yellow-300",
+          vermelho: "bg-red-100 text-red-800 border-red-300",
+        };
+        const MESES_ORDER = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+        const pedidosVisiveis = pedidosExpandidos ? (ficha?.pedidos ?? []) : (ficha?.pedidos ?? []).slice(0, 5);
+
+        return (
+          <Sheet open={!!fichaClienteId} onOpenChange={(o) => !o && setFichaClienteId(null)}>
+            <SheetContent side="right" className="w-full max-w-lg p-0 flex flex-col">
+              <SheetHeader className="px-4 pt-4 pb-2 border-b">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <SheetTitle className="text-base font-bold truncate">{card?.nome ?? "—"}</SheetTitle>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {ficha && (
+                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${SCORE_CLS[ficha.scoreNome]}`}>
+                          {ficha.scoreLabel}
+                        </span>
+                      )}
+                      {card?.etapa_pipeline && (
+                        <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] bg-muted text-muted-foreground">
+                          {card.etapa_pipeline}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </SheetHeader>
+
+              <ScrollArea className="flex-1">
+                <div className="px-4 py-3 space-y-4">
+
+                  {fichaLoading ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                    </div>
+                  ) : !ficha ? null : (
+                    <>
+                      {/* Métricas rápidas */}
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="rounded-md border bg-muted/30 p-2 text-center">
+                          <div className="text-[10px] text-muted-foreground uppercase">LTV</div>
+                          <div className="text-sm font-bold">{fmtBRL(card?.ltv)}</div>
+                        </div>
+                        <div className="rounded-md border bg-muted/30 p-2 text-center">
+                          <div className="text-[10px] text-muted-foreground uppercase">Ticket médio</div>
+                          <div className="text-sm font-bold">{ficha.ticketMedio != null ? fmtBRL(ficha.ticketMedio) : "—"}</div>
+                        </div>
+                        <div className="rounded-md border bg-muted/30 p-2 text-center">
+                          <div className="text-[10px] text-muted-foreground uppercase">Ciclo médio</div>
+                          <div className="text-sm font-bold">{ficha.cicloMedio != null ? `${ficha.cicloMedio}d` : "—"}</div>
+                        </div>
+                      </div>
+
+                      {/* Ciclo vs dias sem comprar */}
+                      {ficha.cicloMedio != null && card?.dias_sem_comprar != null && (
+                        <div className={`rounded-md border px-3 py-2 text-xs ${
+                          card.dias_sem_comprar > ficha.cicloMedio
+                            ? "border-red-300 bg-red-50 text-red-800"
+                            : "border-green-300 bg-green-50 text-green-800"
+                        }`}>
+                          <Activity className="inline h-3 w-3 mr-1" />
+                          Ciclo médio: {ficha.cicloMedio}d · Sem comprar: {card.dias_sem_comprar}d
+                          {card.dias_sem_comprar > ficha.cicloMedio
+                            ? ` · Atrasado ${card.dias_sem_comprar - ficha.cicloMedio}d`
+                            : " · Em dia"}
+                        </div>
+                      )}
+
+                      {/* Sazonalidade */}
+                      {Object.keys(ficha.sazonalidade).length > 0 && (
+                        <div>
+                          <div className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                            <TrendingUp className="h-3 w-3" /> Sazonalidade (pedidos por mês)
+                          </div>
+                          <div className="flex gap-1 flex-wrap">
+                            {MESES_ORDER.map((m) => {
+                              const v = ficha.sazonalidade[m] ?? 0;
+                              if (v === 0) return null;
+                              return (
+                                <div key={m} className="flex flex-col items-center">
+                                  <div className="text-[10px] font-semibold text-primary">{v}</div>
+                                  <div className={`w-6 rounded-sm ${v > 0 ? "bg-primary" : "bg-muted"}`} style={{ height: `${Math.max(4, v * 8)}px` }} />
+                                  <div className="text-[9px] text-muted-foreground">{m}</div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
+                      <Separator />
+
+                      {/* Produtos mais comprados */}
+                      {ficha.produtosTop.length > 0 && (
+                        <div>
+                          <div className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                            <Package className="h-3 w-3" /> Produtos mais comprados
+                          </div>
+                          <div className="space-y-1">
+                            {ficha.produtosTop.map((p) => (
+                              <div key={p.produto_id} className="flex items-center justify-between text-xs">
+                                <span className="truncate text-foreground">{p.nome}</span>
+                                <span className="ml-2 shrink-0 text-muted-foreground">{fmtBRL(p.valor_total)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <Separator />
+
+                      {/* Tarefas */}
+                      <div>
+                        <div className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                          <CheckCircle2 className="h-3 w-3" /> Tarefas
+                        </div>
+                        <div className="space-y-1 mb-3">
+                          {ficha.tarefas.length === 0 && (
+                            <p className="text-xs text-muted-foreground">Nenhuma tarefa</p>
+                          )}
+                          {ficha.tarefas.map((t) => (
+                            <div key={t.id} className={`flex items-start gap-2 rounded-md border px-2 py-1.5 ${t.concluida ? "opacity-50" : ""}`}>
+                              <button type="button" onClick={() => !t.concluida && concluirTarefa(t.id)} className="mt-0.5 shrink-0">
+                                {t.concluida
+                                  ? <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                  : <Circle className="h-4 w-4 text-muted-foreground" />}
+                              </button>
+                              <div className="min-w-0 flex-1">
+                                <div className={`text-xs font-medium ${t.concluida ? "line-through" : ""}`}>{t.titulo}</div>
+                                {t.data_vencimento && (
+                                  <div className={`text-[10px] flex items-center gap-1 ${t.data_vencimento < hoje && !t.concluida ? "text-red-600" : "text-muted-foreground"}`}>
+                                    <Calendar className="h-2.5 w-2.5" />
+                                    {new Date(t.data_vencimento + "T00:00:00").toLocaleDateString("pt-BR")}
+                                  </div>
+                                )}
+                              </div>
+                              <span className="text-[9px] text-muted-foreground shrink-0">{t.tipo}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        {/* Nova tarefa inline */}
+                        <div className="rounded-md border bg-muted/20 p-2 space-y-2">
+                          <div className="text-[10px] font-semibold text-muted-foreground uppercase">Nova tarefa</div>
+                          <Input
+                            placeholder="Título da tarefa..."
+                            value={novaT.titulo}
+                            onChange={(e) => setNovaT((p) => ({ ...p, titulo: e.target.value }))}
+                            className="h-7 text-xs"
+                          />
+                          <div className="flex gap-2">
+                            <Select value={novaT.tipo} onValueChange={(v) => setNovaT((p) => ({ ...p, tipo: v }))} >
+                              <SelectTrigger className="h-7 text-xs flex-1">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {["tarefa", "ligação", "email", "visita", "proposta"].map((t) => (
+                                  <SelectItem key={t} value={t}>{t}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              type="date"
+                              value={novaT.data_vencimento}
+                              onChange={(e) => setNovaT((p) => ({ ...p, data_vencimento: e.target.value }))}
+                              className="h-7 text-xs flex-1"
+                            />
+                          </div>
+                          <Button
+                            size="sm"
+                            className="w-full h-7 text-xs"
+                            disabled={salvandoTarefa}
+                            onClick={() => criarTarefa(fichaClienteId!)}
+                          >
+                            {salvandoTarefa ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />}
+                            Adicionar tarefa
+                          </Button>
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      {/* Timeline de contatos */}
+                      <div>
+                        <div className="text-xs font-semibold text-muted-foreground uppercase mb-2 flex items-center gap-1">
+                          <Phone className="h-3 w-3" /> Timeline de contatos
+                        </div>
+                        {ficha.contatos.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">Nenhum contato registrado</p>
+                        ) : (
+                          <ol className="relative border-l border-muted-foreground/20 space-y-3 ml-2">
+                            {ficha.contatos.map((c) => (
+                              <li key={c.id} className="ml-3">
+                                <div className="absolute -left-1.5 h-3 w-3 rounded-full border border-white bg-primary" />
+                                <div className="text-[10px] text-muted-foreground">
+                                  {new Date(c.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                </div>
+                                <div className="text-xs font-medium">{c.tipo}</div>
+                                {c.nota && <div className="text-xs text-muted-foreground">{c.nota}</div>}
+                              </li>
+                            ))}
+                          </ol>
+                        )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full mt-3 h-7 text-xs"
+                          onClick={() => {
+                            const c = (cardsQ.data ?? []).find((x) => x.cliente_id === fichaClienteId);
+                            if (c) setContatoCard(c);
+                          }}
+                        >
+                          <Phone className="h-3 w-3 mr-1" /> Registrar contato
+                        </Button>
+                      </div>
+
+                      <Separator />
+
+                      {/* Histórico de pedidos */}
+                      <div>
+                        <div className="text-xs font-semibold text-muted-foreground uppercase mb-2">
+                          Histórico de pedidos ({ficha.pedidos.length})
+                        </div>
+                        {ficha.pedidos.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">Nenhum pedido</p>
+                        ) : (
+                          <>
+                            <div className="space-y-1">
+                              {pedidosVisiveis.map((p) => (
+                                <div key={p.id} className="flex items-center justify-between rounded-md border px-2 py-1.5 text-xs">
+                                  <div>
+                                    <span className="font-mono font-semibold">#{p.numero_pedido}</span>
+                                    <span className="ml-2 text-muted-foreground">{new Date(p.data_pedido + "T00:00:00").toLocaleDateString("pt-BR")}</span>
+                                  </div>
+                                  <span className="font-semibold text-green-700">{fmtBRL(p.total)}</span>
+                                </div>
+                              ))}
+                            </div>
+                            {ficha.pedidos.length > 5 && (
+                              <button
+                                type="button"
+                                className="mt-2 flex w-full items-center justify-center gap-1 text-xs text-primary hover:underline"
+                                onClick={() => setPedidosExpandidos((v) => !v)}
+                              >
+                                {pedidosExpandidos ? (
+                                  <><ChevronUp className="h-3 w-3" /> Ver menos</>
+                                ) : (
+                                  <><ChevronDown className="h-3 w-3" /> Ver todos ({ficha.pedidos.length})</>
+                                )}
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </ScrollArea>
+            </SheetContent>
+          </Sheet>
+        );
+      })()}
 
       {/* Modais */}
       {editCard && (
@@ -606,12 +1081,14 @@ function CardKanban({
   onDragStart,
   onEdit,
   onContato,
+  onAbrirFicha,
 }: {
   card: Card;
   fields: Record<FieldKey, boolean>;
   onDragStart: (e: React.DragEvent) => void;
   onEdit: () => void;
   onContato: () => void;
+  onAbrirFicha: () => void;
 }) {
   const hoje = hojeISO();
   const parado =
@@ -640,7 +1117,13 @@ function CardKanban({
     >
       <div className="flex items-start gap-1">
         <GripVertical className="h-3.5 w-3.5 shrink-0 cursor-grab text-muted-foreground" />
-        <div className="min-w-0 flex-1 font-medium">{card.nome}</div>
+        <button
+          type="button"
+          className="min-w-0 flex-1 text-left font-medium hover:underline hover:text-primary"
+          onClick={(e) => { e.stopPropagation(); onAbrirFicha(); }}
+        >
+          {card.nome}
+        </button>
         {parado && (
           <Tooltip>
             <TooltipTrigger asChild>
