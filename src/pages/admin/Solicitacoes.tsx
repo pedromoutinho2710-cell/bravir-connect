@@ -94,6 +94,7 @@ export default function Solicitacoes() {
   const { user } = useAuth();
   const [filterTipo, setFilterTipo] = useState<string>("todos");
   const [filterPrioridade, setFilterPrioridade] = useState<string>("todas");
+  const [filterStatus, setFilterStatus] = useState<string>("todos");
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const isAdmin = user?.email === PEDRO_EMAIL;
@@ -148,8 +149,8 @@ export default function Solicitacoes() {
         .eq("id", id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["solicitacoes_gestor"] });
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["solicitacoes_gestor"] });
       toast.success("Status atualizado");
     },
     onError: () => toast.error("Erro ao atualizar status"),
@@ -172,6 +173,7 @@ export default function Solicitacoes() {
   });
 
   const filtered = solicitacoes.filter((s) => {
+    if (filterStatus !== "todos" && s.status !== filterStatus) return false;
     if (filterTipo !== "todos" && s.tipo !== filterTipo) return false;
     if (filterPrioridade !== "todas" && s.prioridade !== filterPrioridade) return false;
     return true;
@@ -194,20 +196,32 @@ export default function Solicitacoes() {
         </Button>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary cards — also act as status tabs */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: "Total", value: total, color: "text-gray-700" },
-          { label: "Em aberto", value: abertos, color: "text-yellow-700" },
-          { label: "Em andamento", value: emAndamento, color: "text-blue-700" },
-          { label: "Concluídos", value: concluidos, color: "text-green-700" },
-        ].map(({ label, value, color }) => (
-          <Card key={label}>
-            <CardContent className="pt-4 pb-3 px-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
-              <p className={`text-3xl font-bold ${color}`}>{value}</p>
-            </CardContent>
-          </Card>
+          { label: "Total", value: total, color: "text-gray-700", status: "todos" },
+          { label: "Em aberto", value: abertos, color: "text-yellow-700", status: "aberto" },
+          { label: "Em andamento", value: emAndamento, color: "text-blue-700", status: "em-andamento" },
+          { label: "Concluídos", value: concluidos, color: "text-green-700", status: "concluido" },
+        ].map(({ label, value, color, status }) => (
+          <button
+            key={label}
+            type="button"
+            onClick={() => setFilterStatus(status)}
+            className="text-left focus:outline-none"
+            aria-pressed={filterStatus === status}
+          >
+            <Card
+              className={`transition-colors hover:bg-muted/50 ${
+                filterStatus === status ? "ring-2 ring-primary" : ""
+              }`}
+            >
+              <CardContent className="pt-4 pb-3 px-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
+                <p className={`text-3xl font-bold ${color}`}>{value}</p>
+              </CardContent>
+            </Card>
+          </button>
         ))}
       </div>
 
