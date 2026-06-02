@@ -67,6 +67,20 @@ const STATUS_OPTIONS = [
   { value: "aguardando_trade", label: "Aguardando Trade" },
 ];
 
+const STATUS_CAD_LABEL: Record<string, string> = {
+  ativo: "Ativo",
+  inativo: "Inativo",
+  aguardando_trade: "Aguardando Trade",
+  pendente: "Pendente",
+};
+
+const STATUS_CAD_COLOR: Record<string, string> = {
+  ativo: "bg-green-100 text-green-800 border-green-300",
+  inativo: "bg-gray-200 text-gray-600 border-gray-400",
+  aguardando_trade: "bg-blue-100 text-blue-800 border-blue-300",
+  pendente: "bg-yellow-100 text-yellow-800 border-yellow-300",
+};
+
 function computeAtividade(data: string | null): "ativo" | "em_risco" | "inativo" {
   if (!data) return "inativo";
   const dias = Math.floor((Date.now() - new Date(data).getTime()) / 86_400_000);
@@ -85,6 +99,7 @@ export default function FaturamentoClientes() {
   const [busca, setBusca] = useState("");
   const [filtroPerfil, setFiltroPerfil] = useState<"todos" | "sem" | "com">("todos");
   const [filtroUF, setFiltroUF] = useState("todas");
+  const [filtroStatusCad, setFiltroStatusCad] = useState("todos");
 
   // Filtros avançados
   const [showFiltros, setShowFiltros] = useState(false);
@@ -214,7 +229,8 @@ export default function FaturamentoClientes() {
         || (filtroPerfil === "sem" && !c.cluster)
         || (filtroPerfil === "com" && !!c.cluster);
       const matchUF = filtroUF === "todas" || c.uf === filtroUF;
-      return matchBusca && matchPerfil && matchUF;
+      const matchStatus = filtroStatusCad === "todos" || (c.status ?? "ativo") === filtroStatusCad;
+      return matchBusca && matchPerfil && matchUF && matchStatus;
     });
 
     if (filtroVendedor !== "todos") lista = lista.filter((c) => c.vendedor_id === filtroVendedor);
@@ -231,7 +247,7 @@ export default function FaturamentoClientes() {
     });
 
     return lista;
-  }, [clientes, busca, filtroPerfil, filtroUF, filtroVendedor, filtroCluster, filtroTabela, filtroAtividade, lastOrders]);
+  }, [clientes, busca, filtroPerfil, filtroUF, filtroStatusCad, filtroVendedor, filtroCluster, filtroTabela, filtroAtividade, lastOrders]);
 
   const abrirModal = (c: Cliente) => {
     setModalCliente(c);
@@ -388,6 +404,18 @@ export default function FaturamentoClientes() {
           </SelectContent>
         </Select>
 
+        <Select value={filtroStatusCad} onValueChange={setFiltroStatusCad}>
+          <SelectTrigger className="w-40">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos os status</SelectItem>
+            {STATUS_OPTIONS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
         <Button
           variant={showFiltros ? "default" : "outline"}
           size="sm"
@@ -495,7 +523,17 @@ export default function FaturamentoClientes() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => navigate(`/clientes/${c.id}`)}
                   >
-                    <TableCell className="font-medium">{c.nome_parceiro || c.razao_social}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        <span>{c.nome_parceiro || c.razao_social}</span>
+                        <Badge
+                          variant="outline"
+                          className={`text-xs ${STATUS_CAD_COLOR[c.status ?? "ativo"] ?? "bg-gray-100 text-gray-600 border-gray-300"}`}
+                        >
+                          {STATUS_CAD_LABEL[c.status ?? "ativo"] ?? (c.status ?? "—")}
+                        </Badge>
+                      </div>
+                    </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       <div className="font-mono">{c.cnpj ? formatCNPJ(c.cnpj) : "—"}</div>
                       {c.codigo_parceiro && <div className="text-xs">Cód: {c.codigo_parceiro}</div>}

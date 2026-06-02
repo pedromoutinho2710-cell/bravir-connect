@@ -62,6 +62,7 @@ type ClienteAgregado = {
   suframa: boolean | null;
   cidade: string | null;
   uf: string | null;
+  status: string | null;
 };
 
 type CadastroPendente = {
@@ -75,6 +76,20 @@ type CadastroPendente = {
 };
 
 type OrdemCampo = "ltv" | "ticket_medio" | "razao_social" | "num_pedidos";
+
+const STATUS_CLIENTE_LABEL: Record<string, string> = {
+  ativo: "Ativo",
+  inativo: "Inativo",
+  aguardando_trade: "Aguardando Trade",
+  pendente: "Pendente",
+};
+
+const STATUS_CLIENTE_COLOR: Record<string, string> = {
+  ativo: "bg-green-100 text-green-800 border-green-400",
+  inativo: "bg-gray-200 text-gray-600 border-gray-400",
+  aguardando_trade: "bg-blue-100 text-blue-800 border-blue-300",
+  pendente: "bg-yellow-100 text-yellow-800 border-yellow-300",
+};
 
 function calcCicloMedio(dates: Date[]): number | null {
   if (dates.length < 2) return null;
@@ -108,6 +123,7 @@ export default function MeusClientes() {
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState("");
   const [ordem, setOrdem] = useState<OrdemCampo>("ltv");
+  const [filtroStatus, setFiltroStatus] = useState("todos");
 
   const hoje = new Date();
   const DIA_MS = 1000 * 60 * 60 * 24;
@@ -137,15 +153,14 @@ export default function MeusClientes() {
             cliente_id,
             data_pedido,
             itens_pedido(total_item, produtos(marca)),
-            clientes(razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf)
+            clientes(razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf, status)
           `)
           .eq("vendedor_id", effectiveUserId ?? "")
           .not("status", "in", '("rascunho","cancelado")'),
         supabase
           .from("clientes")
-          .select("id, razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf")
-          .eq("vendedor_id", effectiveUserId ?? "")
-          .eq("status", "ativo"),
+          .select("id, razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf, status")
+          .eq("vendedor_id", effectiveUserId ?? ""),
       ]);
 
       if (pedidosRes.error) {
@@ -153,7 +168,6 @@ export default function MeusClientes() {
         return;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const map = new Map<string, {
         razao_social: string;
         cnpj: string | null;
@@ -167,6 +181,7 @@ export default function MeusClientes() {
         suframa: boolean | null;
         cidade: string | null;
         uf: string | null;
+        status: string | null;
         ltv: number;
         num_pedidos: number;
         marcas: Set<string>;
@@ -191,6 +206,7 @@ export default function MeusClientes() {
             suframa: cl?.suframa ?? null,
             cidade: cl?.cidade ?? null,
             uf: cl?.uf ?? null,
+            status: cl?.status ?? null,
             ltv: 0,
             num_pedidos: 0,
             marcas: new Set(),
@@ -224,6 +240,7 @@ export default function MeusClientes() {
           suframa: cl.suframa ?? null,
           cidade: cl.cidade ?? null,
           uf: cl.uf ?? null,
+          status: cl.status ?? null,
           ltv: 0,
           num_pedidos: 0,
           marcas: new Set(),
@@ -268,6 +285,7 @@ export default function MeusClientes() {
             suframa: c.suframa,
             cidade: c.cidade,
             uf: c.uf,
+            status: c.status,
             ltv: c.ltv,
             num_pedidos: c.num_pedidos,
             ticket_medio: c.ticket_medio,
@@ -397,7 +415,7 @@ export default function MeusClientes() {
   };
 
   const clientesFiltrados = useMemo(() => {
-    const filtrados = busca.trim()
+    let filtrados = busca.trim()
       ? clientes.filter((c) => {
           const buscaDigits = busca.replace(/\D/g, "");
           const cnpjDigits = (c.cnpj ?? "").replace(/\D/g, "");
@@ -408,13 +426,17 @@ export default function MeusClientes() {
         })
       : clientes;
 
+    if (filtroStatus !== "todos") {
+      filtrados = filtrados.filter((c) => (c.status ?? "ativo") === filtroStatus);
+    }
+
     return [...filtrados].sort((a, b) => {
       if (ordem === "ltv") return b.ltv - a.ltv;
       if (ordem === "ticket_medio") return b.ticket_medio - a.ticket_medio;
       if (ordem === "num_pedidos") return b.num_pedidos - a.num_pedidos;
       return a.razao_social.localeCompare(b.razao_social, "pt-BR");
     });
-  }, [clientes, busca, ordem]);
+  }, [clientes, busca, ordem, filtroStatus]);
 
   if (loading) {
     return (
@@ -437,7 +459,7 @@ export default function MeusClientes() {
 
       <Tabs defaultValue="carteira">
         <TabsList>
-          <TabsTrigger value="carteira">Carteira ativa</TabsTrigger>
+          <TabsTrigger value="carteira">Carteira</TabsTrigger>
           <TabsTrigger value="cadastros" className="gap-2">
             Cadastros enviados
             {badgeCount > 0 && (
@@ -459,6 +481,17 @@ export default function MeusClientes() {
                 onChange={(e) => setBusca(e.target.value)}
               />
             </div>
+            <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+              <SelectTrigger className="w-full sm:w-44">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os status</SelectItem>
+                <SelectItem value="ativo">Ativo</SelectItem>
+                <SelectItem value="inativo">Inativo</SelectItem>
+                <SelectItem value="aguardando_trade">Aguardando Trade</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={ordem} onValueChange={(v) => setOrdem(v as OrdemCampo)}>
               <SelectTrigger className="w-full sm:w-56">
                 <SelectValue placeholder="Ordenar por" />
@@ -514,6 +547,12 @@ export default function MeusClientes() {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <span className="truncate">{c.razao_social}</span>
+                            <Badge
+                              variant="outline"
+                              className={`text-xs shrink-0 ${STATUS_CLIENTE_COLOR[c.status ?? "ativo"] ?? "bg-gray-100 text-gray-600 border-gray-300"}`}
+                            >
+                              {STATUS_CLIENTE_LABEL[c.status ?? "ativo"] ?? (c.status ?? "—")}
+                            </Badge>
                             <Button
                               size="sm"
                               variant="ghost"
