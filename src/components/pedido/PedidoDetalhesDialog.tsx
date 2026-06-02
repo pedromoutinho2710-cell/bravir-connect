@@ -317,6 +317,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
       const { gerarPedidoPDF } = await import("@/lib/pdf");
       const doc = gerarPedidoPDF({
         data: new Date(pedido.data_pedido + "T12:00:00"),
+        numero: pedido.numero_pedido,
         tipo: pedido.tipo,
         cliente: {
           cnpj: pedido.cnpj,
