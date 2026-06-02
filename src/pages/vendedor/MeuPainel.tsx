@@ -105,13 +105,12 @@ function rangePeriodo(p: Periodo): { inicio: string; fim: string } {
   if (p === "semana") {
     const dow = agora.getDay();
     const inicio = new Date(y, m, d - dow);
-    const fim = new Date(y, m, d - dow + 6);
-    return { inicio: fmt(inicio), fim: fmt(fim) };
+    return { inicio: fmt(inicio), fim: fmt(agora) };
   }
   if (p === "ano") {
-    return { inicio: `${y}-01-01`, fim: `${y}-12-31` };
+    return { inicio: `${y}-01-01`, fim: fmt(agora) };
   }
-  return { inicio: fmt(new Date(y, m, 1)), fim: fmt(new Date(y, m + 1, 0)) };
+  return { inicio: fmt(new Date(y, m, 1)), fim: fmt(agora) };
 }
 
 function rangeEfetivo(p: Periodo, customAtivo: boolean, customInicio: string, customFim: string) {
@@ -286,6 +285,12 @@ export default function MeuPainel() {
       const mesInicio = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-01`;
       const mesFim = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
 
+      // Mês/ano da meta derivado do período filtrado (filtrar maio → meta de maio)
+      const { inicio: periodoInicio } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
+      const periodoDate = new Date(periodoInicio + "T12:00:00");
+      const mesFiltro = periodoDate.getMonth() + 1;
+      const anoFiltro = periodoDate.getFullYear();
+
       const [pedidosRes, rascunhosRes, metasRes, ultimosRes] = await Promise.all([
         supabase
           .from("pedidos")
@@ -303,8 +308,8 @@ export default function MeuPainel() {
           .from("metas")
           .select("valor_meta_reais")
           .eq("vendedor_id", user.id)
-          .eq("mes", agora.getMonth() + 1)
-          .eq("ano", agora.getFullYear())
+          .eq("mes", mesFiltro)
+          .eq("ano", anoFiltro)
           .maybeSingle(),
         supabase
           .from("pedidos")
@@ -402,7 +407,7 @@ export default function MeuPainel() {
         data_pedido: p.data_pedido,
       })));
     })().finally(() => setLoading(false));
-  }, [user]);
+  }, [user, periodo, customAtivo, customInicio, customFim]);
 
   useEffect(() => {
     if (!user) return;
