@@ -39,6 +39,7 @@ export const ADMIN_SECTIONS: Section[] = [
     items: [
       { title: "Equipe", url: "/admin/equipe", icon: UserCog },
       { title: "Metas", url: "/admin/metas", icon: Target },
+      { title: "Gestão de Metas", url: "/admin/gestao-metas", icon: Target },
       { title: "Formulários", url: "/admin/formularios", icon: FileStack },
       { title: "Importar Clientes", url: "/admin/importar-clientes", icon: Upload },
       { title: "Tabelas de Preço", url: "/admin/tabelas-preco", icon: Tag },
@@ -84,6 +85,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Clientes", url: "/gestora/clientes", icon: Users },
     { title: "Cadastrar Cliente", url: "/gestora/cadastrar-cliente", icon: UserPlus },
     { title: "Gestão do Time", url: "/gestora/time", icon: UserCog },
+    { title: "Gestão de Metas", url: "/admin/gestao-metas", icon: Target },
     { title: "Leads Evento", url: "/gestora/leads-evento", icon: UserCheck },
     { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
     { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
@@ -91,6 +93,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
   gestora_faturamento: [
     { title: "Dashboard", url: "/dashboard-faturamento", icon: LayoutDashboard },
     { title: "Histórico Faturamento", url: "/gestora/historico-faturamento", icon: History },
+    { title: "Gestão de Metas", url: "/admin/gestao-metas", icon: Target },
     { title: "Novo Pedido", url: "/faturamento/novo-pedido", icon: PlusCircle },
     { title: "Fila de Pedidos", url: "/faturamento", icon: ListChecks },
     { title: "Clientes", url: "/faturamento/clientes", icon: Users },

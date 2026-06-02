@@ -20,6 +20,7 @@ import Faturamento from "./pages/Faturamento";
 import Formularios from "./pages/admin/Formularios";
 import Equipe from "./pages/admin/Equipe";
 import Metas from "./pages/admin/Metas";
+import GestaoMetas from "./pages/admin/GestaoMetas";
 import Dashboard from "./pages/Dashboard";
 import Trade from "./pages/Trade";
 import TradeCampanhas from "./pages/TradeCampanhas";
@@ -100,6 +101,11 @@ const App = () => (
               <Route path="/admin/tabelas-preco" element={<TabelasPreco />} />
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
               <Route path="/admin/campanhas" element={<Campanhas />} />
+            </Route>
+
+            {/* Gestão de Metas — admin, gestora e gestora_faturamento */}
+            <Route element={<ProtectedRoute allow={["admin", "gestora", "gestora_faturamento"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/admin/gestao-metas" element={<GestaoMetas />} />
             </Route>
 
             {/* Solicitações de melhoria — acessíveis por todos os roles */}
