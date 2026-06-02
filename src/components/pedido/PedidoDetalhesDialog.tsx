@@ -415,12 +415,12 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
                 </Button>
               )}
 
-              {pedido.status === "pendente_sankhya" && pedido.responsavel_id === null && onEditar && (
+              {pedido.status === "aguardando_faturamento" && pedido.responsavel_id === null && onEditar && (
                 <Button size="sm" variant="outline" onClick={onEditar}>
                   Editar pedido
                 </Button>
               )}
-              {pedido.status === "pendente_sankhya" && pedido.responsavel_id !== null && (
+              {pedido.status === "aguardando_faturamento" && pedido.responsavel_id !== null && (
                 <div>
                   <Button size="sm" variant="outline" disabled>
                     Editar pedido
