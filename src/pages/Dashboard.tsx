@@ -258,7 +258,14 @@ export default function Dashboard() {
           supabase.from("pedidos").select("id", { count: "exact", head: true }).in("status", ["com_problema", "devolvido", "cancelado"]).gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
           // Campanha ativa
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (supabase as any).from("campanhas").select("*, campanha_niveis(*)").eq("ativa", true).maybeSingle(),
+          (supabase as any)
+            .from("campanhas")
+            .select("*, campanha_niveis(*)")
+            .lte("data_inicio", effectiveFim)
+            .gte("data_fim", effectiveInicio)
+            .order("data_fim", { ascending: false })
+            .limit(1)
+            .maybeSingle(),
           // Faturamento mensal — últimos 6 meses (dados reais do Sankhya)
           // TODO: adicionar faturamentos_sankhya ao types.ts
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
