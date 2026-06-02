@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
@@ -113,6 +114,16 @@ function rangePeriodo(p: Periodo): { inicio: string; fim: string } {
   return { inicio: fmt(new Date(y, m, 1)), fim: fmt(new Date(y, m + 1, 0)) };
 }
 
+function rangeEfetivo(p: Periodo, customAtivo: boolean, customInicio: string, customFim: string) {
+  if (customAtivo && customInicio && customFim) return { inicio: customInicio, fim: customFim };
+  return rangePeriodo(p);
+}
+
+function formatDataBR(iso: string) {
+  const [a, m, d] = iso.split("-");
+  return `${d}/${m}/${a}`;
+}
+
 type PeriodTotais = { entrada: number; faturado: number; aFaturar: number };
 
 type ClienteSemPedido = {
@@ -161,6 +172,10 @@ export default function MeuPainel() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [periodo, setPeriodo] = useState<Periodo>("mes");
+  const [customInicio, setCustomInicio] = useState("");
+  const [customFim, setCustomFim] = useState("");
+  const [customAtivo, setCustomAtivo] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
   const [periodTotais, setPeriodTotais] = useState<PeriodTotais>({ entrada: 0, faturado: 0, aFaturar: 0 });
   const [loadingPeriodo, setLoadingPeriodo] = useState(false);
   const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0, aFaturar: 0, pedidosSemEstoque: 0, valorSemEstoque: 0 });
@@ -394,7 +409,7 @@ export default function MeuPainel() {
     let cancelado = false;
     setLoadingPeriodo(true);
     (async () => {
-      const { inicio, fim } = rangePeriodo(periodo);
+      const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
       const { data, error } = await supabase
         .from("pedidos")
         .select("status, itens_pedido(total_item)")
@@ -422,7 +437,7 @@ export default function MeuPainel() {
       setLoadingPeriodo(false);
     })();
     return () => { cancelado = true; };
-  }, [user, periodo]);
+  }, [user, periodo, customAtivo, customInicio, customFim]);
 
   // Faturado do mês — agora vem de faturamentos_sankhya casado por nome_vendedor.
   // Busca profiles.full_name → ILIKE em faturamentos_sankhya.nome_vendedor.
@@ -529,7 +544,7 @@ export default function MeuPainel() {
 
   useEffect(() => {
     if (!user) return;
-    const { inicio, fim } = rangePeriodo(periodo);
+    const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
     (async () => {
       const [carteiraRes, pedidosRes] = await Promise.all([
         supabase
@@ -587,7 +602,7 @@ export default function MeuPainel() {
         semPedidoList,
       });
     })();
-  }, [user, periodo]);
+  }, [user, periodo, customAtivo, customInicio, customFim]);
 
   useEffect(() => {
     let cancelado = false;
@@ -670,13 +685,73 @@ export default function MeuPainel() {
             <Button
               key={p}
               size="sm"
-              variant={periodo === p ? "default" : "outline"}
-              onClick={() => setPeriodo(p)}
+              variant={periodo === p && !customAtivo ? "default" : "outline"}
+              onClick={() => {
+                setPeriodo(p);
+                setCustomAtivo(false);
+                setCustomOpen(false);
+              }}
             >
               {PERIODO_LABEL[p]}
             </Button>
           ))}
+          <Button
+            size="sm"
+            variant={customAtivo ? "default" : "outline"}
+            onClick={() => setCustomOpen((o) => !o)}
+          >
+            Personalizar {customOpen ? "▲" : "▼"}
+          </Button>
+          {customAtivo && customInicio && customFim && (
+            <Badge variant="secondary" className="ml-1">
+              {formatDataBR(customInicio)} – {formatDataBR(customFim)}
+            </Badge>
+          )}
         </div>
+        {customOpen && (
+          <div className="flex flex-wrap items-end gap-2 rounded-md border bg-muted/30 p-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">De</label>
+              <Input
+                type="date"
+                value={customInicio}
+                onChange={(e) => setCustomInicio(e.target.value)}
+                className="h-9 w-auto"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Até</label>
+              <Input
+                type="date"
+                value={customFim}
+                onChange={(e) => setCustomFim(e.target.value)}
+                className="h-9 w-auto"
+              />
+            </div>
+            <Button
+              size="sm"
+              disabled={!customInicio || !customFim}
+              onClick={() => {
+                setCustomAtivo(true);
+                setCustomOpen(false);
+              }}
+            >
+              Aplicar
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setCustomAtivo(false);
+                setCustomInicio("");
+                setCustomFim("");
+                setCustomOpen(false);
+              }}
+            >
+              Limpar
+            </Button>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Card
             className="cursor-pointer hover:border-[#166534] hover:shadow-sm transition"
@@ -847,7 +922,7 @@ export default function MeuPainel() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-700">{clientesPeriodo.comPedido}</div>
-            <p className="text-xs text-muted-foreground mt-1">{PERIODO_LABEL[periodo]}</p>
+            <p className="text-xs text-muted-foreground mt-1">{customAtivo ? "Período personalizado" : PERIODO_LABEL[periodo]}</p>
           </CardContent>
         </Card>
 
@@ -869,7 +944,7 @@ export default function MeuPainel() {
       <Dialog open={modalSemPedidoOpen} onOpenChange={setModalSemPedidoOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Clientes sem pedido — {PERIODO_LABEL[periodo]}</DialogTitle>
+            <DialogTitle>Clientes sem pedido — {customAtivo ? "Período personalizado" : PERIODO_LABEL[periodo]}</DialogTitle>
           </DialogHeader>
           <div className="overflow-y-auto rounded-md border">
             {clientesPeriodo.semPedidoList.length === 0 ? (
