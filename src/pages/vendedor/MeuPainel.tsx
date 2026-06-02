@@ -73,6 +73,14 @@ const TIPO_LABEL: Record<string, string> = {
   outro: "Outro",
 };
 
+type HistoricoMes = {
+  mes: string;
+  ano: number;
+  mesNum: number;
+  totalEntrada: number;
+  numPedidos: number;
+};
+
 type Periodo = "hoje" | "semana" | "mes" | "ano";
 
 const PERIODO_LABEL: Record<Periodo, string> = {
@@ -175,6 +183,7 @@ export default function MeuPainel() {
   const [vendedorFullName, setVendedorFullName] = useState<string | null>(null);
   const [produtosIndisponiveis, setProdutosIndisponiveis] = useState<{ id: string; nome: string }[]>([]);
   const [modalIndispOpen, setModalIndispOpen] = useState(false);
+  const [historicoMeses, setHistoricoMeses] = useState<HistoricoMes[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -475,6 +484,47 @@ export default function MeuPainel() {
       setFaturamentoRealMesAnterior(sumAnt);
     })();
     return () => { cancelado = true; };
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+      const agora = new Date();
+      const meses = Array.from({ length: 3 }, (_, i) => {
+        const d = new Date(agora.getFullYear(), agora.getMonth() - (2 - i), 1);
+        const ano = d.getFullYear();
+        const mesNum = d.getMonth() + 1;
+        const inicio = `${ano}-${String(mesNum).padStart(2, "0")}-01`;
+        const fim = new Date(ano, mesNum, 0).toISOString().slice(0, 10);
+        return { mes: MESES_ABREV[d.getMonth()], ano, mesNum, inicio, fim };
+      });
+
+      const resultados = await Promise.all(
+        meses.map(async (m) => {
+          const { data } = await supabase
+            .from("pedidos")
+            .select("id, itens_pedido(total_item)")
+            .eq("vendedor_id", user.id)
+            .gte("data_pedido", m.inicio)
+            .lte("data_pedido", m.fim)
+            .not("status", "in", '("rascunho","cancelado")');
+          const pedidos = data ?? [];
+          const totalEntrada = pedidos.reduce((s, p) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return s + (p.itens_pedido ?? []).reduce((si: number, i: any) => si + Number(i.total_item), 0);
+          }, 0);
+          return {
+            mes: m.mes,
+            ano: m.ano,
+            mesNum: m.mesNum,
+            totalEntrada,
+            numPedidos: pedidos.length,
+          };
+        })
+      );
+      setHistoricoMeses(resultados);
+    })();
   }, [user]);
 
   useEffect(() => {
@@ -1188,6 +1238,28 @@ export default function MeuPainel() {
                   >
                     Ver cliente
                   </Button>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Histórico dos últimos 3 meses */}
+      {historicoMeses.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-medium">Histórico dos últimos 3 meses</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {historicoMeses.map((m) => (
+                <div key={`${m.mes}-${m.ano}`} className="rounded-md border p-3 space-y-1">
+                  <div className="text-xs text-muted-foreground font-medium uppercase tracking-wide">
+                    {m.mes}/{m.ano}
+                  </div>
+                  <div className="text-lg font-bold">{formatBRL(m.totalEntrada)}</div>
+                  <div className="text-xs text-muted-foreground">{m.numPedidos} pedido(s)</div>
                 </div>
               ))}
             </div>
