@@ -143,7 +143,6 @@ export default function Solicitacoes() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      console.log("Chamando UPDATE no banco:", { id, status });
       const { error } = await (supabase as any)
         .from("solicitacoes_gestor")
         .update({ status })
@@ -151,7 +150,6 @@ export default function Solicitacoes() {
       if (error) throw error;
     },
     onSuccess: async () => {
-      console.log("UPDATE bem sucedido, invalidando query");
       await qc.invalidateQueries({ queryKey: ["solicitacoes_gestor"] });
       toast.success("Status atualizado");
     },
@@ -311,7 +309,6 @@ export default function Solicitacoes() {
                     <Select
                       value={s.status}
                       onValueChange={(novoStatus) => {
-                        console.log("Atualizando status:", { id: s.id, status: novoStatus });
                         updateStatus.mutate({ id: s.id, status: novoStatus });
                       }}
                     >
