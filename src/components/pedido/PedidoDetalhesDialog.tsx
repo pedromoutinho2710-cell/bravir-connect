@@ -81,6 +81,7 @@ type PedidoDetalhe = {
   negativado: boolean;
   responsavel_id: string | null;
   responsavel_nome: string | null;
+  pedido_origem_id: string | null;
   itens: ItemDetalhe[];
   historico: HistoricoItem[];
   faturamentos: FaturamentoNF[];
@@ -137,6 +138,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
           observacoes,
           motivo,
           responsavel_id,
+          pedido_origem_id,
           cliente_id,
           vendedor_id,
           clientes(razao_social, nome_parceiro, cnpj, cidade, uf, comprador, telefone, codigo_parceiro, negativado),
@@ -260,6 +262,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
         negativado: cl?.negativado ?? false,
         responsavel_id: d.responsavel_id ?? null,
         responsavel_nome: responsavelNome,
+        pedido_origem_id: d.pedido_origem_id ?? null,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         itens: (d.itens_pedido ?? []).map((i: any) => ({
           produto_id: i.produto_id,
@@ -374,6 +377,12 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
               <span className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${STATUS_COLOR[pedido.status] ?? "bg-gray-100 text-gray-700 border-gray-300"}`}>
                 {STATUS_LABEL[pedido.status] ?? pedido.status}
               </span>
+
+              {pedido.pedido_origem_id && (
+                <span className="flex items-center gap-1 rounded-full border border-orange-300 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-800">
+                  ⚠️ SALDO — faturamento de item sem estoque
+                </span>
+              )}
 
               {etapa && (
                 <span className={`flex items-center gap-1 text-xs ${etapa.urgente ? "text-red-600 font-semibold" : "text-muted-foreground"}`}>
