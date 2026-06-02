@@ -143,6 +143,7 @@ export default function Solicitacoes() {
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      console.log("Chamando UPDATE no banco:", { id, status });
       const { error } = await (supabase as any)
         .from("solicitacoes_gestor")
         .update({ status })
@@ -150,10 +151,14 @@ export default function Solicitacoes() {
       if (error) throw error;
     },
     onSuccess: async () => {
+      console.log("UPDATE bem sucedido, invalidando query");
       await qc.invalidateQueries({ queryKey: ["solicitacoes_gestor"] });
       toast.success("Status atualizado");
     },
-    onError: () => toast.error("Erro ao atualizar status"),
+    onError: (e: any) => {
+      console.error("Erro UPDATE status:", e);
+      toast.error("Erro ao atualizar status: " + (e?.message ?? "desconhecido"));
+    },
   });
 
   const deleteSolicitacao = useMutation({
@@ -305,7 +310,10 @@ export default function Solicitacoes() {
                   <div className="ml-auto flex items-center gap-3">
                     <Select
                       value={s.status}
-                      onValueChange={(val) => updateStatus.mutate({ id: s.id, status: val })}
+                      onValueChange={(novoStatus) => {
+                        console.log("Atualizando status:", { id: s.id, status: novoStatus });
+                        updateStatus.mutate({ id: s.id, status: novoStatus });
+                      }}
                     >
                       <SelectTrigger className="w-44 h-8 text-xs">
                         <SelectValue />
