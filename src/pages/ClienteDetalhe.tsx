@@ -171,6 +171,13 @@ export default function ClienteDetalhe() {
   const [editTabela, setEditTabela] = useState("");
   const [editEmail, setEditEmail] = useState("");
   const [editComprador, setEditComprador] = useState("");
+  const [editTelefone, setEditTelefone] = useState("");
+  const [editRua, setEditRua] = useState("");
+  const [editNumero, setEditNumero] = useState("");
+  const [editBairro, setEditBairro] = useState("");
+  const [editCidade, setEditCidade] = useState("");
+  const [editUf, setEditUf] = useState("");
+  const [editCep, setEditCep] = useState("");
   const [editVendedorId, setEditVendedorId] = useState("");
   const [editObs, setEditObs] = useState("");
   const [salvandoEdit, setSalvandoEdit] = useState(false);
@@ -192,8 +199,10 @@ export default function ClienteDetalhe() {
   const [analiseObs, setAnaliseObs] = useState("");
   const [salvandoAnalise, setSalvandoAnalise] = useState(false);
 
-  const canEdit = role === "admin" || role === "faturamento";
-  const canObs = canEdit || (role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id);
+  const canEditFull = role === "admin" || role === "faturamento";
+  const canEditLimitado = role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id;
+  const canEdit = canEditFull || canEditLimitado;
+  const canObs = canEditFull || (role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id);
 
   const enviarAnalise = async () => {
     if (!cliente) return;
@@ -420,6 +429,13 @@ export default function ClienteDetalhe() {
     setEditTabela(cliente.tabela_preco ?? "");
     setEditEmail(cliente.email ?? "");
     setEditComprador(cliente.comprador ?? "");
+    setEditTelefone(cliente.telefone ?? "");
+    setEditRua(cliente.rua ?? "");
+    setEditNumero(cliente.numero ?? "");
+    setEditBairro(cliente.bairro ?? "");
+    setEditCidade(cliente.cidade ?? "");
+    setEditUf(cliente.uf ?? "");
+    setEditCep(cliente.cep ?? "");
     setEditVendedorId(cliente.vendedor_id ?? "");
     setEditObs(cliente.observacoes_trade ?? "");
     setEditOpen(true);
@@ -437,6 +453,13 @@ export default function ClienteDetalhe() {
         tabela_preco: editTabela || null,
         email: editEmail.trim() || null,
         comprador: editComprador.trim() || null,
+        telefone: editTelefone.trim() || null,
+        rua: editRua.trim() || null,
+        numero: editNumero.trim() || null,
+        bairro: editBairro.trim() || null,
+        cidade: editCidade.trim() || null,
+        uf: editUf.trim() || null,
+        cep: editCep.replace(/\D/g, "") || null,
         vendedor_id: editVendedorId || null,
         observacoes_trade: editObs.trim() || null,
       })
@@ -561,7 +584,7 @@ export default function ClienteDetalhe() {
                 Editar
               </Button>
             )}
-            {canEdit && (
+            {canEditFull && (
               <Button size="sm" variant="destructive" onClick={() => setExcluirOpen(true)}>
                 <Trash2 className="h-4 w-4" />
                 Excluir
@@ -856,55 +879,101 @@ export default function ClienteDetalhe() {
           <DialogHeader><DialogTitle>Editar cliente</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label>Razão Social *</Label>
-                <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>CNPJ</Label>
-                <Input value={editCnpj} onChange={(e) => setEditCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
-              </div>
+              {canEditFull && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Razão Social *</Label>
+                  <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} />
+                </div>
+              )}
+              {canEditFull && (
+                <div className="space-y-1.5">
+                  <Label>CNPJ</Label>
+                  <Input value={editCnpj} onChange={(e) => setEditCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label>Email XML/Boleto</Label>
                 <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
               </div>
-              <div className="space-y-1.5">
-                <Label>Cluster</Label>
-                <Select value={editCluster} onValueChange={setEditCluster}>
-                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">— Nenhum —</SelectItem>
-                    {CLUSTERS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Tabela de preço</Label>
-                <Select value={editTabela} onValueChange={setEditTabela}>
-                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">— Nenhuma —</SelectItem>
-                    {TABELAS_PRECO.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {canEditFull && (
+                <div className="space-y-1.5">
+                  <Label>Cluster</Label>
+                  <Select value={editCluster} onValueChange={setEditCluster}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">— Nenhum —</SelectItem>
+                      {CLUSTERS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {canEditFull && (
+                <div className="space-y-1.5">
+                  <Label>Tabela de preço</Label>
+                  <Select value={editTabela} onValueChange={setEditTabela}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">— Nenhuma —</SelectItem>
+                      {TABELAS_PRECO.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label>Comprador</Label>
                 <Input value={editComprador} onChange={(e) => setEditComprador(e.target.value)} />
               </div>
               <div className="space-y-1.5">
-                <Label>Vendedor (encarteiramento)</Label>
-                <Select value={editVendedorId} onValueChange={setEditVendedorId}>
-                  <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">— Nenhum —</SelectItem>
-                    {vendedores.map((v) => <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Label>Telefone</Label>
+                <Input value={editTelefone} onChange={(e) => setEditTelefone(e.target.value)} />
               </div>
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label>Observações internas</Label>
-                <Textarea value={editObs} onChange={(e) => setEditObs(e.target.value)} rows={3} />
+              {canEditFull && (
+                <div className="space-y-1.5">
+                  <Label>Vendedor (encarteiramento)</Label>
+                  <Select value={editVendedorId} onValueChange={setEditVendedorId}>
+                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">— Nenhum —</SelectItem>
+                      {vendedores.map((v) => <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+              {canEditFull && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Observações internas</Label>
+                  <Textarea value={editObs} onChange={(e) => setEditObs(e.target.value)} rows={3} />
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-3">
+              <h4 className="text-sm font-semibold">Endereço</h4>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Rua</Label>
+                  <Input value={editRua} onChange={(e) => setEditRua(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Número</Label>
+                  <Input value={editNumero} onChange={(e) => setEditNumero(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Bairro</Label>
+                  <Input value={editBairro} onChange={(e) => setEditBairro(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Cidade</Label>
+                  <Input value={editCidade} onChange={(e) => setEditCidade(e.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>UF</Label>
+                  <Input value={editUf} onChange={(e) => setEditUf(e.target.value)} maxLength={2} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>CEP</Label>
+                  <Input value={editCep} onChange={(e) => setEditCep(e.target.value)} placeholder="00000-000" />
+                </div>
               </div>
             </div>
           </div>
