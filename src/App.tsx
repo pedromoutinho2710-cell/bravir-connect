@@ -14,6 +14,7 @@ import NovoPedido from "./pages/vendedor/NovoPedido";
 import MeusPedidos from "./pages/vendedor/MeusPedidos";
 import MeuPainel from "./pages/vendedor/MeuPainel";
 import MeusClientes from "./pages/vendedor/MeusClientes";
+import MinhasTarefas from "./pages/vendedor/MinhasTarefas";
 import CadastrarCliente from "./pages/vendedor/CadastrarCliente";
 import Faturamento from "./pages/Faturamento";
 import Formularios from "./pages/admin/Formularios";
@@ -113,6 +114,7 @@ const App = () => (
               <Route path="/novo-pedido" element={<NovoPedido />} />
               <Route path="/meus-pedidos" element={<MeusPedidos />} />
               <Route path="/meus-clientes" element={<MeusClientes />} />
+              <Route path="/minhas-tarefas" element={<MinhasTarefas />} />
               <Route path="/cadastrar-cliente" element={<CadastrarCliente />} />
               <Route path="/meu-pipeline" element={<MeuPipeline />} />
             </Route>

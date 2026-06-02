@@ -20,6 +20,7 @@ import {
   Boxes,
   FileText,
   Calculator,
+  CheckSquare,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -65,6 +66,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
     { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
     { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
+    { title: "Minhas Tarefas", url: "/minhas-tarefas", icon: CheckSquare },
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
     { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
     { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
