@@ -238,7 +238,7 @@ export default function Dashboard() {
             .select("id, vendedor_id, cliente_id, status, itens_pedido(total_item)")
             .gte("data_pedido", kpiInicio)
             .lte("data_pedido", kpiFim)
-            .not("status", "in", '("rascunho","cancelado")'),
+            .not("status", "in", '("rascunho","cancelado","devolvido")'),
           // Pedidos em pipeline (a faturar) dentro do período
           supabase
             .from("pedidos")
@@ -385,7 +385,7 @@ export default function Dashboard() {
           });
         }
 
-        const rankingList: RankingVendedor[] = Object.entries(vendedorAgg)
+        let rankingList: RankingVendedor[] = Object.entries(vendedorAgg)
           .map(([vendedor_id, data]) => ({
             vendedor_id,
             nome: profileMap[vendedor_id] ?? "—",
@@ -416,10 +416,12 @@ export default function Dashboard() {
         }
 
         todosVendedorIds.forEach((vendedor_id) => {
+          const nome = profileMap[vendedor_id] ?? "—";
+          if (!nome || nome === "—") return; // pular vendedores sem profile
           if (!vendedorAgg[vendedor_id]) {
             rankingList.push({
               vendedor_id,
-              nome: profileMap[vendedor_id] ?? "—",
+              nome,
               faturamento: 0,
               numPedidos: 0,
               clientesAtivos: 0,
@@ -429,6 +431,7 @@ export default function Dashboard() {
           }
         });
 
+        rankingList = rankingList.filter((r) => r.nome && r.nome !== "—");
         rankingList.sort((a, b) => b.faturamento - a.faturamento);
         setRanking(rankingList);
 
