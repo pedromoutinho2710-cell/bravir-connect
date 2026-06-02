@@ -349,6 +349,21 @@ export default function MeuPipeline() {
     onError: (e: any) => toast.error(e?.message ?? "Erro ao adicionar"),
   });
 
+  const removerPipelineM = useMutation({
+    mutationFn: async (cliente_id: string) => {
+      const { error } = await (supabase as any)
+        .from("clientes")
+        .update({ etapa_pipeline: null, pipeline_updated_at: new Date().toISOString() })
+        .eq("id", cliente_id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["meu-pipeline"] });
+      toast.success("Cliente removido do pipeline");
+    },
+    onError: (e: any) => toast.error(e?.message ?? "Erro ao remover"),
+  });
+
   // Estado de modais
   const [editCard, setEditCard] = useState<Card | null>(null);
   const [contatoCard, setContatoCard] = useState<Card | null>(null);
@@ -662,6 +677,7 @@ export default function MeuPipeline() {
                       onEdit={() => setEditCard(card)}
                       onContato={() => setContatoCard(card)}
                       onAbrirFicha={() => setFichaClienteId(card.cliente_id)}
+                      onRemover={() => removerPipelineM.mutate(card.cliente_id)}
                     />
                   ))}
                 </div>
@@ -1082,6 +1098,7 @@ function CardKanban({
   onEdit,
   onContato,
   onAbrirFicha,
+  onRemover,
 }: {
   card: Card;
   fields: Record<FieldKey, boolean>;
@@ -1089,6 +1106,7 @@ function CardKanban({
   onEdit: () => void;
   onContato: () => void;
   onAbrirFicha: () => void;
+  onRemover: () => void;
 }) {
   const hoje = hojeISO();
   const parado =
@@ -1187,6 +1205,10 @@ function CardKanban({
         <Button variant="ghost" size="sm" className="h-6 flex-1 text-[11px]" onClick={onContato}>
           <Phone className="mr-1 h-3 w-3" />
           Contato
+        </Button>
+        <Button variant="ghost" size="sm" className="h-6 flex-1 text-[11px] text-red-600 hover:text-red-700" onClick={onRemover}>
+          <X className="mr-1 h-3 w-3" />
+          Remover
         </Button>
       </div>
     </div>
