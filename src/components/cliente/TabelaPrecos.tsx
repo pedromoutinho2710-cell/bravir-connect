@@ -86,17 +86,6 @@ export function TabelaPrecos({
         });
       }
 
-      const descontosMap: Record<string, number> = {};
-      if (clienteCluster) {
-        const { data: descs } = await supabase
-          .from("descontos")
-          .select("produto_id, percentual_desconto")
-          .eq("perfil_cliente", clienteCluster);
-        (descs ?? []).forEach((d) => {
-          descontosMap[d.produto_id] = Number(d.percentual_desconto);
-        });
-      }
-
       const impostosMap: Record<string, { ipi: number; st: number }> = {};
       if (clienteUf && produtos.length > 0) {
         const codigos = produtos.map((p) => p.codigo_jiva);
@@ -110,33 +99,13 @@ export function TabelaPrecos({
         });
       }
 
-      const { data: itens } = await supabase
-        .from("itens_pedido")
-        .select("produto_id, preco_final, pedidos!inner(cliente_id)")
-        .eq("pedidos.cliente_id", clienteId);
-
-      const historicoMap: Record<string, number> = {};
-      ((itens ?? []) as unknown as { produto_id: string; preco_final: number | null }[]).forEach((i) => {
-        if (i.preco_final == null) return;
-        const v = Number(i.preco_final);
-        if (!Number.isFinite(v) || v <= 0) return;
-        if (historicoMap[i.produto_id] == null || v > historicoMap[i.produto_id]) {
-          historicoMap[i.produto_id] = v;
-        }
-      });
-
+      // Preço líquido sem impostos = preço do cluster (tabela do cliente) direto,
+      // sem desconto do cluster, sem desconto adicional e sem piso histórico.
       const calculadas: LinhaProduto[] = produtos.map((p) => {
-        const bruto = precosMap[p.id] ?? 0;
-        const descCluster = descontosMap[p.id] ?? 0;
-        let precoCluster = bruto * (1 - descCluster);
-        if (clienteDescontoAdicional != null) {
-          precoCluster = precoCluster * (1 - clienteDescontoAdicional);
-        }
-        const precoHist = historicoMap[p.id] ?? 0;
-        const precoFinal = Math.max(precoCluster, precoHist);
+        const precoCluster = precosMap[p.id] ?? 0;
         return {
           ...p,
-          precoFinal: precoFinal === 0 ? null : precoFinal,
+          precoFinal: precoCluster === 0 ? null : precoCluster,
           ipi: impostosMap[p.codigo_jiva]?.ipi ?? 0,
           st: impostosMap[p.codigo_jiva]?.st ?? 0,
         };
@@ -160,7 +129,7 @@ export function TabelaPrecos({
     return () => {
       cancelado = true;
     };
-  }, [clienteId, clienteTabela, clienteCluster, clienteDescontoAdicional, clienteUf]);
+  }, [clienteTabela, clienteUf]);
 
   const grupos = useMemo(() => {
     const map: Record<string, LinhaProduto[]> = {};
