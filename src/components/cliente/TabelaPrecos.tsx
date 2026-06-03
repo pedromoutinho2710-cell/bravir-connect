@@ -303,20 +303,15 @@ export function TabelaPrecos({
       let r = cabRow + 1;
       const linhasProduto: number[] = [];
       grupos.forEach((g) => {
-        // Apenas itens com quantidade pedida; a quantidade exportada é
-        // arredondada para o múltiplo mais próximo da CX de embarque.
-        const itensExportar = g.itens
-          .map((it) => {
-            const qtdBruta = qtds[it.id] ?? 0;
-            if (qtdBruta <= 0) return null;
-            const cx = it.cx_embarque > 0 ? it.cx_embarque : 1;
-            const qtdExportada = Math.max(cx, Math.round(qtdBruta / cx) * cx);
-            return { it, qtdExportada };
-          })
-          .filter((x): x is { it: LinhaProduto; qtdExportada: number } => x !== null);
-
-        // Não exportar grupos de marca sem itens pedidos.
-        if (itensExportar.length === 0) return;
+        // Exporta todos os produtos da tabela (catálogo completo). Quando há
+        // quantidade pedida, ela é arredondada para o múltiplo mais próximo
+        // da CX de embarque; sem quantidade pedida, exporta 0.
+        const itensExportar = g.itens.map((it) => {
+          const qtdBruta = qtds[it.id] ?? 0;
+          const cx = it.cx_embarque > 0 ? it.cx_embarque : 1;
+          const qtdExportada = qtdBruta > 0 ? Math.max(cx, Math.round(qtdBruta / cx) * cx) : 0;
+          return { it, qtdExportada };
+        });
 
         ws.mergeCells(`A${r}:I${r}`);
         const gc = ws.getCell(`A${r}`);
