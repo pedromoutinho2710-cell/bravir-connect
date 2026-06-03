@@ -99,13 +99,28 @@ export function TabelaPrecos({
         });
       }
 
-      // Preço líquido sem impostos = preço do cluster (tabela do cliente) direto,
-      // sem desconto do cluster, sem desconto adicional e sem piso histórico.
+      // Desconto do cluster (perfil do cliente) por produto — tabela `descontos`,
+      // chaveada por produto_id × perfil_cliente. percentual_desconto é fração (0,25 = 25%).
+      const descontosMap: Record<string, number> = {};
+      if (clienteCluster) {
+        const { data: descontos } = await supabase
+          .from("descontos")
+          .select("produto_id, percentual_desconto")
+          .eq("perfil_cliente", clienteCluster);
+        (descontos ?? []).forEach((d) => {
+          if (d.produto_id) descontosMap[d.produto_id] = Number(d.percentual_desconto);
+        });
+      }
+
+      // Preço líquido sem IPI = preço bruto da tabela do cliente já com o
+      // desconto do cluster aplicado: preco_bruto × (1 - desconto_cluster).
       const calculadas: LinhaProduto[] = produtos.map((p) => {
-        const precoCluster = precosMap[p.id] ?? 0;
+        const precoBruto = precosMap[p.id] ?? 0;
+        const descontoCluster = descontosMap[p.id] ?? 0;
+        const precoLiquido = precoBruto * (1 - descontoCluster);
         return {
           ...p,
-          precoFinal: precoCluster === 0 ? null : precoCluster,
+          precoFinal: precoBruto === 0 ? null : precoLiquido,
           ipi: impostosMap[p.codigo_jiva]?.ipi ?? 0,
           st: impostosMap[p.codigo_jiva]?.st ?? 0,
         };
@@ -129,7 +144,7 @@ export function TabelaPrecos({
     return () => {
       cancelado = true;
     };
-  }, [clienteTabela, clienteUf]);
+  }, [clienteTabela, clienteUf, clienteCluster]);
 
   const grupos = useMemo(() => {
     const map: Record<string, LinhaProduto[]> = {};
