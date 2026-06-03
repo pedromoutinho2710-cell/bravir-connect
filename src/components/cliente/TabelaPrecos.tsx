@@ -15,6 +15,7 @@ type Props = {
   clienteTabela: string | null;
   clienteCluster: string | null;
   clienteDescontoAdicional: number | null;
+  clienteCodigoParceiro?: string | null;
   suframa: boolean | null;
 };
 
@@ -45,6 +46,7 @@ export function TabelaPrecos({
   clienteTabela,
   clienteCluster,
   clienteDescontoAdicional,
+  clienteCodigoParceiro,
   suframa: _suframa,
 }: Props) {
   const [loading, setLoading] = useState(true);
@@ -112,15 +114,33 @@ export function TabelaPrecos({
         });
       }
 
+      // Preço especial por cliente (precos_cliente_produto) — chaveado por
+      // codigo_parceiro × codigo_produto. Funciona como piso de preço.
+      const precosEspeciaisMap: Record<string, number> = {};
+      if (clienteCodigoParceiro) {
+        const { data: especiais } = await supabase
+          .from("precos_cliente_produto")
+          .select("codigo_produto, preco_unitario")
+          .eq("codigo_parceiro", clienteCodigoParceiro);
+        (especiais ?? []).forEach((e) => {
+          if (e.codigo_produto != null && e.preco_unitario != null) {
+            precosEspeciaisMap[e.codigo_produto] = Number(e.preco_unitario);
+          }
+        });
+      }
+
       // Preço líquido sem IPI = preço bruto da tabela do cliente já com o
       // desconto do cluster aplicado: preco_bruto × (1 - desconto_cluster).
+      // Em seguida aplica-se o preço especial do cliente como piso de preço.
       const calculadas: LinhaProduto[] = produtos.map((p) => {
         const precoBruto = precosMap[p.id] ?? 0;
         const descontoCluster = descontosMap[p.id] ?? 0;
         const precoLiquido = precoBruto * (1 - descontoCluster);
+        const precoEspecial = precosEspeciaisMap[p.codigo_jiva];
+        const precoFinal = Math.max(precoLiquido, precoEspecial ?? 0);
         return {
           ...p,
-          precoFinal: precoBruto === 0 ? null : precoLiquido,
+          precoFinal: precoBruto === 0 ? null : precoFinal,
           ipi: impostosMap[p.codigo_jiva]?.ipi ?? 0,
           st: impostosMap[p.codigo_jiva]?.st ?? 0,
         };
@@ -144,7 +164,7 @@ export function TabelaPrecos({
     return () => {
       cancelado = true;
     };
-  }, [clienteTabela, clienteUf, clienteCluster]);
+  }, [clienteTabela, clienteUf, clienteCluster, clienteCodigoParceiro]);
 
   const grupos = useMemo(() => {
     const map: Record<string, LinhaProduto[]> = {};
@@ -168,6 +188,19 @@ export function TabelaPrecos({
     setQtds((prev) => ({ ...prev, [id]: Number.isFinite(n) && n >= 0 ? n : 0 }));
   };
 
+  // Arredonda a quantidade para o múltiplo mais próximo da CX de embarque,
+  // com mínimo de 1 caixa. Aplicado ao sair do campo (onBlur).
+  const arredondarQtd = (id: string, cxEmbarque: number) => {
+    const cx = cxEmbarque > 0 ? cxEmbarque : 1;
+    setQtds((prev) => {
+      const atual = prev[id] ?? 0;
+      if (atual <= 0) return prev;
+      const arredondado = Math.max(cx, Math.round(atual / cx) * cx);
+      if (arredondado === atual) return prev;
+      return { ...prev, [id]: arredondado };
+    });
+  };
+
   const totaisGerais = useMemo(() => {
     let semST = 0;
     let comST = 0;
@@ -176,7 +209,8 @@ export function TabelaPrecos({
       if (l.precoFinal == null || qtd <= 0) return;
       const precoComIpi = l.precoFinal * (1 + l.ipi);
       const precoComIpiSt = precoComIpi * (1 + l.st);
-      semST += precoComIpi * qtd;
+      // Total s/ ST = quantidade × Preço Líq. s/ IPI (precoFinal).
+      semST += l.precoFinal * qtd;
       comST += precoComIpiSt * qtd;
     });
     return { semST, comST };
@@ -307,7 +341,7 @@ export function TabelaPrecos({
             { col: 5, val: precoLiq, fmt: '"R$"#,##0.00', align: "right" },
             { col: 6, val: precoComIpi, fmt: '"R$"#,##0.00', align: "right" },
             { col: 7, val: precoComIpiSt, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 8, val: { formula: `C${rowNum}*F${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 8, val: { formula: `C${rowNum}*E${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
             { col: 9, val: { formula: `C${rowNum}*G${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
           ];
           cells.forEach(({ col, val, fmt, align }) => {
@@ -423,6 +457,7 @@ export function TabelaPrecos({
                 itens={g.itens}
                 qtds={qtds}
                 onChangeQtd={setQtd}
+                onBlurQtd={arredondarQtd}
               />
             ))}
           </tbody>
@@ -453,11 +488,13 @@ function GrupoLinhas({
   itens,
   qtds,
   onChangeQtd,
+  onBlurQtd,
 }: {
   marca: string;
   itens: LinhaProduto[];
   qtds: Record<string, number>;
   onChangeQtd: (id: string, v: string) => void;
+  onBlurQtd: (id: string, cxEmbarque: number) => void;
 }) {
   return (
     <>
@@ -471,7 +508,8 @@ function GrupoLinhas({
         const precoLiq = it.precoFinal;
         const precoComIpi = precoLiq != null ? precoLiq * (1 + it.ipi) : null;
         const precoComIpiSt = precoComIpi != null ? precoComIpi * (1 + it.st) : null;
-        const totalSemST = precoComIpi != null ? precoComIpi * qtd : 0;
+        // Total s/ ST = quantidade × Preço Líq. s/ IPI (precoFinal).
+        const totalSemST = precoLiq != null ? precoLiq * qtd : 0;
         const totalComST = precoComIpiSt != null ? precoComIpiSt * qtd : 0;
         return (
           <tr key={it.id} className={idx % 2 === 1 ? "bg-muted/30" : undefined}>
@@ -487,11 +525,12 @@ function GrupoLinhas({
                 min={0}
                 value={qtd === 0 ? "" : qtd}
                 onChange={(e) => onChangeQtd(it.id, e.target.value)}
+                onBlur={() => onBlurQtd(it.id, it.cx_embarque)}
                 className="h-8 w-20 mx-auto text-center"
               />
             </td>
             <td className="px-3 py-1.5 text-right">
-              {precoComIpi != null && qtd > 0 ? formatBRL(totalSemST) : "—"}
+              {precoLiq != null && qtd > 0 ? formatBRL(totalSemST) : "—"}
             </td>
             <td className="px-3 py-1.5 text-right">
               {precoComIpiSt != null && qtd > 0 ? formatBRL(totalComST) : "—"}
