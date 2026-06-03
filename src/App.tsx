@@ -8,6 +8,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
+import AgenteChatFlutuante from "@/components/AgenteChatFlutuante";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import NovoPedido from "./pages/vendedor/NovoPedido";
@@ -191,6 +192,7 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
           </Routes>
           </Suspense>
+          <AgenteChatFlutuante />
           </ImpersonationProvider>
         </AuthProvider>
       </BrowserRouter>

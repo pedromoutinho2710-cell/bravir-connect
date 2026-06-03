@@ -1,0 +1,317 @@
+import { useEffect, useRef, useState } from "react";
+import { Bot, CheckCircle2, Loader2, MessageCircle, Send, X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
+
+const BRAND = "#0F6E56";
+
+const GREETING =
+  "Olá! Pode me contar sua dúvida, reportar um bug ou sugerir uma melhoria. Estou aqui para ajudar!";
+
+type MsgKind = "greeting" | "confirmation";
+
+interface ChatMsg {
+  id: number;
+  role: "user" | "assistant";
+  content: string;
+  kind?: MsgKind;
+}
+
+interface Registro {
+  tipo: "bug" | "nova" | "altera";
+  titulo?: string;
+  tela?: string;
+  descricao?: string;
+  motivo?: string;
+  prioridade?: "alta" | "normal";
+  mockup_prompt?: string;
+}
+
+// Extrai o primeiro objeto JSON balanceado a partir de uma string.
+function extractFirstJson(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+// Separa o texto exibido ao usuário do bloco REGISTRO:{...}.
+function splitRegistro(raw: string): { display: string; registro: Registro | null } {
+  const idx = raw.indexOf("REGISTRO:");
+  if (idx === -1) return { display: raw.trim(), registro: null };
+
+  const display = raw.slice(0, idx).trim();
+  const jsonStr = extractFirstJson(raw.slice(idx + "REGISTRO:".length));
+  if (!jsonStr) return { display: display || raw.trim(), registro: null };
+
+  try {
+    const registro = JSON.parse(jsonStr) as Registro;
+    if (registro && (registro.tipo === "bug" || registro.tipo === "nova" || registro.tipo === "altera")) {
+      return { display: display || "Anotei tudo aqui. 👇", registro };
+    }
+  } catch {
+    // JSON malformado — apenas mostra o texto bruto.
+  }
+  return { display: raw.trim(), registro: null };
+}
+
+export default function AgenteChatFlutuante() {
+  const { user, fullName } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [unread, setUnread] = useState(0);
+
+  const idRef = useRef(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nextId = () => {
+    idRef.current += 1;
+    return idRef.current;
+  };
+
+  // Mensagem de boas-vindas ao abrir pela primeira vez.
+  useEffect(() => {
+    if (open && messages.length === 0) {
+      setMessages([{ id: nextId(), role: "assistant", content: GREETING, kind: "greeting" }]);
+    }
+    if (open) setUnread(0);
+  }, [open, messages.length]);
+
+  // Auto-scroll para a última mensagem.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, loading]);
+
+  if (!user) return null;
+
+  async function salvarRegistro(registro: Registro, conversa: ChatMsg[]) {
+    const chatHistorico = conversa
+      .filter((m) => !m.kind)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- colunas novas ainda não estão no types.ts gerado
+    const { error } = await (supabase as any).from("solicitacoes_gestor").insert({
+      tipo: registro.tipo,
+      titulo: registro.titulo ?? null,
+      tela: registro.tela ?? null,
+      descricao: registro.descricao ?? registro.titulo ?? "(sem descrição)",
+      motivo: registro.motivo ?? null,
+      prioridade: registro.prioridade ?? "normal",
+      mockup_prompt: registro.mockup_prompt ?? null,
+      status: "aberto",
+      criado_por: user!.id,
+      criado_por_nome: fullName || user!.email || "Colaborador",
+      chat_historico: chatHistorico,
+    });
+
+    if (error) {
+      console.error("Erro ao salvar solicitação do agente:", error);
+      return false;
+    }
+    return true;
+  }
+
+  async function handleSend() {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    const userMsg: ChatMsg = { id: nextId(), role: "user", content: text };
+    const baseConversa = [...messages, userMsg];
+    setMessages(baseConversa);
+    setInput("");
+    setLoading(true);
+
+    try {
+      // Envia apenas os turnos reais (sem saudação/confirmações) para a API.
+      const apiMessages = baseConversa
+        .filter((m) => !m.kind)
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const { data, error } = await supabase.functions.invoke("agente-chat", {
+        body: { messages: apiMessages },
+      });
+
+      if (error || !data?.text) {
+        throw error ?? new Error("Resposta vazia do assistente");
+      }
+
+      const { display, registro } = splitRegistro(data.text as string);
+      const assistantMsg: ChatMsg = { id: nextId(), role: "assistant", content: display };
+      const comResposta = [...baseConversa, assistantMsg];
+      setMessages(comResposta);
+      if (!open) setUnread((u) => u + 1);
+
+      if (registro) {
+        const ok = await salvarRegistro(registro, comResposta);
+        if (ok) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: nextId(),
+              role: "assistant",
+              content: "✓ Registrado! Pedro vai analisar sua solicitação em breve.",
+              kind: "confirmation",
+            },
+          ]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: nextId(),
+              role: "assistant",
+              content: "Não consegui registrar agora. Pode tentar de novo em instantes?",
+            },
+          ]);
+        }
+      }
+    } catch (err) {
+      console.error("Erro no agente de chat:", err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId(),
+          role: "assistant",
+          content: "Ops, tive um problema para responder agora. Tente novamente em alguns segundos.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ---- Botão fechado ----
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label="Abrir assistente Bravir"
+        className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-transform hover:scale-105"
+        style={{ bottom: 24, right: 24, backgroundColor: BRAND }}
+      >
+        <MessageCircle className="h-6 w-6" />
+        {unread > 0 && (
+          <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
+            {unread > 9 ? "9+" : unread}
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  // ---- Painel aberto ----
+  return (
+    <div
+      className="fixed z-50 flex flex-col overflow-hidden rounded-2xl border border-border bg-background shadow-2xl"
+      style={{ bottom: 24, right: 24, width: 340, height: 480, maxWidth: "calc(100vw - 32px)" }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: BRAND }}>
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20">
+          <Bot className="h-5 w-5" />
+        </div>
+        <div className="flex-1 leading-tight">
+          <p className="text-sm font-semibold">Assistente Bravir</p>
+          <p className="flex items-center gap-1.5 text-xs text-white/80">
+            <span className="inline-block h-2 w-2 rounded-full bg-green-300" />
+            Online
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          aria-label="Fechar assistente"
+          className="rounded-md p-1 transition-colors hover:bg-white/20"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+
+      {/* Mensagens */}
+      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-muted/30 px-3 py-4">
+        {messages.map((m) => {
+          if (m.kind === "confirmation") {
+            return (
+              <div
+                key={m.id}
+                className="flex items-start gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800"
+              >
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+                <span>{m.content}</span>
+              </div>
+            );
+          }
+          const isUser = m.role === "user";
+          return (
+            <div key={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
+                  isUser
+                    ? "rounded-br-sm bg-primary text-primary-foreground"
+                    : "rounded-bl-sm border border-border bg-background text-foreground"
+                }`}
+                style={isUser ? { backgroundColor: BRAND, color: "#fff" } : undefined}
+              >
+                {m.content}
+              </div>
+            </div>
+          );
+        })}
+
+        {loading && (
+          <div className="flex justify-start">
+            <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Digitando...
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="flex items-center gap-2 border-t border-border bg-background px-3 py-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          disabled={loading}
+          placeholder="Escreva sua mensagem..."
+          className="flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+        />
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={loading || !input.trim()}
+          aria-label="Enviar mensagem"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-40"
+          style={{ backgroundColor: BRAND }}
+        >
+          <Send className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
