@@ -2794,7 +2794,7 @@ export default function Faturamento() {
                 Copiar para Sankhya
               </div>
               <div className="rounded-md border bg-muted/20 px-3 py-1 min-w-[280px]">
-                {detalhePedido.pedido_origem_id && (
+                {detalhePedido?.pedido_origem_id && (
                   <div className="flex items-center gap-2 rounded-md border border-orange-300 bg-orange-50 px-3 py-2 mb-2">
                     <span className="text-sm font-bold text-orange-800">⚠️ SALDO</span>
                     <span className="text-xs text-orange-700">Faturamento de item sem estoque — identificar no Sankhya</span>
@@ -2806,7 +2806,7 @@ export default function Faturamento() {
                 />
                 <CopiarCampo
                   label="CNPJ"
-                  valor={detalhePedido?.cnpj ? formatCNPJ(detalhePedido.cnpj) : null}
+                  valor={detalhePedido?.cnpj ? formatCNPJ(detalhePedido?.cnpj) : null}
                 />
                 <CopiarCampo
                   label="Código do cliente"
