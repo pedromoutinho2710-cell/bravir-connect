@@ -327,6 +327,7 @@ export type Database = {
           marcas: string[] | null
           nome: string
           tipo: string | null
+          tipo_meta: string | null
           valor: number | null
         }
         Insert: {
@@ -340,6 +341,7 @@ export type Database = {
           marcas?: string[] | null
           nome: string
           tipo?: string | null
+          tipo_meta?: string | null
           valor?: number | null
         }
         Update: {
@@ -353,6 +355,7 @@ export type Database = {
           marcas?: string[] | null
           nome?: string
           tipo?: string | null
+          tipo_meta?: string | null
           valor?: number | null
         }
         Relationships: []
