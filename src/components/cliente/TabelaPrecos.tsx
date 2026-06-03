@@ -118,15 +118,22 @@ export function TabelaPrecos({
       // codigo_parceiro × codigo_produto. Funciona como piso de preço.
       const precosEspeciaisMap: Record<string, number> = {};
       if (clienteCodigoParceiro) {
-        const { data: especiais } = await supabase
+        const { data: especiais, error: errEsp } = await supabase
           .from("precos_cliente_produto")
           .select("codigo_produto, preco_unitario")
           .eq("codigo_parceiro", clienteCodigoParceiro);
+        // [DIAG temporário] preço especial por cliente
+        console.log("[TabelaPrecos] preço especial — clienteCodigoParceiro:", clienteCodigoParceiro);
+        console.log("[TabelaPrecos] preço especial — linhas retornadas:", especiais?.length ?? 0, especiais);
+        if (errEsp) console.warn("[TabelaPrecos] preço especial — erro na query:", errEsp);
         (especiais ?? []).forEach((e) => {
           if (e.codigo_produto != null && e.preco_unitario != null) {
-            precosEspeciaisMap[e.codigo_produto] = Number(e.preco_unitario);
+            precosEspeciaisMap[String(e.codigo_produto)] = Number(e.preco_unitario);
           }
         });
+        console.log("[TabelaPrecos] preço especial — mapa (codigo_produto → preço):", precosEspeciaisMap);
+      } else {
+        console.log("[TabelaPrecos] preço especial — clienteCodigoParceiro ausente:", clienteCodigoParceiro);
       }
 
       // Preço líquido sem IPI = preço bruto da tabela do cliente já com o
@@ -136,8 +143,14 @@ export function TabelaPrecos({
         const precoBruto = precosMap[p.id] ?? 0;
         const descontoCluster = descontosMap[p.id] ?? 0;
         const precoLiquido = precoBruto * (1 - descontoCluster);
-        const precoEspecial = precosEspeciaisMap[p.codigo_jiva];
+        const precoEspecial = precosEspeciaisMap[String(p.codigo_jiva)];
         const precoFinal = Math.max(precoLiquido, precoEspecial ?? 0);
+        // [DIAG temporário] log quando há preço especial para o produto
+        if (precoEspecial != null) {
+          console.log(
+            `[TabelaPrecos] preço especial — produto ${p.codigo_jiva}: calculado=${precoLiquido.toFixed(4)} especial=${precoEspecial} → final=${(precoBruto === 0 ? null : precoFinal)}`,
+          );
+        }
         return {
           ...p,
           precoFinal: precoBruto === 0 ? null : precoFinal,
@@ -186,19 +199,6 @@ export function TabelaPrecos({
   const setQtd = (id: string, v: string) => {
     const n = Number(v);
     setQtds((prev) => ({ ...prev, [id]: Number.isFinite(n) && n >= 0 ? n : 0 }));
-  };
-
-  // Arredonda a quantidade para o múltiplo mais próximo da CX de embarque,
-  // com mínimo de 1 caixa. Aplicado ao sair do campo (onBlur).
-  const arredondarQtd = (id: string, cxEmbarque: number) => {
-    const cx = cxEmbarque > 0 ? cxEmbarque : 1;
-    setQtds((prev) => {
-      const atual = prev[id] ?? 0;
-      if (atual <= 0) return prev;
-      const arredondado = Math.max(cx, Math.round(atual / cx) * cx);
-      if (arredondado === atual) return prev;
-      return { ...prev, [id]: arredondado };
-    });
   };
 
   const totaisGerais = useMemo(() => {
@@ -303,6 +303,21 @@ export function TabelaPrecos({
       let r = cabRow + 1;
       const linhasProduto: number[] = [];
       grupos.forEach((g) => {
+        // Apenas itens com quantidade pedida; a quantidade exportada é
+        // arredondada para o múltiplo mais próximo da CX de embarque.
+        const itensExportar = g.itens
+          .map((it) => {
+            const qtdBruta = qtds[it.id] ?? 0;
+            if (qtdBruta <= 0) return null;
+            const cx = it.cx_embarque > 0 ? it.cx_embarque : 1;
+            const qtdExportada = Math.max(cx, Math.round(qtdBruta / cx) * cx);
+            return { it, qtdExportada };
+          })
+          .filter((x): x is { it: LinhaProduto; qtdExportada: number } => x !== null);
+
+        // Não exportar grupos de marca sem itens pedidos.
+        if (itensExportar.length === 0) return;
+
         ws.mergeCells(`A${r}:I${r}`);
         const gc = ws.getCell(`A${r}`);
         gc.value = g.marca;
@@ -319,8 +334,7 @@ export function TabelaPrecos({
         }
         r++;
 
-        g.itens.forEach((it, idx) => {
-          const qtd = qtds[it.id] ?? 0;
+        itensExportar.forEach(({ it, qtdExportada: qtd }, idx) => {
           const precoLiq = it.precoFinal ?? 0;
           const precoComIpi = precoLiq * (1 + it.ipi);
           const precoComIpiSt = precoComIpi * (1 + it.st);
@@ -457,7 +471,6 @@ export function TabelaPrecos({
                 itens={g.itens}
                 qtds={qtds}
                 onChangeQtd={setQtd}
-                onBlurQtd={arredondarQtd}
               />
             ))}
           </tbody>
@@ -488,13 +501,11 @@ function GrupoLinhas({
   itens,
   qtds,
   onChangeQtd,
-  onBlurQtd,
 }: {
   marca: string;
   itens: LinhaProduto[];
   qtds: Record<string, number>;
   onChangeQtd: (id: string, v: string) => void;
-  onBlurQtd: (id: string, cxEmbarque: number) => void;
 }) {
   return (
     <>
@@ -525,7 +536,6 @@ function GrupoLinhas({
                 min={0}
                 value={qtd === 0 ? "" : qtd}
                 onChange={(e) => onChangeQtd(it.id, e.target.value)}
-                onBlur={() => onBlurQtd(it.id, it.cx_embarque)}
                 className="h-8 w-20 mx-auto text-center"
               />
             </td>
