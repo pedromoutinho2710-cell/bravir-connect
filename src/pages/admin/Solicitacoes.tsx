@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -14,73 +16,87 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Loader2, PlusSquare, Trash2 } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Loader2, Eye } from "lucide-react";
 
-const PEDRO_EMAIL = "pedro.menezes@bravir.com.br";
+const VERDE = "#0F6E56";
+
+interface ChatMensagem {
+  role: "user" | "assistant" | string;
+  content: string;
+}
 
 interface Solicitacao {
   id: string;
-  tipo: "nova" | "altera" | "bug";
+  tipo: string;
   tela: string | null;
+  titulo: string | null;
   descricao: string;
   motivo: string | null;
-  prioridade: "urgente" | "alta" | "normal" | "baixa";
-  status: "aberto" | "em-andamento" | "concluido";
+  prioridade: string;
+  status: string;
   criado_por: string | null;
   criado_por_nome: string | null;
-  created_at: string;
+  created_at: string | null;
+  // Campos opcionais — presentes apenas se existirem na tabela viva.
+  mockup_prompt?: string | null;
+  chat_historico?: ChatMensagem[] | null;
 }
 
-const TIPO_LABEL: Record<Solicitacao["tipo"], string> = {
-  nova: "Sugestão de adição na plataforma",
-  altera: "Alteração",
-  bug: "Bug",
+/* ───────────────────────── Metadados de exibição ───────────────────────── */
+
+const TIPO_META: Record<string, { label: string; cls: string }> = {
+  bug: { label: "Bug", cls: "bg-red-100 text-red-800 border-red-300" },
+  nova: { label: "Nova feature", cls: "bg-blue-100 text-blue-800 border-blue-300" },
+  altera: { label: "Melhoria", cls: "bg-emerald-100 text-emerald-800 border-emerald-300" },
 };
 
-const TIPO_CLASS: Record<Solicitacao["tipo"], string> = {
-  nova: "bg-blue-100 text-blue-800 border-blue-300",
-  altera: "bg-green-100 text-green-800 border-green-300",
-  bug: "bg-red-100 text-red-800 border-red-300",
+function tipoMeta(t: string) {
+  return TIPO_META[t] ?? { label: t, cls: "bg-gray-100 text-gray-700 border-gray-300" };
+}
+
+const STATUS_META: Record<string, { label: string; cls: string }> = {
+  aberto: { label: "Aberto", cls: "bg-blue-100 text-blue-800 border-blue-300" },
+  em_analise: { label: "Em análise", cls: "bg-amber-100 text-amber-800 border-amber-300" },
+  "em-andamento": { label: "Em andamento", cls: "bg-amber-100 text-amber-800 border-amber-300" },
+  concluido: { label: "Concluído", cls: "bg-green-100 text-green-800 border-green-300" },
+  recusado: { label: "Recusado", cls: "bg-red-100 text-red-800 border-red-300" },
 };
 
-const PRIORIDADE_LABEL: Record<Solicitacao["prioridade"], string> = {
-  urgente: "Urgente",
-  alta: "Alta",
-  normal: "Normal",
-  baixa: "Baixa",
+function statusMeta(s: string) {
+  return STATUS_META[s] ?? { label: s, cls: "bg-gray-100 text-gray-700 border-gray-300" };
+}
+
+const PRIO_META: Record<string, { label: string; cls: string }> = {
+  urgente: { label: "Urgente", cls: "bg-red-100 text-red-800 border-red-300" },
+  alta: { label: "Alta", cls: "bg-orange-100 text-orange-800 border-orange-300" },
+  normal: { label: "Normal", cls: "bg-gray-100 text-gray-700 border-gray-300" },
+  baixa: { label: "Baixa", cls: "bg-green-100 text-green-800 border-green-300" },
 };
 
-const PRIORIDADE_CLASS: Record<Solicitacao["prioridade"], string> = {
-  urgente: "bg-red-100 text-red-800 border-red-300",
-  alta: "bg-orange-100 text-orange-800 border-orange-300",
-  normal: "bg-gray-100 text-gray-700 border-gray-300",
-  baixa: "bg-green-100 text-green-800 border-green-300",
-};
+function prioMeta(p: string) {
+  return PRIO_META[p] ?? { label: p, cls: "bg-gray-100 text-gray-700 border-gray-300" };
+}
 
-const STATUS_LABEL: Record<Solicitacao["status"], string> = {
-  aberto: "Aberto",
-  "em-andamento": "Em andamento",
-  concluido: "Concluído",
-};
+const TIPO_FILTERS = [
+  { value: "todos", label: "Todos" },
+  { value: "bug", label: "Bug" },
+  { value: "nova", label: "Nova feature" },
+  { value: "altera", label: "Melhoria" },
+];
 
-const STATUS_CLASS: Record<Solicitacao["status"], string> = {
-  aberto: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  "em-andamento": "bg-blue-100 text-blue-800 border-blue-300",
-  concluido: "bg-green-100 text-green-800 border-green-300",
-};
+function relativo(iso: string | null) {
+  if (!iso) return "";
+  try {
+    return formatDistanceToNow(new Date(iso), { addSuffix: true, locale: ptBR });
+  } catch {
+    return "";
+  }
+}
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("pt-BR", {
+function dataCompleta(iso: string | null) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -89,275 +105,410 @@ function formatDate(iso: string) {
   });
 }
 
+/* ───────────────────────────── Página ───────────────────────────── */
+
 export default function Solicitacoes() {
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const isMobile = useIsMobile();
   const [filterTipo, setFilterTipo] = useState<string>("todos");
-  const [filterPrioridade, setFilterPrioridade] = useState<string>("todas");
   const [filterStatus, setFilterStatus] = useState<string>("todos");
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const isAdmin = user?.email === PEDRO_EMAIL;
+  // KPIs — count do Supabase por status.
+  const { data: kpis } = useQuery({
+    queryKey: ["solicitacoes_gestor_kpis"],
+    queryFn: async () => {
+      const contar = async (status: string) => {
+        const { count, error } = await supabase
+          .from("solicitacoes_gestor")
+          .select("*", { count: "exact", head: true })
+          .eq("status", status);
+        if (error) throw error;
+        return count ?? 0;
+      };
+      const [aberto, emAnalise, concluido] = await Promise.all([
+        contar("aberto"),
+        contar("em_analise"),
+        contar("concluido"),
+      ]);
+      return { aberto, emAnalise, concluido };
+    },
+  });
 
   const { data: solicitacoes = [], isLoading } = useQuery({
-    queryKey: ["solicitacoes_gestor", isAdmin, user?.id],
+    queryKey: ["solicitacoes_gestor"],
     queryFn: async () => {
-      let query = (supabase as any)
+      const { data, error } = await supabase
         .from("solicitacoes_gestor")
         .select("*")
         .order("created_at", { ascending: false });
-
-      if (!isAdmin && user?.id) {
-        query = query.eq("criado_por", user.id);
-      }
-
-      const { data, error } = await query;
       if (error) throw error;
-      const rows = (data ?? []) as Solicitacao[];
-
-      const missingIds = Array.from(
-        new Set(
-          rows
-            .filter((r) => !r.criado_por_nome && r.criado_por)
-            .map((r) => r.criado_por as string),
-        ),
-      );
-      if (missingIds.length === 0) return rows;
-
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", missingIds);
-
-      const nameById = new Map(
-        (profiles ?? []).map((p) => [p.id, p.full_name || p.email || null]),
-      );
-      return rows.map((r) =>
-        r.criado_por_nome || !r.criado_por
-          ? r
-          : { ...r, criado_por_nome: nameById.get(r.criado_por) ?? null },
-      );
+      return (data ?? []) as unknown as Solicitacao[];
     },
-    enabled: !!user,
   });
 
   const updateStatus = useMutation({
     mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("solicitacoes_gestor")
         .update({ status })
         .eq("id", id);
       if (error) throw error;
     },
     onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["solicitacoes_gestor"] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["solicitacoes_gestor"] }),
+        qc.invalidateQueries({ queryKey: ["solicitacoes_gestor_kpis"] }),
+      ]);
       toast.success("Status atualizado");
     },
-    onError: (e: any) => {
+    onError: (e: unknown) => {
       console.error("Erro UPDATE status:", e);
-      toast.error("Erro ao atualizar status: " + (e?.message ?? "desconhecido"));
+      toast.error("Erro ao atualizar status: " + (e instanceof Error ? e.message : "desconhecido"));
     },
-  });
-
-  const deleteSolicitacao = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await (supabase as any)
-        .from("solicitacoes_gestor")
-        .delete()
-        .eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["solicitacoes_gestor"] });
-      toast.success("Solicitação excluída");
-      setDeleteId(null);
-    },
-    onError: () => toast.error("Erro ao excluir"),
   });
 
   const filtered = solicitacoes.filter((s) => {
-    if (filterStatus !== "todos" && s.status !== filterStatus) return false;
     if (filterTipo !== "todos" && s.tipo !== filterTipo) return false;
-    if (filterPrioridade !== "todas" && s.prioridade !== filterPrioridade) return false;
+    if (filterStatus !== "todos" && s.status !== filterStatus) return false;
     return true;
   });
 
-  const total = solicitacoes.length;
-  const abertos = solicitacoes.filter((s) => s.status === "aberto").length;
-  const emAndamento = solicitacoes.filter((s) => s.status === "em-andamento").length;
-  const concluidos = solicitacoes.filter((s) => s.status === "concluido").length;
+  const selected = solicitacoes.find((s) => s.id === selectedId) ?? null;
+
+  const kpiCards = [
+    { label: "Em aberto", value: kpis?.aberto ?? 0, color: "text-blue-700" },
+    { label: "Em análise", value: kpis?.emAnalise ?? 0, color: "text-amber-700" },
+    { label: "Concluídos", value: kpis?.concluido ?? 0, color: "text-green-700" },
+  ];
 
   return (
-    <div className="p-6 space-y-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Solicitações de melhoria</h1>
-        <Button asChild size="sm">
-          <Link to="/solicitacao">
-            <PlusSquare className="mr-2 h-4 w-4" />
-            Nova solicitação
-          </Link>
-        </Button>
+    <div className="p-6 space-y-6">
+      {/* Cabeçalho */}
+      <div>
+        <h1 className="text-2xl font-bold">Solicitações</h1>
+        <p className="text-sm text-muted-foreground">Feedbacks da equipe</p>
       </div>
 
-      {/* Summary cards — also act as status tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          { label: "Total", value: total, color: "text-gray-700", status: "todos" },
-          { label: "Em aberto", value: abertos, color: "text-yellow-700", status: "aberto" },
-          { label: "Em andamento", value: emAndamento, color: "text-blue-700", status: "em-andamento" },
-          { label: "Concluídos", value: concluidos, color: "text-green-700", status: "concluido" },
-        ].map(({ label, value, color, status }) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => setFilterStatus(status)}
-            className="text-left focus:outline-none"
-            aria-pressed={filterStatus === status}
-          >
-            <Card
-              className={`transition-colors hover:bg-muted/50 ${
-                filterStatus === status ? "ring-2 ring-primary" : ""
-              }`}
-            >
-              <CardContent className="pt-4 pb-3 px-4">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
-                <p className={`text-3xl font-bold ${color}`}>{value}</p>
-              </CardContent>
-            </Card>
-          </button>
+      {/* KPIs */}
+      <div className="grid grid-cols-3 gap-4">
+        {kpiCards.map(({ label, value, color }) => (
+          <Card key={label}>
+            <CardContent className="pt-4 pb-3 px-4">
+              <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
+              <p className={`text-3xl font-bold ${color}`}>{value}</p>
+            </CardContent>
+          </Card>
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <Select value={filterTipo} onValueChange={setFilterTipo}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Tipo" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todos">Todos os tipos</SelectItem>
-            <SelectItem value="nova">Sugestão de adição na plataforma</SelectItem>
-            <SelectItem value="altera">Alteração</SelectItem>
-            <SelectItem value="bug">Bug</SelectItem>
-          </SelectContent>
-        </Select>
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Coluna esquerda — lista */}
+        <div className="flex-1 w-full space-y-4">
+          {/* Filtros */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap gap-2">
+              {TIPO_FILTERS.map((t) => (
+                <Button
+                  key={t.value}
+                  type="button"
+                  size="sm"
+                  variant={filterTipo === t.value ? "default" : "outline"}
+                  onClick={() => setFilterTipo(t.value)}
+                >
+                  {t.label}
+                </Button>
+              ))}
+            </div>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-40 ml-auto">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos</SelectItem>
+                <SelectItem value="aberto">Aberto</SelectItem>
+                <SelectItem value="em_analise">Em análise</SelectItem>
+                <SelectItem value="concluido">Concluído</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-        <Select value={filterPrioridade} onValueChange={setFilterPrioridade}>
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Prioridade" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Todas as prioridades</SelectItem>
-            <SelectItem value="urgente">Urgente</SelectItem>
-            <SelectItem value="alta">Alta</SelectItem>
-            <SelectItem value="normal">Normal</SelectItem>
-            <SelectItem value="baixa">Baixa</SelectItem>
-          </SelectContent>
-        </Select>
+          {/* Lista */}
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className="text-center text-muted-foreground py-12">
+              Nenhuma solicitação encontrada.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((s) => {
+                const tm = tipoMeta(s.tipo);
+                const sm = statusMeta(s.status);
+                const pm = prioMeta(s.prioridade);
+                const resumo = s.titulo || `${s.descricao.slice(0, 80)}${s.descricao.length > 80 ? "…" : ""}`;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setSelectedId(s.id)}
+                    className="w-full text-left focus:outline-none"
+                  >
+                    <Card
+                      className={`transition-colors hover:bg-muted/50 ${
+                        selectedId === s.id ? "ring-2 ring-primary" : ""
+                      }`}
+                    >
+                      <CardContent className="pt-4 pb-4 px-5 space-y-2">
+                        <div className="flex flex-wrap gap-2 items-center">
+                          <Badge className={`border text-xs font-semibold ${tm.cls}`}>{tm.label}</Badge>
+                          <Badge className={`border text-xs font-semibold ${sm.cls}`}>{sm.label}</Badge>
+                          <Badge className={`border text-xs font-semibold ${pm.cls}`}>{pm.label}</Badge>
+                        </div>
+                        <p className="text-sm font-medium">{resumo}</p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          {s.tela && <span>{s.tela}</span>}
+                          {s.criado_por_nome && (
+                            <span>
+                              Por <span className="font-medium text-foreground">{s.criado_por_nome}</span>
+                            </span>
+                          )}
+                          <span className="ml-auto">{relativo(s.created_at)}</span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Coluna direita — detalhe (desktop, sticky) */}
+        {!isMobile && (
+          <div className="w-[380px] shrink-0 sticky top-6">
+            {selected ? (
+              <DetalhePainel
+                key={selected.id}
+                solicitacao={selected}
+                onStatus={(status) => updateStatus.mutate({ id: selected.id, status })}
+              />
+            ) : (
+              <Card>
+                <CardContent className="py-12 text-center text-sm text-muted-foreground">
+                  Selecione uma solicitação para ver os detalhes.
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* List */}
-      {isLoading ? (
-        <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <p className="text-center text-muted-foreground py-12">Nenhuma solicitação encontrada.</p>
-      ) : (
-        <div className="space-y-4">
-          {filtered.map((s) => (
-            <Card key={s.id}>
-              <CardContent className="pt-4 pb-4 px-5 space-y-3">
-                {/* Badges row */}
-                <div className="flex flex-wrap gap-2 items-center">
-                  <Badge className={`border text-xs font-semibold ${TIPO_CLASS[s.tipo]}`}>
-                    {TIPO_LABEL[s.tipo]}
-                  </Badge>
-                  <Badge className={`border text-xs font-semibold ${PRIORIDADE_CLASS[s.prioridade]}`}>
-                    {PRIORIDADE_LABEL[s.prioridade]}
-                  </Badge>
-                  <Badge className={`border text-xs font-semibold ${STATUS_CLASS[s.status]}`}>
-                    {STATUS_LABEL[s.status]}
-                  </Badge>
-                  {s.tela && (
-                    <span className="text-xs text-muted-foreground">• {s.tela}</span>
-                  )}
-                  <span className="ml-auto text-xs text-muted-foreground">
-                    {formatDate(s.created_at)}
-                  </span>
-                </div>
-
-                {/* Content */}
-                <div>
-                  <p className="text-sm font-medium">{s.descricao}</p>
-                  {s.motivo && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      <span className="font-medium text-foreground">Motivo: </span>
-                      {s.motivo}
-                    </p>
-                  )}
-                </div>
-
-                {/* Author + actions */}
-                <div className="flex items-center gap-3 pt-1">
-                  {s.criado_por_nome && (
-                    <span className="text-xs text-muted-foreground">
-                      Por: <span className="font-medium text-foreground">{s.criado_por_nome}</span>
-                    </span>
-                  )}
-                  <div className="ml-auto flex items-center gap-3">
-                    <Select
-                      value={s.status}
-                      onValueChange={(novoStatus) => {
-                        updateStatus.mutate({ id: s.id, status: novoStatus });
-                      }}
-                    >
-                      <SelectTrigger className="w-44 h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="aberto">Aberto</SelectItem>
-                        <SelectItem value="em-andamento">Em andamento</SelectItem>
-                        <SelectItem value="concluido">Concluído</SelectItem>
-                      </SelectContent>
-                    </Select>
-
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-600 hover:bg-red-50 hover:text-red-700 h-8 px-2"
-                      onClick={() => setDeleteId(s.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+      {/* Detalhe (mobile, dialog) */}
+      {isMobile && (
+        <Dialog open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
+          <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto p-0 bg-transparent border-0 shadow-none">
+            {selected && (
+              <DetalhePainel
+                key={selected.id}
+                solicitacao={selected}
+                onStatus={(status) => updateStatus.mutate({ id: selected.id, status })}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
       )}
-
-      {/* Delete confirmation */}
-      <AlertDialog open={!!deleteId} onOpenChange={(o) => !o && setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir solicitação?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700"
-              onClick={() => deleteId && deleteSolicitacao.mutate(deleteId)}
-            >
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
+  );
+}
+
+/* ─────────────────────── Painel de detalhe (3 cards) ─────────────────────── */
+
+function DetalhePainel({
+  solicitacao: s,
+  onStatus,
+}: {
+  solicitacao: Solicitacao;
+  onStatus: (status: string) => void;
+}) {
+  const tm = tipoMeta(s.tipo);
+  const sm = statusMeta(s.status);
+  const pm = prioMeta(s.prioridade);
+
+  const chat = Array.isArray(s.chat_historico) ? s.chat_historico : [];
+
+  return (
+    <div className="space-y-4">
+      {/* Card 1 — Detalhe */}
+      <Card>
+        <CardContent className="pt-5 pb-5 px-5 space-y-4">
+          <div className="flex flex-wrap gap-2 items-center">
+            <Badge className={`border text-xs font-semibold ${tm.cls}`}>{tm.label}</Badge>
+            <Badge className={`border text-xs font-semibold ${sm.cls}`}>{sm.label}</Badge>
+            <Badge className={`border text-xs font-semibold ${pm.cls}`}>{pm.label}</Badge>
+          </div>
+
+          {s.titulo && <h2 className="text-lg font-semibold leading-tight">{s.titulo}</h2>}
+
+          <dl className="space-y-2 text-sm">
+            {s.tela && (
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted-foreground">Tela</dt>
+                <dd>{s.tela}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Descrição</dt>
+              <dd className="whitespace-pre-wrap">{s.descricao}</dd>
+            </div>
+            {s.motivo && (
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted-foreground">Motivo</dt>
+                <dd className="whitespace-pre-wrap">{s.motivo}</dd>
+              </div>
+            )}
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Criado por</dt>
+              <dd>{s.criado_por_nome ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-muted-foreground">Data</dt>
+              <dd>{dataCompleta(s.created_at)}</dd>
+            </div>
+          </dl>
+
+          <Separator />
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-300 text-amber-800 hover:bg-amber-50"
+              disabled={s.status === "em_analise"}
+              onClick={() => onStatus("em_analise")}
+            >
+              Em análise
+            </Button>
+            <Button
+              size="sm"
+              className="bg-green-600 hover:bg-green-700"
+              disabled={s.status === "concluido"}
+              onClick={() => onStatus("concluido")}
+            >
+              Concluir
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-red-300 text-red-700 hover:bg-red-50"
+              disabled={s.status === "recusado"}
+              onClick={() => onStatus("recusado")}
+            >
+              Recusar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Card 2 — Como ficaria no CRM (mockup IA) */}
+      {s.mockup_prompt && <MockupCard prompt={s.mockup_prompt} />}
+
+      {/* Card 3 — Histórico do chat */}
+      {chat.length > 0 && (
+        <Card>
+          <CardContent className="pt-5 pb-5 px-5 space-y-3">
+            <h3 className="text-sm font-semibold">Conversa original</h3>
+            <div className="space-y-2">
+              {chat.map((m, i) => {
+                const isUser = m.role === "user";
+                return (
+                  <div key={i} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className="max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
+                      style={
+                        isUser
+                          ? { backgroundColor: VERDE, color: "#fff" }
+                          : { backgroundColor: "#f3f4f6", color: "#111827" }
+                      }
+                    >
+                      {m.content}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ───────────────────── Card de mockup gerado por IA ───────────────────── */
+
+function MockupCard({ prompt }: { prompt: string }) {
+  const [html, setHtml] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const gerar = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("agente-chat", {
+        body: {
+          messages: [
+            {
+              role: "user",
+              content: `Gere APENAS HTML puro (sem DOCTYPE, sem html/head/body) representando um mockup simples e realista desta melhoria no CRM: ${prompt}. Use somente inline styles. Cores: verde #0F6E56 para elementos principais, cinza #f9fafb para backgrounds, bordas #e5e7eb. Fonte sans-serif. Máximo 280px de altura. Retorne SOMENTE o HTML, sem explicação.`,
+            },
+          ],
+          system_override: `Você é um especialista em UI. Gere apenas HTML puro de mockup, sem texto explicativo.`,
+        },
+      });
+      if (error || !data?.text) {
+        throw error ?? new Error("Resposta vazia");
+      }
+      setHtml(String(data.text).trim());
+    } catch (e: unknown) {
+      console.error("Erro ao gerar mockup:", e);
+      toast.error("Erro ao gerar mockup: " + (e instanceof Error ? e.message : "desconhecido"));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card className="overflow-hidden">
+      <div
+        className="flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white"
+        style={{ backgroundColor: VERDE }}
+      >
+        <Eye className="h-4 w-4" />
+        Como ficaria no CRM
+      </div>
+      <CardContent className="pt-4 pb-5 px-5 space-y-3">
+        <Button size="sm" variant="outline" onClick={gerar} disabled={loading}>
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Gerando…
+            </>
+          ) : html ? (
+            "Gerar novamente"
+          ) : (
+            "Gerar mockup"
+          )}
+        </Button>
+
+        {html && (
+          <div
+            className="overflow-hidden rounded-md border"
+            style={{ borderColor: "#e5e7eb" }}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        )}
+      </CardContent>
+    </Card>
   );
 }

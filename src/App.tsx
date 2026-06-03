@@ -102,6 +102,7 @@ const App = () => (
               <Route path="/admin/tabelas-preco" element={<TabelasPreco />} />
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
               <Route path="/admin/campanhas" element={<Campanhas />} />
+              <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
             </Route>
 
             {/* Gestão de Metas — admin, gestora e gestora_faturamento */}
@@ -109,9 +110,8 @@ const App = () => (
               <Route path="/admin/gestao-metas" element={<GestaoMetas />} />
             </Route>
 
-            {/* Solicitações de melhoria — acessíveis por todos os roles */}
+            {/* Nova solicitação de melhoria — acessível por todos os roles */}
             <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento"]}><AppLayout /></ProtectedRoute>}>
-              <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
               <Route path="/solicitacao" element={<NovaSolicitacao />} />
             </Route>
 
