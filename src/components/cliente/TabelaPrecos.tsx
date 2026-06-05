@@ -150,36 +150,45 @@ export function TabelaPrecos({
     };
   }, [clienteTabela, clienteUf, clienteCluster, clienteCodigoParceiro]);
 
-  // Preço especial por cliente (precos_cliente_produto) — aplicado como piso
-  // de preço num efeito próprio, depois que `linhas` carregou. Assim, mesmo que
-  // `clienteCodigoParceiro` chegue depois da primeira busca, o piso é reaplicado.
+  // Preço especial por cliente (precos_cliente_produto) — replica a lógica que
+  // funciona no Novo Pedido (SecaoProdutos): mapa por codigo_produto, lookup por
+  // codigo_jiva, aplicado como piso quando o especial é maior que o calculado.
+  // Resolve o codigo_parceiro de forma robusta: usa a prop e, se vier vazia,
+  // busca direto na tabela `clientes` pelo clienteId (mesma fonte do pedido).
   useEffect(() => {
-    if (!clienteCodigoParceiro || linhas.length === 0) return;
+    if (linhas.length === 0) return;
     let cancelado = false;
 
     const aplicarEspeciais = async () => {
+      let parceiro = clienteCodigoParceiro ?? "";
+      if (!parceiro && clienteId) {
+        const { data: cli } = await supabase
+          .from("clientes")
+          .select("codigo_parceiro")
+          .eq("id", clienteId)
+          .maybeSingle();
+        parceiro = cli?.codigo_parceiro ?? "";
+      }
+      if (cancelado || !parceiro) return;
+
       const { data: especiais } = await supabase
         .from("precos_cliente_produto")
         .select("codigo_produto, preco_unitario")
-        .eq("codigo_parceiro", clienteCodigoParceiro.trim());
+        .eq("codigo_parceiro", parceiro);
 
       if (cancelado || !especiais || especiais.length === 0) return;
 
       const mapa: Record<string, number> = {};
-      especiais.forEach((e) => {
-        if (e.codigo_produto != null && e.preco_unitario != null) {
-          mapa[String(e.codigo_produto).trim()] = Number(e.preco_unitario);
-        }
+      especiais.forEach((p) => {
+        if (p.codigo_produto != null) mapa[p.codigo_produto] = Number(p.preco_unitario);
       });
 
       setLinhas((prev) =>
         prev.map((l) => {
           if (l.precoFinal == null) return l;
-          const especial = mapa[String(l.codigo_jiva).trim()];
-          if (!especial) return l;
-          const novoPreco = Math.max(l.precoFinal, especial);
-          if (novoPreco === l.precoFinal) return l;
-          return { ...l, precoFinal: novoPreco };
+          const especial = l.codigo_jiva ? mapa[l.codigo_jiva] : undefined;
+          if (especial === undefined || !(especial > l.precoFinal)) return l;
+          return { ...l, precoFinal: especial };
         }),
       );
     };
@@ -188,7 +197,7 @@ export function TabelaPrecos({
     return () => {
       cancelado = true;
     };
-  }, [clienteCodigoParceiro, linhas.length]);
+  }, [clienteCodigoParceiro, clienteId, linhas.length]);
 
   const grupos = useMemo(() => {
     const map: Record<string, LinhaProduto[]> = {};
