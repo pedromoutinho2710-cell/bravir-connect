@@ -116,15 +116,18 @@ export function TabelaPrecos({
 
       // Preço especial por cliente (precos_cliente_produto) — chaveado por
       // codigo_parceiro × codigo_produto. Funciona como piso de preço.
+      // O código do parceiro é normalizado (trim) para evitar falha de match
+      // por espaços/quebras vindos da importação Sankhya.
       const precosEspeciaisMap: Record<string, number> = {};
-      if (clienteCodigoParceiro) {
+      const codigoParceiro = clienteCodigoParceiro?.trim();
+      if (codigoParceiro) {
         const { data: especiais } = await supabase
           .from("precos_cliente_produto")
           .select("codigo_produto, preco_unitario")
-          .eq("codigo_parceiro", clienteCodigoParceiro);
+          .eq("codigo_parceiro", codigoParceiro);
         (especiais ?? []).forEach((e) => {
           if (e.codigo_produto != null && e.preco_unitario != null) {
-            precosEspeciaisMap[String(e.codigo_produto)] = Number(e.preco_unitario);
+            precosEspeciaisMap[String(e.codigo_produto).trim()] = Number(e.preco_unitario);
           }
         });
       }
@@ -136,7 +139,7 @@ export function TabelaPrecos({
         const precoBruto = precosMap[p.id] ?? 0;
         const descontoCluster = descontosMap[p.id] ?? 0;
         const precoLiquido = precoBruto * (1 - descontoCluster);
-        const precoEspecial = precosEspeciaisMap[String(p.codigo_jiva)];
+        const precoEspecial = precosEspeciaisMap[String(p.codigo_jiva).trim()];
         const precoFinal = Math.max(precoLiquido, precoEspecial ?? 0);
         return {
           ...p,
