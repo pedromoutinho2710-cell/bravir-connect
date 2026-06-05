@@ -246,7 +246,7 @@ export default function ClienteDetalhe() {
         razao_social: c.razao_social,
         nome_parceiro: c.nome_parceiro ?? null,
         cnpj: c.cnpj,
-        codigo_parceiro: c.codigo_parceiro,
+        codigo_parceiro: c.codigo_parceiro ?? null,
         cluster: c.cluster,
         tabela_preco: c.tabela_preco,
         cidade: c.cidade,
@@ -867,7 +867,7 @@ export default function ClienteDetalhe() {
               clienteTabela={cliente.tabela_preco}
               clienteCluster={cliente.cluster}
               clienteDescontoAdicional={cliente.desconto_adicional ?? null}
-              clienteCodigoParceiro={cliente.codigo_parceiro}
+              clienteCodigoParceiro={cliente.codigo_parceiro ?? null}
               suframa={cliente.suframa ?? null}
             />
           )}
