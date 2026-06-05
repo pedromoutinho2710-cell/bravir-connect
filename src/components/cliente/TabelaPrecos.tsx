@@ -53,8 +53,6 @@ export function TabelaPrecos({
   const [linhas, setLinhas] = useState<LinhaProduto[]>([]);
   const [qtds, setQtds] = useState<Record<string, number>>({});
   const [exportando, setExportando] = useState(false);
-  // [DIAG temporário] info de preço especial exibida na tela
-  const [debugInfo, setDebugInfo] = useState<string>("");
 
   useEffect(() => {
     let cancelado = false;
@@ -119,27 +117,16 @@ export function TabelaPrecos({
       // Preço especial por cliente (precos_cliente_produto) — chaveado por
       // codigo_parceiro × codigo_produto. Funciona como piso de preço.
       const precosEspeciaisMap: Record<string, number> = {};
-      let especiaisCount = 0;
-      let especiaisErro = "";
       if (clienteCodigoParceiro) {
-        const { data: especiais, error: errEsp } = await supabase
+        const { data: especiais } = await supabase
           .from("precos_cliente_produto")
           .select("codigo_produto, preco_unitario")
           .eq("codigo_parceiro", clienteCodigoParceiro);
-        especiaisCount = especiais?.length ?? 0;
-        if (errEsp) especiaisErro = errEsp.message;
-        // [DIAG temporário] preço especial por cliente
-        console.log("[TabelaPrecos] preço especial — clienteCodigoParceiro:", clienteCodigoParceiro);
-        console.log("[TabelaPrecos] preço especial — linhas retornadas:", especiais?.length ?? 0, especiais);
-        if (errEsp) console.warn("[TabelaPrecos] preço especial — erro na query:", errEsp);
         (especiais ?? []).forEach((e) => {
           if (e.codigo_produto != null && e.preco_unitario != null) {
             precosEspeciaisMap[String(e.codigo_produto)] = Number(e.preco_unitario);
           }
         });
-        console.log("[TabelaPrecos] preço especial — mapa (codigo_produto → preço):", precosEspeciaisMap);
-      } else {
-        console.log("[TabelaPrecos] preço especial — clienteCodigoParceiro ausente:", clienteCodigoParceiro);
       }
 
       // Preço líquido sem IPI = preço bruto da tabela do cliente já com o
@@ -151,12 +138,6 @@ export function TabelaPrecos({
         const precoLiquido = precoBruto * (1 - descontoCluster);
         const precoEspecial = precosEspeciaisMap[String(p.codigo_jiva)];
         const precoFinal = Math.max(precoLiquido, precoEspecial ?? 0);
-        // [DIAG temporário] log quando há preço especial para o produto
-        if (precoEspecial != null) {
-          console.log(
-            `[TabelaPrecos] preço especial — produto ${p.codigo_jiva}: calculado=${precoLiquido.toFixed(4)} especial=${precoEspecial} → final=${(precoBruto === 0 ? null : precoFinal)}`,
-          );
-        }
         return {
           ...p,
           precoFinal: precoBruto === 0 ? null : precoFinal,
@@ -177,13 +158,6 @@ export function TabelaPrecos({
 
       if (!cancelado) {
         setLinhas(calculadas);
-        // [DIAG temporário] resumo do preço especial para exibir na tela
-        setDebugInfo(
-          `parceiro=${clienteCodigoParceiro ?? "(vazio)"} · ` +
-            `linhasEspeciais=${especiaisCount} · ` +
-            `esp[17]=${precosEspeciaisMap["17"] ?? "(sem)"}` +
-            (especiaisErro ? ` · ERRO=${especiaisErro}` : ""),
-        );
         setLoading(false);
       }
     })();
@@ -449,12 +423,6 @@ export function TabelaPrecos({
 
   return (
     <div className="space-y-4">
-      {/* [DIAG temporário] preço especial */}
-      {debugInfo && (
-        <div className="rounded-md border border-yellow-400 bg-yellow-100 px-3 py-2 font-mono text-xs text-yellow-900">
-          DEBUG preço especial → {debugInfo}
-        </div>
-      )}
       <div className="flex justify-end">
         <Button size="sm" onClick={exportar} disabled={exportando}>
           {exportando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />}
