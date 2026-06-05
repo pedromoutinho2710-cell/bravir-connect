@@ -69,6 +69,8 @@ export function TabelaPrecos({
 
       const vigenciaId = vig?.id ?? null;
 
+      console.log('[TabelaPrecos useEffect] clienteCodigoParceiro:', clienteCodigoParceiro, 'vigenciaId:', vigenciaId);
+
       const { data: prods } = await supabase
         .from("produtos")
         .select("id, codigo_jiva, nome, cx_embarque, marca")
