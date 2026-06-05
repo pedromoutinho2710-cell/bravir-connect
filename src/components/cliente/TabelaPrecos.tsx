@@ -116,36 +116,17 @@ export function TabelaPrecos({
         });
       }
 
-      // Preço especial por cliente (precos_cliente_produto) — chaveado por
-      // codigo_parceiro × codigo_produto. Funciona como piso de preço.
-      // O código do parceiro é normalizado (trim) para evitar falha de match
-      // por espaços/quebras vindos da importação Sankhya.
-      const precosEspeciaisMap: Record<string, number> = {};
-      const codigoParceiro = clienteCodigoParceiro?.trim();
-      if (codigoParceiro) {
-        const { data: especiais } = await supabase
-          .from("precos_cliente_produto")
-          .select("codigo_produto, preco_unitario")
-          .eq("codigo_parceiro", codigoParceiro);
-        (especiais ?? []).forEach((e) => {
-          if (e.codigo_produto != null && e.preco_unitario != null) {
-            precosEspeciaisMap[String(e.codigo_produto).trim()] = Number(e.preco_unitario);
-          }
-        });
-      }
-
       // Preço líquido sem IPI = preço bruto da tabela do cliente já com o
       // desconto do cluster aplicado: preco_bruto × (1 - desconto_cluster).
-      // Em seguida aplica-se o preço especial do cliente como piso de preço.
+      // O preço especial por cliente (piso de preço) é aplicado num useEffect
+      // próprio, abaixo, para não depender do timing desta busca inicial.
       const calculadas: LinhaProduto[] = produtos.map((p) => {
         const precoBruto = precosMap[p.id] ?? 0;
         const descontoCluster = descontosMap[p.id] ?? 0;
         const precoLiquido = precoBruto * (1 - descontoCluster);
-        const precoEspecial = precosEspeciaisMap[String(p.codigo_jiva).trim()];
-        const precoFinal = Math.max(precoLiquido, precoEspecial ?? 0);
         return {
           ...p,
-          precoFinal: precoBruto === 0 ? null : precoFinal,
+          precoFinal: precoBruto === 0 ? null : precoLiquido,
           ipi: impostosMap[p.codigo_jiva]?.ipi ?? 0,
           st: impostosMap[p.codigo_jiva]?.st ?? 0,
         };
@@ -170,6 +151,46 @@ export function TabelaPrecos({
       cancelado = true;
     };
   }, [clienteTabela, clienteUf, clienteCluster, clienteCodigoParceiro]);
+
+  // Preço especial por cliente (precos_cliente_produto) — aplicado como piso
+  // de preço num efeito próprio, depois que `linhas` carregou. Assim, mesmo que
+  // `clienteCodigoParceiro` chegue depois da primeira busca, o piso é reaplicado.
+  useEffect(() => {
+    if (!clienteCodigoParceiro || linhas.length === 0) return;
+    let cancelado = false;
+
+    const aplicarEspeciais = async () => {
+      const { data: especiais } = await supabase
+        .from("precos_cliente_produto")
+        .select("codigo_produto, preco_unitario")
+        .eq("codigo_parceiro", clienteCodigoParceiro.trim());
+
+      if (cancelado || !especiais || especiais.length === 0) return;
+
+      const mapa: Record<string, number> = {};
+      especiais.forEach((e) => {
+        if (e.codigo_produto != null && e.preco_unitario != null) {
+          mapa[String(e.codigo_produto).trim()] = Number(e.preco_unitario);
+        }
+      });
+
+      setLinhas((prev) =>
+        prev.map((l) => {
+          if (l.precoFinal == null) return l;
+          const especial = mapa[String(l.codigo_jiva).trim()];
+          if (!especial) return l;
+          const novoPreco = Math.max(l.precoFinal, especial);
+          if (novoPreco === l.precoFinal) return l;
+          return { ...l, precoFinal: novoPreco };
+        }),
+      );
+    };
+
+    aplicarEspeciais();
+    return () => {
+      cancelado = true;
+    };
+  }, [clienteCodigoParceiro, linhas.length]);
 
   const grupos = useMemo(() => {
     const map: Record<string, LinhaProduto[]> = {};
