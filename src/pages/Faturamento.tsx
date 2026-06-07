@@ -216,7 +216,7 @@ const ABAS = [
   {
     key: "em_aberto",
     label: "Em Aberto",
-    status: ["pendente_sankhya", "devolvido", "cancelado", "com_problema"],
+    status: ["pendente_sankhya", "devolvido", "com_problema"],
     descricao: "Pedidos na fila aguardando assumir",
     activeClass: "data-[state=active]:bg-yellow-50 data-[state=active]:border-yellow-300 data-[state=active]:text-yellow-800",
     badgeClass: "bg-yellow-100 text-yellow-800",
@@ -610,7 +610,6 @@ export default function Faturamento() {
       lista = lista.filter((p) =>
         (p.status === "pendente_sankhya" && !p.responsavel_id) ||
         p.status === "devolvido" ||
-        p.status === "cancelado" ||
         p.status === "com_problema"
       );
     }
