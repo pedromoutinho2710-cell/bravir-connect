@@ -68,6 +68,7 @@ type PedidoFat = {
   ultima_acao: { nome: string; data: string } | null;
   itens: ExcelItemRaw[];
   responsavel_nome: string | null;
+  flag_prioridade: string | null;
 };
 
 type ExcelItemRaw = {
@@ -111,6 +112,15 @@ function urgencyClass(p: PedidoFat): string {
   if (dias >= 4) return "bg-red-100";
   if (dias >= 2) return "bg-yellow-50";
   return "";
+}
+
+// Fundo da linha: na aba Sem Estoque, destaca por flag de prioridade; senão, urgência por tempo.
+function rowBg(p: PedidoFat, abaKey: string): string {
+  if (abaKey === "sem_estoque") {
+    if (p.flag_prioridade === "risco_cancelamento") return "bg-red-50";
+    if (p.flag_prioridade === "a_faturar") return "bg-amber-50";
+  }
+  return urgencyClass(p);
 }
 
 function calcScore(p: PedidoFat): number {
@@ -417,7 +427,7 @@ export default function Faturamento() {
         .from("pedidos")
         .select(`
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
-          cond_pagamento, observacoes, ordem_compra, pedido_origem_id, responsavel_id, motivo, vendedor_id,
+          cond_pagamento, observacoes, ordem_compra, pedido_origem_id, responsavel_id, motivo, vendedor_id, flag_prioridade,
           cliente_id, perfil_cliente, tabela_preco, agendamento, total,
           clientes(razao_social, nome_parceiro, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, cluster, aceita_saldo, negativado, email, rua, numero, bairro, telefone),
           itens_pedido(
@@ -478,6 +488,7 @@ export default function Faturamento() {
           bairro: cl?.bairro ?? null,
           telefone: cl?.telefone ?? null,
           vendedor_nome: profiles[p.vendedor_id] ?? "—",
+          flag_prioridade: p.flag_prioridade ?? null,
           total,
           peso_total: pesoTotal,
           marcas,
@@ -654,15 +665,22 @@ export default function Faturamento() {
       }
     }
 
-    if (ordenarAlfabetico) {
-      return lista.sort((a, b) =>
-        (a.razao_social ?? "").localeCompare(b.razao_social ?? "", "pt-BR", { sensitivity: "base" })
-      );
+    const sortBase = ordenarAlfabetico
+      ? (a: PedidoFat, b: PedidoFat) =>
+          (a.razao_social ?? "").localeCompare(b.razao_social ?? "", "pt-BR", { sensitivity: "base" })
+      : (a: PedidoFat, b: PedidoFat) =>
+          new Date(b.data_pedido).getTime() - new Date(a.data_pedido).getTime();
+
+    // Na aba Sem Estoque, prioriza por flag: risco_cancelamento > a_faturar > sem flag
+    if (abaAtiva === "sem_estoque") {
+      const flagRank = (p: PedidoFat) =>
+        p.flag_prioridade === "risco_cancelamento" ? 0
+        : p.flag_prioridade === "a_faturar" ? 1
+        : 2;
+      return lista.sort((a, b) => flagRank(a) - flagRank(b) || sortBase(a, b));
     }
 
-    return lista.sort((a, b) =>
-      new Date(b.data_pedido).getTime() - new Date(a.data_pedido).getTime()
-    );
+    return lista.sort(sortBase);
   }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroClienteGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim, filtroStatusAba, filtroProdutoSemEstoque, filtroProdutoPreFat, ordenarAlfabetico]);
 
   // ── Ações ─────────────────────────────────────────────────────────
@@ -1007,6 +1025,32 @@ export default function Faturamento() {
       setSemEstoqueDialog(null);
       setMotivoSemEstoque("");
     }
+  };
+
+  // Flag de prioridade (apenas pedidos sem estoque)
+  const marcarFlagPrioridade = async (p: PedidoFat, valor: "a_faturar" | "risco_cancelamento" | null) => {
+    setAtualizando(p.id);
+    const { error } = await supabase
+      .from("pedidos")
+      .update({ flag_prioridade: valor } as any)
+      .eq("id", p.id);
+    setAtualizando(null);
+    if (error) { toast.error("Erro ao atualizar flag: " + error.message); return; }
+
+    if (valor === "risco_cancelamento") {
+      await supabase.from("notificacoes").insert({
+        destinatario_role: "faturamento",
+        tipo: "risco_cancelamento",
+        mensagem: `Pedido #${p.numero_pedido} marcado como Risco de Cancelamento`,
+      });
+    }
+
+    toast.success(
+      valor === null ? "Flag removida"
+      : valor === "risco_cancelamento" ? "Marcado como Risco de Cancelamento"
+      : "Marcado como A Faturar"
+    );
+    setRefreshKey((k) => k + 1);
   };
 
   const excluirPedido = async () => {
@@ -1738,6 +1782,24 @@ export default function Faturamento() {
     );
   }
 
+  function FlagBadge({ flag }: { flag: string | null }) {
+    if (flag === "risco_cancelamento") {
+      return (
+        <span className="inline-flex items-center rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+          ⚠ Risco Cancelamento
+        </span>
+      );
+    }
+    if (flag === "a_faturar") {
+      return (
+        <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+          ▶ A Faturar
+        </span>
+      );
+    }
+    return null;
+  }
+
   function AcoesPedido({ p, stopProp = true }: { p: PedidoFat; stopProp?: boolean }) {
     const wrap = (fn: (e: React.MouseEvent) => void) => (e: React.MouseEvent) => {
       if (stopProp) e.stopPropagation();
@@ -1804,6 +1866,44 @@ export default function Faturamento() {
           >
             Sem Estoque
           </Button>
+        )}
+
+        {/* Flags de prioridade — apenas aba Sem Estoque */}
+        {abaAtiva === "sem_estoque" && (
+          <>
+            {p.flag_prioridade !== "a_faturar" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-amber-700 border-amber-300 hover:bg-amber-50"
+                disabled={atualizando === p.id}
+                onClick={wrap(() => marcarFlagPrioridade(p, "a_faturar"))}
+              >
+                ▶ A Faturar
+              </Button>
+            )}
+            {p.flag_prioridade !== "risco_cancelamento" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-red-700 border-red-300 hover:bg-red-50"
+                disabled={atualizando === p.id}
+                onClick={wrap(() => marcarFlagPrioridade(p, "risco_cancelamento"))}
+              >
+                ⚠ Risco Cancelamento
+              </Button>
+            )}
+            {p.flag_prioridade && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={atualizando === p.id}
+                onClick={wrap(() => marcarFlagPrioridade(p, null))}
+              >
+                Remover flag
+              </Button>
+            )}
+          </>
         )}
 
         {/* Lançados PDF */}
@@ -2044,14 +2144,15 @@ export default function Faturamento() {
                 {/* Mobile: cards */}
                 <div className="grid gap-3 md:hidden">
                   {pedidosFiltrados.map((p) => (
-                    <Card key={p.id} className={`cursor-pointer active:opacity-70 ${urgencyClass(p)}`}
+                    <Card key={p.id} className={`cursor-pointer active:opacity-70 ${rowBg(p, aba.key)}`}
                       onClick={() => setDetalhePedido(p)}>
                       <CardContent className="p-4 space-y-3">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
                               <StatusBadge status={p.status} />
+                              {aba.key === "sem_estoque" && <FlagBadge flag={p.flag_prioridade} />}
                             </div>
                             {p.tipo === "Bonificação" && (
                               <div className="mt-0.5">
@@ -2155,7 +2256,7 @@ export default function Faturamento() {
                     <TableBody>
                       {pedidosFiltrados.map((p) => (
                         <TableRow key={p.id}
-                          className={`cursor-pointer hover:bg-muted/50 ${urgencyClass(p)}`}
+                          className={`cursor-pointer hover:bg-muted/50 ${rowBg(p, aba.key)}`}
                           onClick={() => setDetalhePedido(p)}>
                           <TableCell className="font-mono font-semibold text-sm">
                             <div>#{p.numero_pedido}</div>
@@ -2244,6 +2345,11 @@ export default function Faturamento() {
                           </TableCell>
                           <TableCell>
                             <StatusBadge status={p.status} />
+                            {aba.key === "sem_estoque" && p.flag_prioridade && (
+                              <div className="mt-1">
+                                <FlagBadge flag={p.flag_prioridade} />
+                              </div>
+                            )}
                             {p.responsavel_id && (
                               <div className="text-xs text-muted-foreground mt-1">
                                 Assumido: <span className="font-medium">{profiles[p.responsavel_id] ?? p.responsavel_nome ?? "—"}</span>
