@@ -26,6 +26,7 @@ import { CLUSTERS, TABELAS_PRECO } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { BadgeNegativado } from "@/components/BadgeNegativado";
 import { TabelaPrecos } from "@/components/cliente/TabelaPrecos";
+import { StatusClienteBadge } from "@/components/cliente/StatusClienteBadge";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
@@ -95,6 +96,7 @@ type ClienteInfo = {
   vendedor_id: string | null;
   observacoes_trade: string | null;
   desconto_adicional: number | null;
+  status: string | null;
 };
 
 type PedidoLinha = {
@@ -225,7 +227,7 @@ export default function ClienteDetalhe() {
     const [cRes, pRes, profRes, roleRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional")
+        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional, status")
         .eq("id", id)
         .single(),
       supabase
@@ -264,6 +266,7 @@ export default function ClienteDetalhe() {
         vendedor_id: c.vendedor_id,
         observacoes_trade: c.observacoes_trade,
         desconto_adicional: c.desconto_adicional ?? null,
+        status: c.status ?? null,
       };
       setCliente(info);
       setObsLocal(info.observacoes_trade ?? "");
@@ -546,6 +549,7 @@ export default function ClienteDetalhe() {
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-2xl font-bold leading-tight">{cliente.nome_parceiro || cliente.razao_social}</h1>
+              <StatusClienteBadge status={cliente.status} />
               <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${atividadeConf.cls}`}>
                 {atividadeConf.label}
               </span>

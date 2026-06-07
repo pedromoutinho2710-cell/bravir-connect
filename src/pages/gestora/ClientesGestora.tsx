@@ -16,6 +16,7 @@ import { toast } from "sonner";
 import { formatCNPJ } from "@/lib/format";
 import { CLUSTERS, TABELAS_PRECO, UFS } from "@/lib/constants";
 import { Loader2, Search, Users, UserX, AlertTriangle, ShieldAlert, Pencil, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import { StatusClienteBadge } from "@/components/cliente/StatusClienteBadge";
 
 const PAGE_SIZE = 200;
 
@@ -51,21 +52,10 @@ const STATUS_OPTIONS = [
   { value: "aguardando_trade", label: "Aguardando Trade" },
 ];
 
-const STATUS_COLOR: Record<string, string> = {
-  ativo: "bg-green-100 text-green-800 border-green-300",
-  inativo: "bg-gray-100 text-gray-700 border-gray-300",
-  aguardando_trade: "bg-yellow-100 text-yellow-800 border-yellow-300",
-};
-
 function tabelaLabel(v: string | null): string {
   if (!v) return "—";
   const t = TABELAS_PRECO.find((x) => x.value === v);
   return t ? t.label : v;
-}
-
-function statusLabel(v: string | null): string {
-  if (!v) return "—";
-  return STATUS_OPTIONS.find((s) => s.value === v)?.label ?? v;
 }
 
 export default function ClientesGestora() {
@@ -451,9 +441,7 @@ export default function ClientesGestora() {
                     </TableCell>
                     <TableCell>
                       {c.status ? (
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[c.status] ?? "bg-gray-100 text-gray-600 border-gray-300"}`}>
-                          {statusLabel(c.status)}
-                        </span>
+                        <StatusClienteBadge status={c.status} />
                       ) : (
                         <span className="text-muted-foreground text-sm">—</span>
                       )}

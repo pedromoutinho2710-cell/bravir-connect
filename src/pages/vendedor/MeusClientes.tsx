@@ -22,6 +22,7 @@ import { toast } from "sonner";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { TabelaPrecos } from "@/components/cliente/TabelaPrecos";
+import { StatusClienteBadge } from "@/components/cliente/StatusClienteBadge";
 
 type PedidoHistorico = {
   id: string;
@@ -76,20 +77,6 @@ type CadastroPendente = {
 };
 
 type OrdemCampo = "ltv" | "ticket_medio" | "razao_social" | "num_pedidos";
-
-const STATUS_CLIENTE_LABEL: Record<string, string> = {
-  ativo: "Ativo",
-  inativo: "Inativo",
-  aguardando_trade: "Aguardando Trade",
-  pendente: "Pendente",
-};
-
-const STATUS_CLIENTE_COLOR: Record<string, string> = {
-  ativo: "bg-green-100 text-green-800 border-green-400",
-  inativo: "bg-gray-200 text-gray-600 border-gray-400",
-  aguardando_trade: "bg-blue-100 text-blue-800 border-blue-300",
-  pendente: "bg-yellow-100 text-yellow-800 border-yellow-300",
-};
 
 function calcCicloMedio(dates: Date[]): number | null {
   if (dates.length < 2) return null;
@@ -547,12 +534,7 @@ export default function MeusClientes() {
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2">
                             <span className="truncate">{c.razao_social}</span>
-                            <Badge
-                              variant="outline"
-                              className={`text-xs shrink-0 ${STATUS_CLIENTE_COLOR[c.status ?? "ativo"] ?? "bg-gray-100 text-gray-600 border-gray-300"}`}
-                            >
-                              {STATUS_CLIENTE_LABEL[c.status ?? "ativo"] ?? (c.status ?? "—")}
-                            </Badge>
+                            <StatusClienteBadge status={c.status ?? "ativo"} className="shrink-0" />
                             <Button
                               size="sm"
                               variant="ghost"
