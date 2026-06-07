@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Loader2, Eye } from "lucide-react";
+import { Loader2, Eye, Sheet } from "lucide-react";
 
 const VERDE = "#0F6E56";
 
@@ -176,6 +176,104 @@ export default function Solicitacoes() {
 
   const selected = solicitacoes.find((s) => s.id === selectedId) ?? null;
 
+  async function exportarExcel() {
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Solicitações");
+
+    const colunas = [
+      { header: "Data", key: "data" },
+      { header: "Criado por", key: "criado_por" },
+      { header: "Tipo", key: "tipo" },
+      { header: "Status", key: "status" },
+      { header: "Prioridade", key: "prioridade" },
+      { header: "Tela", key: "tela" },
+      { header: "Título", key: "titulo" },
+      { header: "Descrição", key: "descricao" },
+      { header: "Motivo", key: "motivo" },
+      { header: "Conversa", key: "conversa" },
+    ];
+    ws.columns = colunas.map((c) => ({ header: c.header, key: c.key }));
+
+    const formatarConversa = (chat?: ChatMensagem[] | null) => {
+      if (!Array.isArray(chat) || chat.length === 0) return "";
+      return chat
+        .map((m) => {
+          const autor = m.role === "user" ? "Colaborador" : "Assistente";
+          return `[${autor}]: ${m.content}`;
+        })
+        .join("\n");
+    };
+
+    filtered.forEach((s) => {
+      ws.addRow({
+        data: dataCompleta(s.created_at),
+        criado_por: s.criado_por_nome ?? "",
+        tipo: tipoMeta(s.tipo).label,
+        status: statusMeta(s.status).label,
+        prioridade: prioMeta(s.prioridade).label,
+        tela: s.tela ?? "",
+        titulo: s.titulo ?? "",
+        descricao: s.descricao ?? "",
+        motivo: s.motivo ?? "",
+        conversa: formatarConversa(s.chat_historico),
+      });
+    });
+
+    // Cabeçalho verde com texto branco em bold
+    const header = ws.getRow(1);
+    header.eachCell((cell) => {
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "FF0F6E56" },
+      };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    });
+
+    // Linhas alternadas branco / verde clarinho
+    ws.eachRow((row, rowNumber) => {
+      if (rowNumber === 1) return;
+      if (rowNumber % 2 === 1) {
+        row.eachCell((cell) => {
+          cell.fill = {
+            type: "pattern",
+            pattern: "solid",
+            fgColor: { argb: "FFE1F5EE" },
+          };
+        });
+      }
+    });
+
+    // Largura automática (min 15, max 60)
+    ws.columns.forEach((col) => {
+      let max = 0;
+      col.eachCell?.({ includeEmpty: true }, (cell) => {
+        const valor = cell.value ? String(cell.value) : "";
+        const maisLonga = valor
+          .split("\n")
+          .reduce((m, linha) => Math.max(m, linha.length), 0);
+        if (maisLonga > max) max = maisLonga;
+      });
+      col.width = Math.min(60, Math.max(15, max + 2));
+    });
+
+    // Congelar linha de cabeçalho
+    ws.views = [{ state: "frozen", ySplit: 1 }];
+
+    const hoje = new Date().toISOString().slice(0, 10);
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `solicitacoes-${hoje}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const kpiCards = [
     { label: "Em aberto", value: kpis?.aberto ?? 0, color: "text-blue-700" },
     { label: "Em análise", value: kpis?.emAnalise ?? 0, color: "text-amber-700" },
@@ -231,6 +329,16 @@ export default function Solicitacoes() {
                 <SelectItem value="concluido">Concluído</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={filtered.length === 0}
+              onClick={exportarExcel}
+            >
+              <Sheet className="mr-2 h-4 w-4" />
+              Exportar Excel
+            </Button>
           </div>
 
           {/* Lista */}
