@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatCNPJ } from "@/lib/format";
 import { CLUSTERS, TABELAS_PRECO, UFS } from "@/lib/constants";
-import { Loader2, Search, Users, UserX, AlertTriangle, ShieldAlert, Pencil, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Search, Users, UserX, AlertTriangle, ShieldAlert, Pencil, UserPlus, ChevronLeft, ChevronRight, Sheet } from "lucide-react";
 import { StatusClienteBadge } from "@/components/cliente/StatusClienteBadge";
 
 const PAGE_SIZE = 200;
@@ -67,6 +67,7 @@ export default function ClientesGestora() {
   const [vendedores, setVendedores] = useState<Vendedor[]>([]);
   const [vendedoresMap, setVendedoresMap] = useState<Record<string, string>>({});
   const [resumo, setResumo] = useState<Resumo>({ ativos: 0, semVendedor: 0, aguardandoTrade: 0, negativados: 0 });
+  const [exportando, setExportando] = useState(false);
 
   // Filtros
   const [busca, setBusca] = useState("");
@@ -245,6 +246,126 @@ export default function ClientesGestora() {
     await carregar();
   };
 
+  const exportarExcel = async () => {
+    setExportando(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let query: any = supabase
+        .from("clientes")
+        .select("id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente")
+        .order("razao_social");
+
+      if (buscaDebounced.trim()) {
+        const buscaDigits = buscaDebounced.replace(/\D/g, "");
+        if (buscaDigits.length >= 4) {
+          query = query.or(`razao_social.ilike.%${buscaDebounced}%,cnpj.ilike.%${buscaDigits}%`);
+        } else {
+          query = query.ilike("razao_social", `%${buscaDebounced}%`);
+        }
+      }
+      if (filtroVendedor !== "todos") query = query.eq("vendedor_id", filtroVendedor);
+      if (filtroCluster !== "todos") query = query.eq("cluster", filtroCluster);
+      if (filtroTabela !== "todos") query = query.eq("tabela_preco", filtroTabela);
+      if (filtroUF !== "todas") query = query.eq("uf", filtroUF);
+      if (filtroStatus !== "todos") query = query.eq("status", filtroStatus);
+      if (apenasSemVendedor) query = query.is("vendedor_id", null);
+
+      const { data, error } = await query;
+      if (error) { toast.error("Erro ao buscar clientes: " + error.message); return; }
+
+      const linhas = (data ?? []) as Cliente[];
+
+      const ExcelJS = (await import("exceljs")).default;
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Clientes");
+
+      const colunas = [
+        { header: "Razão Social", key: "razao_social" },
+        { header: "Nome Parceiro", key: "nome_parceiro" },
+        { header: "Nome Fantasia", key: "nome_fantasia" },
+        { header: "CNPJ", key: "cnpj" },
+        { header: "Email", key: "email" },
+        { header: "Telefone", key: "telefone" },
+        { header: "Comprador", key: "comprador" },
+        { header: "Cidade", key: "cidade" },
+        { header: "UF", key: "uf" },
+        { header: "CEP", key: "cep" },
+        { header: "Cluster", key: "cluster" },
+        { header: "Tabela Preço", key: "tabela_preco" },
+        { header: "Vendedor", key: "vendedor" },
+        { header: "Status", key: "status" },
+        { header: "Negativado", key: "negativado" },
+        { header: "Aceita Saldo", key: "aceita_saldo" },
+        { header: "Código Cliente", key: "codigo_cliente" },
+        { header: "Obs. Trade", key: "observacoes_trade" },
+      ];
+      ws.columns = colunas.map((c) => ({ header: c.header, key: c.key }));
+
+      linhas.forEach((c) => {
+        ws.addRow({
+          razao_social: c.razao_social ?? "",
+          nome_parceiro: c.nome_parceiro ?? "",
+          nome_fantasia: c.nome_fantasia ?? "",
+          cnpj: c.cnpj ?? "",
+          email: c.email ?? "",
+          telefone: c.telefone ?? "",
+          comprador: c.comprador ?? "",
+          cidade: c.cidade ?? "",
+          uf: c.uf ?? "",
+          cep: c.cep ?? "",
+          cluster: c.cluster ?? "",
+          tabela_preco: tabelaLabel(c.tabela_preco),
+          vendedor: c.vendedor_id ? (vendedoresMap[c.vendedor_id] ?? "—") : "—",
+          status: c.status ?? "",
+          negativado: c.negativado ? "Sim" : "Não",
+          aceita_saldo: c.aceita_saldo ? "Sim" : "Não",
+          codigo_cliente: c.codigo_cliente ?? "",
+          observacoes_trade: c.observacoes_trade ?? "",
+        });
+      });
+
+      // Cabeçalho — fundo verde, texto branco bold
+      const header = ws.getRow(1);
+      header.eachCell((cell) => {
+        cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF166534" } };
+        cell.alignment = { vertical: "middle", horizontal: "left" };
+      });
+
+      // Linhas alternadas — branco / verde claro
+      for (let i = 2; i <= ws.rowCount; i++) {
+        const cor = i % 2 === 0 ? "FFFFFFFF" : "FFF0FDF4";
+        ws.getRow(i).eachCell((cell) => {
+          cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: cor } };
+        });
+      }
+
+      // Largura automática (min 12, max 50)
+      ws.columns.forEach((col) => {
+        let maxLen = 0;
+        col.eachCell?.({ includeEmpty: false }, (cell) => {
+          const len = String(cell.value ?? "").length;
+          if (len > maxLen) maxLen = len;
+        });
+        col.width = Math.max(12, Math.min(50, maxLen + 2));
+      });
+
+      // Congelar primeira linha
+      ws.views = [{ state: "frozen", ySplit: 1 }];
+
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `clientes-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExportando(false);
+    }
+  };
+
   const temProxima = (pagina + 1) * PAGE_SIZE < totalCount;
 
   return (
@@ -254,10 +375,16 @@ export default function ClientesGestora() {
           <h1 className="text-2xl font-bold">Clientes</h1>
           <p className="text-sm text-muted-foreground">Visão completa da carteira — edite perfil, vendedor e status</p>
         </div>
-        <Button onClick={() => navigate("/gestora/cadastrar-cliente")}>
-          <UserPlus className="h-4 w-4 mr-2" />
-          Cadastrar Cliente
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={exportarExcel} disabled={exportando}>
+            {exportando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sheet className="h-4 w-4 mr-2" />}
+            Exportar Excel
+          </Button>
+          <Button onClick={() => navigate("/gestora/cadastrar-cliente")}>
+            <UserPlus className="h-4 w-4 mr-2" />
+            Cadastrar Cliente
+          </Button>
+        </div>
       </div>
 
       {/* Cards de resumo — totais globais */}
