@@ -82,12 +82,13 @@ type HistoricoMes = {
   numPedidos: number;
 };
 
-type Periodo = "hoje" | "semana" | "mes" | "ano";
+type Periodo = "hoje" | "semana" | "mes" | "mes_anterior" | "ano";
 
 const PERIODO_LABEL: Record<Periodo, string> = {
   hoje: "Hoje",
   semana: "Esta semana",
   mes: "Este mês",
+  mes_anterior: "Mês anterior",
   ano: "Este ano",
 };
 
@@ -109,6 +110,13 @@ function rangePeriodo(p: Periodo): { inicio: string; fim: string } {
   }
   if (p === "ano") {
     return { inicio: `${y}-01-01`, fim: fmt(agora) };
+  }
+  if (p === "mes_anterior") {
+    const ano = m === 0 ? y - 1 : y;
+    const mes = m === 0 ? 11 : m - 1;
+    const inicio = new Date(ano, mes, 1);
+    const fim = new Date(ano, mes + 1, 0);
+    return { inicio: fmt(inicio), fim: fmt(fim) };
   }
   return { inicio: fmt(new Date(y, m, 1)), fim: fmt(agora) };
 }
