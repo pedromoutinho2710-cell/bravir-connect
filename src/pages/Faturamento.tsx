@@ -263,6 +263,26 @@ const ABAS = [
   },
 ];
 
+function calcPrazoMedio(cond_pagamento: string | null): number | null {
+  if (!cond_pagamento) return null;
+  const nums = cond_pagamento.match(/\d+/g);
+  if (!nums || nums.length === 0) return null;
+  const media = nums.map(Number).reduce((a, b) => a + b, 0) / nums.length;
+  return Math.round(media);
+}
+
+function prazoStatus(dataPedido: string, prazoMedia: number): { label: string; cls: string } {
+  const vencimento = new Date(dataPedido);
+  vencimento.setDate(vencimento.getDate() + prazoMedia);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  vencimento.setHours(0, 0, 0, 0);
+  const diff = Math.round((vencimento.getTime() - hoje.getTime()) / 86400000);
+  if (diff < 0) return { label: "Prazo Vencido", cls: "text-red-700 font-semibold" };
+  if (diff <= 7) return { label: `Vence em ${diff}d`, cls: "text-amber-700 font-semibold" };
+  return { label: `OK (${diff}d)`, cls: "text-green-700" };
+}
+
 // ── Componente ────────────────────────────────────────────────────
 export default function Faturamento() {
   const { user } = useAuth();
@@ -283,6 +303,23 @@ export default function Faturamento() {
   const [filtroProdutoSemEstoque, setFiltroProdutoSemEstoque] = useState("");
   const [filtroProdutoPreFat, setFiltroProdutoPreFat] = useState("");
   const [ordenarAlfabetico, setOrdenarAlfabetico] = useState(false);
+  const [semEstoqueOrdem, setSemEstoqueOrdem] = useState<{ col: string; dir: "asc" | "desc" } | null>(null);
+
+  const toggleOrdemSemEstoque = (col: string) => {
+    setSemEstoqueOrdem((prev) =>
+      prev?.col === col && prev.dir === "asc"
+        ? { col, dir: "desc" }
+        : prev?.col === col && prev.dir === "desc"
+        ? null
+        : { col, dir: "asc" }
+    );
+  };
+
+  const ordemIcon = (col: string) => {
+    if (semEstoqueOrdem?.col !== col) return "↕";
+    return semEstoqueOrdem.dir === "asc" ? "▲" : "▼";
+  };
+
   const iniciMes = useMemo(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
@@ -684,11 +721,28 @@ export default function Faturamento() {
         p.flag_prioridade === "risco_cancelamento" ? 0
         : p.flag_prioridade === "a_faturar" ? 1
         : 2;
+
+      if (semEstoqueOrdem) {
+        const { col, dir } = semEstoqueOrdem;
+        const mult = dir === "asc" ? 1 : -1;
+        return lista.sort((a, b) => {
+          if (col === "total") return (a.total - b.total) * mult;
+          if (col === "prazo") {
+            const pa = calcPrazoMedio(a.cond_pagamento) ?? 999;
+            const pb = calcPrazoMedio(b.cond_pagamento) ?? 999;
+            return (pa - pb) * mult;
+          }
+          if (col === "cliente") return (a.razao_social ?? "").localeCompare(b.razao_social ?? "", "pt-BR") * mult;
+          if (col === "data") return (new Date(a.data_pedido).getTime() - new Date(b.data_pedido).getTime()) * mult;
+          return 0;
+        });
+      }
+
       return lista.sort((a, b) => flagRank(a) - flagRank(b) || sortBase(a, b));
     }
 
     return lista.sort(sortBase);
-  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroClienteGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim, filtroStatusAba, filtroProdutoSemEstoque, filtroProdutoPreFat, ordenarAlfabetico]);
+  }, [pedidos, abaAtiva, filtroNumeroGlobal, filtroClienteGlobal, filtroVendedorGlobal, filtroDataInicio, filtroDataFim, filtroStatusAba, filtroProdutoSemEstoque, filtroProdutoPreFat, ordenarAlfabetico, semEstoqueOrdem]);
 
   // ── Ações ─────────────────────────────────────────────────────────
   const atualizar = async (id: string, updates: Record<string, unknown>): Promise<boolean> => {
@@ -2041,7 +2095,7 @@ export default function Faturamento() {
         onImportado={carregar}
       />
 
-      <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); setFiltroStatusAba("todos"); setFiltroProdutoPreFat(""); }}>
+      <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); setFiltroStatusAba("todos"); setFiltroProdutoPreFat(""); setSemEstoqueOrdem(null); }}>
         <TabsList className="w-full grid grid-cols-6">
           {ABAS.map((aba) => {
             const count = pedidos.filter((p) => {
@@ -2272,20 +2326,45 @@ export default function Faturamento() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-28"># / Data</TableHead>
+                        <TableHead className="w-28">
+                          {abaAtiva === "sem_estoque" ? (
+                            <button className="flex items-center gap-1 hover:text-foreground" onClick={() => toggleOrdemSemEstoque("data")}>
+                              # / Data <span className="text-xs">{ordemIcon("data")}</span>
+                            </button>
+                          ) : "# / Data"}
+                        </TableHead>
                         <TableHead>
-                          <button
-                            className="flex items-center gap-1 hover:text-foreground"
-                            onClick={() => setOrdenarAlfabetico(!ordenarAlfabetico)}
-                          >
-                            Cliente
-                            <span className="text-xs">{ordenarAlfabetico ? "▲" : "↕"}</span>
-                          </button>
+                          {abaAtiva === "sem_estoque" ? (
+                            <button className="flex items-center gap-1 hover:text-foreground" onClick={() => toggleOrdemSemEstoque("cliente")}>
+                              Cliente <span className="text-xs">{ordemIcon("cliente")}</span>
+                            </button>
+                          ) : (
+                            <button
+                              className="flex items-center gap-1 hover:text-foreground"
+                              onClick={() => setOrdenarAlfabetico(!ordenarAlfabetico)}
+                            >
+                              Cliente
+                              <span className="text-xs">{ordenarAlfabetico ? "▲" : "↕"}</span>
+                            </button>
+                          )}
                         </TableHead>
                         <TableHead>Vendedor</TableHead>
                         <TableHead>Marcas</TableHead>
-                        <TableHead className="text-right">Total</TableHead>
+                        <TableHead className="text-right">
+                          {abaAtiva === "sem_estoque" ? (
+                            <button className="flex items-center gap-1 hover:text-foreground ml-auto" onClick={() => toggleOrdemSemEstoque("total")}>
+                              Total <span className="text-xs">{ordemIcon("total")}</span>
+                            </button>
+                          ) : "Total"}
+                        </TableHead>
                         <TableHead className="text-right">Peso</TableHead>
+                        {abaAtiva === "sem_estoque" && (
+                          <TableHead>
+                            <button className="flex items-center gap-1 hover:text-foreground" onClick={() => toggleOrdemSemEstoque("prazo")}>
+                              Prazo Rec. <span className="text-xs">{ordemIcon("prazo")}</span>
+                            </button>
+                          </TableHead>
+                        )}
                         <TableHead>Aguardando</TableHead>
                         <TableHead>Prioridade</TableHead>
                         <TableHead>Status</TableHead>
@@ -2368,6 +2447,17 @@ export default function Faturamento() {
                               : formatBRL(p.total)}
                           </TableCell>
                           <TableCell className="text-right text-xs text-muted-foreground">{p.peso_total > 0 ? `${p.peso_total.toFixed(1)} kg` : "—"}</TableCell>
+                          {aba.key === "sem_estoque" && (() => {
+                            const prazo = calcPrazoMedio(p.cond_pagamento);
+                            if (!prazo) return <TableCell className="text-xs text-muted-foreground">—</TableCell>;
+                            const { label, cls } = prazoStatus(p.data_pedido, prazo);
+                            return (
+                              <TableCell className={`text-xs ${cls}`}>
+                                <div>{prazo}d médio</div>
+                                <div>{label}</div>
+                              </TableCell>
+                            );
+                          })()}
                           <TableCell className="text-xs text-muted-foreground">
                             {STATUS_ACTIVE.has(p.status) ? (tempoAguardando(p.status_atualizado_em) ?? "—") : "—"}
                           </TableCell>
