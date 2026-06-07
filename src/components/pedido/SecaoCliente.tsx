@@ -6,9 +6,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { formatCNPJ, formatCEP, isValidCNPJ, onlyDigits, formatBRL, formatDate } from "@/lib/format";
 import { UFS } from "@/lib/constants";
-import { AlertCircle, CheckCircle2, Search } from "lucide-react";
+import { AlertCircle, CheckCircle2, Search, PlusCircle } from "lucide-react";
 
 export type DadosCliente = {
   cliente_id?: string;
@@ -536,6 +537,22 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
                   : ""
               }`}
             />
+            {!negativado && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const frase = "+ 60 dias campanha Mix Perfeito";
+                  const atual = value.cond_pagamento;
+                  if (atual.includes(frase)) return;
+                  set("cond_pagamento", atual.trim() ? `${atual} ${frase}` : frase);
+                }}
+              >
+                <PlusCircle className="mr-1.5 h-4 w-4" />
+                + 60 dias campanha Mix Perfeito
+              </Button>
+            )}
           </div>
         </div>
 
