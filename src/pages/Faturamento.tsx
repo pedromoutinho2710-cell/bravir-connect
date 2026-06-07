@@ -1596,7 +1596,7 @@ export default function Faturamento() {
       "Cx Embarque", "Qtd Pedida", "Qtd Faturada", "Saldo",
       "Desc. Perfil (%)", "Desc. Comercial (%)", "Desc. Trade (%)",
       "Preço Bruto Un.", "Preço Final Un.", "Total do Item",
-      "Peso Total Pedido", "Total Geral Pedido", "Motivo",
+      "Peso Total Pedido", "Total Geral Pedido", "Motivo", "Prazo Médio Receb. (dias)",
     ];
 
     // Linha de título (linha 1)
@@ -1661,6 +1661,7 @@ export default function Faturamento() {
           p.peso_total,
           p.total,
           p.motivo ?? "",
+          calcPrazoMedio(p.cond_pagamento) ?? "",
         ]);
 
         const row = ws.getRow(dataRowIndex);
