@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -93,6 +93,21 @@ type RankingSkuValor = {
   valor: number;
 };
 
+type RankingCliente = {
+  cliente_id: string;
+  razao_social: string;
+  vendedor_id: string | null;
+  vendedor_nome: string;
+  total: number;
+  numPedidos: number;
+};
+
+type FiltroReativo = {
+  tipo: "vendedor" | "marca" | "produto" | null;
+  id: string | null;
+  label: string | null;
+};
+
 const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "hoje", label: "Hoje" },
   { key: "semana", label: "Semana" },
@@ -163,6 +178,11 @@ export default function Dashboard() {
   }[]>([]);
   const [metaTotalCampanha, setMetaTotalCampanha] = useState(0);
   const [vendedorExpandido, setVendedorExpandido] = useState<string | null>(null);
+
+  // Ranking de clientes reativo
+  const [rankingClientes, setRankingClientes] = useState<RankingCliente[]>([]);
+  const [loadingClientes, setLoadingClientes] = useState(false);
+  const [filtroReativo, setFiltroReativo] = useState<FiltroReativo>({ tipo: null, id: null, label: null });
 
   // Filtro de período customizado
   const initialRange = getDateRange("mes");
@@ -742,6 +762,119 @@ export default function Dashboard() {
     setDrillLoading(false);
   }
 
+  const carregarRankingClientes = useCallback(async (filtro: FiltroReativo) => {
+    setLoadingClientes(true);
+    try {
+      const { dataInicio: periodoInicio, dataFim: periodoFim } = getDateRange(periodo);
+      const effectiveInicio = (dataInicioEfetiva && dataFimEfetiva) ? dataInicioEfetiva : periodoInicio;
+      const effectiveFim = (dataInicioEfetiva && dataFimEfetiva) ? dataFimEfetiva : periodoFim;
+
+      // Buscar pedidos do período com itens
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let query: any = supabase
+        .from("pedidos")
+        .select("id, cliente_id, vendedor_id, itens_pedido(total_item, produto_id, produtos(marca))")
+        .gte("data_pedido", effectiveInicio)
+        .lte("data_pedido", effectiveFim)
+        .not("status", "in", '("rascunho","cancelado","devolvido")');
+
+      if (filtro.tipo === "vendedor" && filtro.id) {
+        query = query.eq("vendedor_id", filtro.id);
+      }
+
+      const { data: pedidosData } = await query;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pedidos = (pedidosData ?? []) as any[];
+
+      // Agregar por cliente filtrando por marca/produto se necessário
+      const clienteAgg: Record<string, { total: number; numPedidos: number; vendedor_id: string | null }> = {};
+
+      for (const p of pedidos) {
+        if (!p.cliente_id) continue;
+        let totalPedido = 0;
+
+        if (filtro.tipo === "marca" && filtro.id) {
+          // Só somar itens da marca selecionada
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const item of (p.itens_pedido ?? []) as any[]) {
+            if (item.produtos?.marca === filtro.id) {
+              totalPedido += Number(item.total_item ?? 0);
+            }
+          }
+          if (totalPedido === 0) continue;
+        } else if (filtro.tipo === "produto" && filtro.id) {
+          // Só somar itens do produto selecionado
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const item of (p.itens_pedido ?? []) as any[]) {
+            if (item.produto_id === filtro.id) {
+              totalPedido += Number(item.total_item ?? 0);
+            }
+          }
+          if (totalPedido === 0) continue;
+        } else {
+          // Sem filtro de produto/marca — somar tudo
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          totalPedido = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item ?? 0), 0);
+        }
+
+        if (!clienteAgg[p.cliente_id]) {
+          clienteAgg[p.cliente_id] = { total: 0, numPedidos: 0, vendedor_id: p.vendedor_id };
+        }
+        clienteAgg[p.cliente_id].total += totalPedido;
+        clienteAgg[p.cliente_id].numPedidos += 1;
+      }
+
+      const clienteIds = Object.keys(clienteAgg);
+      if (clienteIds.length === 0) {
+        setRankingClientes([]);
+        setLoadingClientes(false);
+        return;
+      }
+
+      // Buscar razao_social dos clientes
+      const { data: clientesData } = await supabase
+        .from("clientes")
+        .select("id, razao_social, nome_parceiro, vendedor_id")
+        .in("id", clienteIds);
+
+      // Buscar profiles dos vendedores
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const vendedorIds = [...new Set((clientesData ?? []).map((c: any) => c.vendedor_id).filter(Boolean))];
+      const profileMapLocal: Record<string, string> = {};
+      if (vendedorIds.length > 0) {
+        const { data: profilesData } = await supabase
+          .from("profiles")
+          .select("id, full_name, email")
+          .in("id", vendedorIds as string[]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (profilesData ?? []).forEach((p: any) => {
+          profileMapLocal[p.id] = p.full_name || p.email || "—";
+        });
+      }
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const lista: RankingCliente[] = (clientesData ?? []).map((c: any) => ({
+        cliente_id: c.id,
+        razao_social: c.nome_parceiro || c.razao_social || "—",
+        vendedor_id: c.vendedor_id,
+        vendedor_nome: profileMapLocal[c.vendedor_id] ?? "—",
+        total: clienteAgg[c.id]?.total ?? 0,
+        numPedidos: clienteAgg[c.id]?.numPedidos ?? 0,
+      }));
+
+      lista.sort((a, b) => b.total - a.total);
+      setRankingClientes(lista.slice(0, 30));
+    } catch (e) {
+      console.error("Erro ao carregar ranking clientes:", e);
+    } finally {
+      setLoadingClientes(false);
+    }
+  }, [periodo, dataInicioEfetiva, dataFimEfetiva]);
+
+  useEffect(() => {
+    carregarRankingClientes(filtroReativo);
+  }, [carregarRankingClientes, filtroReativo]);
+
   function handleCardClick(card: DrillCardKey) {
     if (cardAberto === card) {
       setCardAberto(null);
@@ -1026,18 +1159,28 @@ export default function Dashboard() {
               <div className="relative shrink-0" style={{ width: 200, height: 200 }}>
                 <svg width="200" height="200" style={{ display: "block" }}>
                   <circle cx="100" cy="100" r="70" fill="none" stroke="#e5e7eb" strokeWidth="38" />
-                  {donutSlices.map(({ marca, dash, offset }) => (
-                    <circle
-                      key={marca}
-                      cx="100" cy="100" r="70"
-                      fill="none"
-                      stroke={MARCA_CORES[marca] ?? "#888780"}
-                      strokeWidth="38"
-                      strokeDasharray={`${dash} ${donutCircumference - dash}`}
-                      strokeDashoffset={offset}
-                      transform="rotate(-90 100 100)"
-                    />
-                  ))}
+                  {donutSlices.map(({ marca, dash, offset }) => {
+                    const selecionada = filtroReativo.tipo === "marca" && filtroReativo.id === marca;
+                    return (
+                      <circle
+                        key={marca}
+                        cx="100" cy="100" r="70"
+                        fill="none"
+                        stroke={MARCA_CORES[marca] ?? "#888780"}
+                        strokeWidth={selecionada ? "40" : "38"}
+                        strokeDasharray={`${dash} ${donutCircumference - dash}`}
+                        strokeDashoffset={offset}
+                        transform="rotate(-90 100 100)"
+                        className="cursor-pointer"
+                        onClick={() => {
+                          const novoFiltro = filtroReativo.tipo === "marca" && filtroReativo.id === marca
+                            ? { tipo: null, id: null, label: null }
+                            : { tipo: "marca" as const, id: marca, label: marca };
+                          setFiltroReativo(novoFiltro);
+                        }}
+                      />
+                    );
+                  })}
                 </svg>
                 {/* Centro: Total + valor */}
                 <div
@@ -1053,7 +1196,17 @@ export default function Dashboard() {
                 {donutSlices.map(({ marca, valor, pct }, i) => (
                   <div
                     key={marca}
-                    className="flex items-center gap-2 text-sm"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => {
+                      const novoFiltro = filtroReativo.tipo === "marca" && filtroReativo.id === marca
+                        ? { tipo: null, id: null, label: null }
+                        : { tipo: "marca" as const, id: marca, label: marca };
+                      setFiltroReativo(novoFiltro);
+                    }}
+                    className={`flex items-center gap-2 text-sm cursor-pointer rounded px-1 -mx-1 transition-colors hover:bg-muted/50 ${
+                      filtroReativo.tipo === "marca" && filtroReativo.id === marca ? "ring-2 ring-green-500" : ""
+                    }`}
                     style={{
                       paddingBottom: 4,
                       borderBottom: i < donutSlices.length - 1 ? "0.5px solid #e5e7eb" : undefined,
@@ -1141,7 +1294,20 @@ export default function Dashboard() {
                   const iniciais = r.nome.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
                   const avatarColor = AVATAR_COLORS[idx % AVATAR_COLORS.length];
                   return (
-                    <div key={r.vendedor_id} className="py-3 flex items-start gap-3">
+                    <div
+                      key={r.vendedor_id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => {
+                        const novoFiltro = filtroReativo.tipo === "vendedor" && filtroReativo.id === r.vendedor_id
+                          ? { tipo: null, id: null, label: null }
+                          : { tipo: "vendedor" as const, id: r.vendedor_id, label: r.nome };
+                        setFiltroReativo(novoFiltro);
+                      }}
+                      className={`py-3 flex items-start gap-3 cursor-pointer rounded-md px-2 -mx-2 transition-colors hover:bg-muted/50 ${
+                        filtroReativo.tipo === "vendedor" && filtroReativo.id === r.vendedor_id ? "ring-2 ring-green-500" : ""
+                      }`}
+                    >
                       {/* Avatar */}
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avatarColor}`}>
                         {iniciais}
@@ -1220,7 +1386,17 @@ export default function Dashboard() {
                         </TableHeader>
                         <TableBody>
                           {topSkus.map((s, idx) => (
-                            <TableRow key={s.produto_id}>
+                            <TableRow
+                              key={s.produto_id}
+                              className={`cursor-pointer hover:bg-muted/50 ${filtroReativo.tipo === "produto" && filtroReativo.id === s.produto_id ? "bg-green-50" : ""}`}
+                              onClick={() => {
+                                const id = s.produto_id;
+                                const novoFiltro = filtroReativo.tipo === "produto" && filtroReativo.id === id
+                                  ? { tipo: null, id: null, label: null }
+                                  : { tipo: "produto" as const, id, label: s.nome };
+                                setFiltroReativo(novoFiltro);
+                              }}
+                            >
                               <TableCell className="font-bold">{idx + 1}</TableCell>
                               <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
                               <TableCell className="text-sm">{s.nome}</TableCell>
@@ -1255,7 +1431,17 @@ export default function Dashboard() {
                         </TableHeader>
                         <TableBody>
                           {topSkusValor.map((s, idx) => (
-                            <TableRow key={s.produto_id}>
+                            <TableRow
+                              key={s.produto_id}
+                              className={`cursor-pointer hover:bg-muted/50 ${filtroReativo.tipo === "produto" && filtroReativo.id === s.produto_id ? "bg-green-50" : ""}`}
+                              onClick={() => {
+                                const id = s.produto_id;
+                                const novoFiltro = filtroReativo.tipo === "produto" && filtroReativo.id === id
+                                  ? { tipo: null, id: null, label: null }
+                                  : { tipo: "produto" as const, id, label: s.nome };
+                                setFiltroReativo(novoFiltro);
+                              }}
+                            >
                               <TableCell className="font-bold">{idx + 1}</TableCell>
                               <TableCell className="font-mono text-sm">{s.codigo_jiva}</TableCell>
                               <TableCell className="text-sm">{s.nome}</TableCell>
@@ -1275,6 +1461,58 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Ranking de clientes — reativo aos filtros */}
+      <Card>
+        <CardHeader className="pb-2 flex flex-row items-center justify-between">
+          <CardTitle className="text-sm font-medium">Ranking de clientes</CardTitle>
+          {filtroReativo.tipo && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                Filtrado por {filtroReativo.tipo === "vendedor" ? "vendedor" : filtroReativo.tipo === "marca" ? "marca" : "produto"}:
+                <span className="font-medium text-foreground ml-1">{filtroReativo.label}</span>
+              </span>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setFiltroReativo({ tipo: null, id: null, label: null })}>
+                Limpar
+              </Button>
+            </div>
+          )}
+        </CardHeader>
+        <CardContent>
+          {loadingClientes ? (
+            <div className="flex h-24 items-center justify-center">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : rankingClientes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nenhum cliente no período</p>
+          ) : (
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-10">#</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Vendedor</TableHead>
+                    <TableHead className="text-center">Pedidos</TableHead>
+                    <TableHead className="text-right">Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rankingClientes.map((c, idx) => (
+                    <TableRow key={c.cliente_id}>
+                      <TableCell className="font-bold text-muted-foreground">{idx + 1}</TableCell>
+                      <TableCell className="font-medium text-sm">{c.razao_social}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{c.vendedor_nome}</TableCell>
+                      <TableCell className="text-center text-sm">{c.numPedidos}</TableCell>
+                      <TableCell className="text-right font-bold text-sm text-green-700">{formatBRL(c.total)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Seção 3 — Campanha Ativa */}
       {campanhaAtiva && (
