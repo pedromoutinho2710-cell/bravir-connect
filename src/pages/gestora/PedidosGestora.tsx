@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -61,6 +61,8 @@ export default function PedidosGestora() {
   const [filtroStatus, setFiltroStatus] = useState("todos");
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroMarca, setFiltroMarca] = useState("todas");
+
+  const [abaAtiva, setAbaAtiva] = useState<"pedidos" | "bonificacoes">("pedidos");
 
   const [detalhesId, setDetalhesId] = useState<string | null>(null);
   const [detalhesOpen, setDetalhesOpen] = useState(false);
@@ -260,6 +262,22 @@ export default function PedidosGestora() {
 
   const temFiltro = filtroStatus !== "todos" || filtroCliente || filtroMarca !== "todas";
 
+  // Aba "Bonificações" separada — filtra sobre os dados já carregados, sem nova query
+  const pedidosPrincipais = useMemo(
+    () => pedidos.filter((p) => p.tipo !== "Bonificação"),
+    [pedidos]
+  );
+  const pedidosBonificacoes = useMemo(
+    () => pedidos.filter((p) => p.tipo === "Bonificação"),
+    [pedidos]
+  );
+  // Contagem da aba: qualquer status exceto rascunho (a lista mantém os rascunhos)
+  const bonificacoesCount = useMemo(
+    () => pedidos.filter((p) => p.tipo === "Bonificação" && p.status !== "rascunho").length,
+    [pedidos]
+  );
+  const listaAtiva = abaAtiva === "bonificacoes" ? pedidosBonificacoes : pedidosPrincipais;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -311,8 +329,34 @@ export default function PedidosGestora() {
         )}
 
         <span className="self-center text-sm text-muted-foreground ml-auto">
-          {pedidos.length} pedido{pedidos.length !== 1 ? "s" : ""}
+          {listaAtiva.length} pedido{listaAtiva.length !== 1 ? "s" : ""}
         </span>
+      </div>
+
+      {/* Abas */}
+      <div className="flex gap-1 border-b">
+        {[
+          { key: "pedidos", label: "Pedidos" },
+          { key: "bonificacoes", label: "Bonificações", count: bonificacoesCount, cor: "bg-amber-100 text-amber-800" },
+        ].map((aba) => (
+          <button
+            key={aba.key}
+            type="button"
+            onClick={() => setAbaAtiva(aba.key as typeof abaAtiva)}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+              abaAtiva === aba.key
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {aba.label}
+            {aba.count !== undefined && aba.count > 0 && (
+              <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${aba.cor}`}>
+                {aba.count}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {/* Tabela */}
@@ -320,7 +364,7 @@ export default function PedidosGestora() {
         <div className="flex h-48 items-center justify-center">
           <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
-      ) : pedidos.length === 0 ? (
+      ) : listaAtiva.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center text-muted-foreground">
             Nenhum pedido encontrado
@@ -342,7 +386,7 @@ export default function PedidosGestora() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {pedidos.map((p) => (
+              {listaAtiva.map((p) => (
                 <TableRow
                   key={p.id}
                   className="cursor-pointer hover:bg-muted/50"

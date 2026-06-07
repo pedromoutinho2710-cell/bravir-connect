@@ -257,6 +257,13 @@ export default function MeusPedidos() {
     [pedidos]
   );
 
+  // Contagem da aba: qualquer status exceto rascunho (a lista mantém os
+  // rascunhos para que não fiquem órfãos — eles são excluídos da aba Pedidos)
+  const bonificacoesCount = useMemo(() =>
+    pedidos.filter((p) => p.tipo === "Bonificação" && p.status !== "rascunho").length,
+    [pedidos]
+  );
+
   const limparFiltros = () => {
     setFiltroStatus("todos");
     setFiltroCliente("");
@@ -772,7 +779,7 @@ export default function MeusPedidos() {
           { key: "pedidos", label: "Pedidos" },
           { key: "devolvidos", label: "Devolvidos", count: pedidosDevolvidos.length, cor: "bg-red-100 text-red-700" },
           { key: "sem_estoque", label: "Sem estoque", count: pedidosSemEstoque.length, cor: "bg-amber-100 text-amber-700" },
-          { key: "bonificacoes", label: "Bonificações", count: pedidosBonificacoes.length, cor: "bg-blue-100 text-blue-700" },
+          { key: "bonificacoes", label: "Bonificações", count: bonificacoesCount, cor: "bg-amber-100 text-amber-800" },
         ].map((aba) => (
           <button
             key={aba.key}
