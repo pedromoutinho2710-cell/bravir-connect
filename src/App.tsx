@@ -8,6 +8,8 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import AppLayout from "@/components/AppLayout";
+import { useAuth } from "@/hooks/useAuth";
+import { type AppRole } from "@/lib/roles";
 import AgenteChatFlutuante from "@/components/AgenteChatFlutuante";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
@@ -68,6 +70,20 @@ const CalculadoraMargem = lazy(() => import("./pages/CalculadoraMargem"));
 
 const queryClient = new QueryClient();
 
+// Guard inline: libera /admin/solicitacoes para admin OU pedro.menezes (por email).
+// Reaproveita o ProtectedRoute (loading/auth/redirect) incluindo o próprio role do
+// pedro.menezes no allow quando o email confere.
+function SolicitacoesRoute() {
+  const { user, role } = useAuth();
+  const isPedroMenezes = user?.email === "pedro.menezes@bravir.com.br";
+  const allow: AppRole[] = isPedroMenezes && role ? ["admin", role] : ["admin"];
+  return (
+    <ProtectedRoute allow={allow}>
+      <AppLayout />
+    </ProtectedRoute>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -102,6 +118,10 @@ const App = () => (
               <Route path="/admin/tabelas-preco" element={<TabelasPreco />} />
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
               <Route path="/admin/campanhas" element={<Campanhas />} />
+            </Route>
+
+            {/* Solicitações de melhoria — admin e pedro.menezes (liberado por email) */}
+            <Route element={<SolicitacoesRoute />}>
               <Route path="/admin/solicitacoes" element={<Solicitacoes />} />
             </Route>
 

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { LogOut, FileText, Calculator, LayoutTemplate } from "lucide-react";
+import { LogOut, FileText, Calculator, LayoutTemplate, ClipboardList } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
@@ -90,6 +90,7 @@ export function MobileNav({ onNavigate }: Props) {
         { title: "Meu Pipeline", url: "/meu-pipeline", icon: LayoutTemplate },
         { title: "Propostas", url: "/propostas", icon: FileText },
         { title: "Calculadora", url: "/calculadora", icon: Calculator },
+        { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
       ]
     : [];
 
