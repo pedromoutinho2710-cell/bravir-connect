@@ -253,6 +253,14 @@ const ABAS = [
     activeClass: "data-[state=active]:bg-green-50 data-[state=active]:border-green-300 data-[state=active]:text-green-800",
     badgeClass: "bg-green-100 text-green-800",
   },
+  {
+    key: "cancelados",
+    label: "Cancelados",
+    status: ["cancelado"],
+    descricao: "Histórico de pedidos cancelados",
+    activeClass: "data-[state=active]:bg-red-50 data-[state=active]:border-red-300 data-[state=active]:text-red-800",
+    badgeClass: "bg-red-100 text-red-800",
+  },
 ];
 
 // ── Componente ────────────────────────────────────────────────────
@@ -1053,6 +1061,20 @@ export default function Faturamento() {
     setRefreshKey((k) => k + 1);
   };
 
+  const restaurarPedido = async (p: PedidoFat) => {
+    setAtualizando(p.id);
+    const { error } = await supabase.from("pedidos").update({
+      status: "aguardando_faturamento",
+      motivo: null,
+      status_atualizado_em: new Date().toISOString(),
+    }).eq("id", p.id);
+    setAtualizando(null);
+    if (error) { toast.error("Erro ao restaurar: " + error.message); return; }
+    toast.success(`Pedido #${p.numero_pedido} restaurado`);
+    await insertHistorico(p.id, "cancelado", "aguardando_faturamento", "restaurou", "Pedido restaurado do histórico de cancelados");
+    setRefreshKey((k) => k + 1);
+  };
+
   const excluirPedido = async () => {
     if (!excluirTarget) return;
     setExcluindo(true);
@@ -1810,6 +1832,18 @@ export default function Faturamento() {
 
     return (
       <div className="flex flex-wrap gap-1.5">
+        {/* Restaurar — apenas aba Cancelados */}
+        {abaAtiva === "cancelados" && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-green-700 border-green-300 hover:bg-green-50"
+            disabled={atualizando === p.id}
+            onClick={wrap(() => restaurarPedido(p))}
+          >
+            Restaurar
+          </Button>
+        )}
         {/* Assumir */}
         {p.status === "pendente_sankhya" && !p.responsavel_id && (
           <Button size="sm" variant="outline" disabled={atualizando === p.id}
@@ -2009,7 +2043,7 @@ export default function Faturamento() {
       />
 
       <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); setFiltroStatusAba("todos"); setFiltroProdutoPreFat(""); }}>
-        <TabsList className="w-full grid grid-cols-5">
+        <TabsList className="w-full grid grid-cols-6">
           {ABAS.map((aba) => {
             const count = pedidos.filter((p) => {
               if (!aba.status.includes(p.status)) return false;
@@ -2217,7 +2251,13 @@ export default function Faturamento() {
                             <span className="font-semibold">Problema:</span> {p.motivo}
                           </div>
                         )}
-                        {p.status !== "com_problema" && p.motivo && (
+                        {aba.key === "cancelados" && (
+                          <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1 space-y-0.5">
+                            {p.motivo && (<div><span className="font-semibold">Motivo:</span> {p.motivo}</div>)}
+                            {p.status_atualizado_em && (<div>Cancelado em {formatDate(p.status_atualizado_em)}</div>)}
+                          </div>
+                        )}
+                        {aba.key !== "cancelados" && p.status !== "com_problema" && p.motivo && (
                           <div className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">{p.motivo}</div>
                         )}
                         <div onClick={(e) => e.stopPropagation()}>
@@ -2360,7 +2400,13 @@ export default function Faturamento() {
                                 <span className="font-semibold">Problema:</span> {p.motivo}
                               </div>
                             )}
-                            {p.status !== "com_problema" && p.motivo && (
+                            {aba.key === "cancelados" && (
+                              <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1 max-w-[200px] space-y-0.5">
+                                {p.motivo && (<div className="break-words"><span className="font-semibold">Motivo:</span> {p.motivo}</div>)}
+                                {p.status_atualizado_em && (<div>Cancelado em {formatDate(p.status_atualizado_em)}</div>)}
+                              </div>
+                            )}
+                            {aba.key !== "cancelados" && p.status !== "com_problema" && p.motivo && (
                               <div className="text-xs text-muted-foreground mt-1 max-w-[160px] truncate" title={p.motivo}>
                                 {p.motivo}
                               </div>
