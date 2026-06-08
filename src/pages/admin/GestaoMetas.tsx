@@ -13,6 +13,13 @@ import { formatBRL } from "@/lib/format";
 import { toast } from "sonner";
 import { Loader2, Save, Trash2 } from "lucide-react";
 
+function parseBRL(raw: string): number {
+  // Remove pontos de milhar, troca vírgula decimal por ponto
+  const clean = raw.replace(/\./g, "").replace(",", ".");
+  const n = parseFloat(clean);
+  return isNaN(n) ? 0 : n;
+}
+
 const MESES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
@@ -229,9 +236,9 @@ export default function GestaoMetas() {
                         <div key={mes} className="rounded-md border p-3 space-y-2">
                           <span className="text-sm font-medium">{nomeMes}</span>
                           <Input
-                            type="number" min={0} step={1000}
-                            value={metaVal || ""}
-                            onChange={(e) => setMeta(v.id, mes, Number(e.target.value) || 0)}
+                            type="text" inputMode="numeric"
+                            value={metaVal ? metaVal.toLocaleString("pt-BR") : ""}
+                            onChange={(e) => setMeta(v.id, mes, parseBRL(e.target.value))}
                             placeholder="R$ 0"
                             className="h-8 text-sm"
                           />
@@ -277,9 +284,9 @@ export default function GestaoMetas() {
                     <div key={mes} className="rounded-md border p-3 space-y-2">
                       <span className="text-sm font-medium">{nomeMes}</span>
                       <Input
-                        type="number" min={0} step={1000}
-                        value={globalVal || ""}
-                        onChange={(e) => setGlobais((prev) => ({ ...prev, [mes]: Number(e.target.value) || 0 }))}
+                        type="text" inputMode="numeric"
+                        value={globalVal ? globalVal.toLocaleString("pt-BR") : ""}
+                        onChange={(e) => setGlobais((prev) => ({ ...prev, [mes]: parseBRL(e.target.value) }))}
                         placeholder="R$ 0"
                         className="h-8 text-sm"
                         disabled={globalIndisponivel}
