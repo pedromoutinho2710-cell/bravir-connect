@@ -17,6 +17,7 @@ export type Produto = {
   marca: string;
   cx_embarque: number;
   peso_unitario: number;
+  disponivel: boolean;
 };
 
 export type ItemPedido = {
@@ -378,6 +379,11 @@ export function SecaoProdutos({
                         <div className="truncate">{p.nome}</div>
                         <div className="text-[10px] text-muted-foreground">CX {p.cx_embarque}</div>
                       </div>
+                      {!p.disponivel && (
+                        <div className="text-[10px] font-medium text-amber-600 flex items-center gap-1 mt-0.5">
+                          <span>⚠</span> Sem estoque
+                        </div>
+                      )}
                       <Button
                         type="button"
                         size="sm"
