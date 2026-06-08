@@ -41,6 +41,7 @@ import EditarPedidoFaturamento from "@/pages/faturamento/EditarPedidoFaturamento
 import PedidosAdmin from "./pages/admin/PedidosAdmin";
 import Solicitacoes from "./pages/admin/Solicitacoes";
 import NovaSolicitacao from "./pages/NovaSolicitacao";
+import MinhasSolicitacoes from "@/pages/MinhasSolicitacoes";
 import ClientesAdmin from "./pages/admin/ClientesAdmin";
 import ImportarClientes from "./pages/admin/ImportarClientes";
 import ClienteDetalhe from "./pages/ClienteDetalhe";
@@ -135,6 +136,11 @@ const App = () => (
             {/* Nova solicitação de melhoria — acessível por todos os roles */}
             <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/solicitacao" element={<NovaSolicitacao />} />
+            </Route>
+
+            {/* Minhas Solicitações — colaborador acompanha as próprias solicitações */}
+            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento", "trade"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/minhas-solicitacoes" element={<MinhasSolicitacoes />} />
             </Route>
 
             {/* Rotas de vendedor — acessíveis por vendedor e admin */}

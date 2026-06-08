@@ -7,6 +7,8 @@ import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
@@ -41,6 +43,8 @@ interface Solicitacao {
   // Campos opcionais — presentes apenas se existirem na tabela viva.
   mockup_prompt?: string | null;
   chat_historico?: ChatMensagem[] | null;
+  link_teste?: string | null;
+  motivo_reprovacao?: string | null;
 }
 
 /* ───────────────────────── Metadados de exibição ───────────────────────── */
@@ -59,6 +63,9 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   aberto: { label: "Aberto", cls: "bg-blue-100 text-blue-800 border-blue-300" },
   em_analise: { label: "Em análise", cls: "bg-amber-100 text-amber-800 border-amber-300" },
   "em-andamento": { label: "Em andamento", cls: "bg-amber-100 text-amber-800 border-amber-300" },
+  aprovado: { label: "Aprovado", cls: "bg-green-100 text-green-800 border-green-300" },
+  reprovado: { label: "Reprovado", cls: "bg-red-100 text-red-800 border-red-300" },
+  devolvido: { label: "Devolvido pelo colaborador", cls: "bg-purple-100 text-purple-800 border-purple-300" },
   concluido: { label: "Concluído", cls: "bg-green-100 text-green-800 border-green-300" },
   recusado: { label: "Recusado", cls: "bg-red-100 text-red-800 border-red-300" },
 };
@@ -126,12 +133,14 @@ export default function Solicitacoes() {
         if (error) throw error;
         return count ?? 0;
       };
-      const [aberto, emAnalise, concluido] = await Promise.all([
+      const [aberto, emAnalise, aprovado, devolvido, reprovado] = await Promise.all([
         contar("aberto"),
         contar("em_analise"),
-        contar("concluido"),
+        contar("aprovado"),
+        contar("devolvido"),
+        contar("reprovado"),
       ]);
-      return { aberto, emAnalise, concluido };
+      return { aberto, emAnalise, aprovado, devolvido, reprovado };
     },
   });
 
@@ -148,10 +157,24 @@ export default function Solicitacoes() {
   });
 
   const updateStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: string }) => {
-      const { error } = await supabase
+    mutationFn: async ({
+      id,
+      status,
+      link_teste,
+      motivo_reprovacao,
+    }: {
+      id: string;
+      status: string;
+      link_teste?: string | null;
+      motivo_reprovacao?: string | null;
+    }) => {
+      const patch: Record<string, unknown> = { status };
+      if (link_teste !== undefined) patch.link_teste = link_teste;
+      if (motivo_reprovacao !== undefined) patch.motivo_reprovacao = motivo_reprovacao;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- colunas novas ainda não estão no types.ts gerado
+      const { error } = await (supabase as any)
         .from("solicitacoes_gestor")
-        .update({ status })
+        .update(patch)
         .eq("id", id);
       if (error) throw error;
     },
@@ -277,7 +300,9 @@ export default function Solicitacoes() {
   const kpiCards = [
     { label: "Em aberto", value: kpis?.aberto ?? 0, color: "text-blue-700" },
     { label: "Em análise", value: kpis?.emAnalise ?? 0, color: "text-amber-700" },
-    { label: "Concluídos", value: kpis?.concluido ?? 0, color: "text-green-700" },
+    { label: "Aprovados", value: kpis?.aprovado ?? 0, color: "text-green-700" },
+    { label: "Devolvidos", value: kpis?.devolvido ?? 0, color: "text-purple-700" },
+    { label: "Reprovados", value: kpis?.reprovado ?? 0, color: "text-red-700" },
   ];
 
   return (
@@ -289,7 +314,7 @@ export default function Solicitacoes() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         {kpiCards.map(({ label, value, color }) => (
           <Card key={label}>
             <CardContent className="pt-4 pb-3 px-4">
@@ -326,7 +351,9 @@ export default function Solicitacoes() {
                 <SelectItem value="todos">Todos</SelectItem>
                 <SelectItem value="aberto">Aberto</SelectItem>
                 <SelectItem value="em_analise">Em análise</SelectItem>
-                <SelectItem value="concluido">Concluído</SelectItem>
+                <SelectItem value="aprovado">Aprovado</SelectItem>
+                <SelectItem value="reprovado">Reprovado</SelectItem>
+                <SelectItem value="devolvido">Devolvido pelo colaborador</SelectItem>
               </SelectContent>
             </Select>
             <Button
@@ -401,7 +428,9 @@ export default function Solicitacoes() {
               <DetalhePainel
                 key={selected.id}
                 solicitacao={selected}
-                onStatus={(status) => updateStatus.mutate({ id: selected.id, status })}
+                onStatus={(status, extra) =>
+                  updateStatus.mutate({ id: selected.id, status, ...extra })
+                }
               />
             ) : (
               <Card>
@@ -422,7 +451,9 @@ export default function Solicitacoes() {
               <DetalhePainel
                 key={selected.id}
                 solicitacao={selected}
-                onStatus={(status) => updateStatus.mutate({ id: selected.id, status })}
+                onStatus={(status, extra) =>
+                  updateStatus.mutate({ id: selected.id, status, ...extra })
+                }
               />
             )}
           </DialogContent>
@@ -439,13 +470,21 @@ function DetalhePainel({
   onStatus,
 }: {
   solicitacao: Solicitacao;
-  onStatus: (status: string) => void;
+  onStatus: (
+    status: string,
+    extra?: { link_teste?: string | null; motivo_reprovacao?: string | null },
+  ) => void;
 }) {
   const tm = tipoMeta(s.tipo);
   const sm = statusMeta(s.status);
   const pm = prioMeta(s.prioridade);
 
   const chat = Array.isArray(s.chat_historico) ? s.chat_historico : [];
+
+  // Sub-formulários inline para aprovar (link de teste) e reprovar (motivo).
+  const [acao, setAcao] = useState<"none" | "aprovar" | "reprovar">("none");
+  const [linkTeste, setLinkTeste] = useState(s.link_teste ?? "");
+  const [motivoReprovacao, setMotivoReprovacao] = useState("");
 
   return (
     <div className="space-y-4">
@@ -477,6 +516,35 @@ function DetalhePainel({
                 <dd className="whitespace-pre-wrap">{s.motivo}</dd>
               </div>
             )}
+            {s.status === "aprovado" && s.link_teste && (
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted-foreground">Link de teste</dt>
+                <dd>
+                  <a
+                    href={s.link_teste}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-700 underline break-all"
+                  >
+                    {s.link_teste}
+                  </a>
+                </dd>
+              </div>
+            )}
+            {s.status === "reprovado" && s.motivo_reprovacao && (
+              <div>
+                <dt className="text-xs uppercase tracking-wide text-muted-foreground">Motivo da reprovação</dt>
+                <dd className="whitespace-pre-wrap text-red-700">{s.motivo_reprovacao}</dd>
+              </div>
+            )}
+            {s.status === "devolvido" && (
+              <div className="rounded-md border border-purple-200 bg-purple-50 p-2">
+                <dt className="text-xs uppercase tracking-wide text-purple-700">Motivo da devolução</dt>
+                <dd className="whitespace-pre-wrap text-purple-900">
+                  {s.motivo_reprovacao || "O colaborador devolveu a solicitação com ajustes."}
+                </dd>
+              </div>
+            )}
             <div>
               <dt className="text-xs uppercase tracking-wide text-muted-foreground">Criado por</dt>
               <dd>{s.criado_por_nome ?? "—"}</dd>
@@ -489,33 +557,85 @@ function DetalhePainel({
 
           <Separator />
 
-          <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-amber-300 text-amber-800 hover:bg-amber-50"
-              disabled={s.status === "em_analise"}
-              onClick={() => onStatus("em_analise")}
-            >
-              Em análise
-            </Button>
-            <Button
-              size="sm"
-              className="bg-green-600 hover:bg-green-700"
-              disabled={s.status === "concluido"}
-              onClick={() => onStatus("concluido")}
-            >
-              Concluir
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-red-300 text-red-700 hover:bg-red-50"
-              disabled={s.status === "recusado"}
-              onClick={() => onStatus("recusado")}
-            >
-              Recusar
-            </Button>
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-300 text-amber-800 hover:bg-amber-50"
+                disabled={s.status === "em_analise"}
+                onClick={() => {
+                  setAcao("none");
+                  onStatus("em_analise");
+                }}
+              >
+                Em análise
+              </Button>
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700"
+                onClick={() => setAcao((a) => (a === "aprovar" ? "none" : "aprovar"))}
+              >
+                Aprovar
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-red-300 text-red-700 hover:bg-red-50"
+                onClick={() => setAcao((a) => (a === "reprovar" ? "none" : "reprovar"))}
+              >
+                Reprovar
+              </Button>
+            </div>
+
+            {/* Inline — aprovar com link de teste */}
+            {acao === "aprovar" && (
+              <div className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50 p-3">
+                <label className="text-xs font-medium text-emerald-800">
+                  Link de teste da melhoria (opcional)
+                </label>
+                <Input
+                  value={linkTeste}
+                  onChange={(e) => setLinkTeste(e.target.value)}
+                  placeholder="https://..."
+                />
+                <Button
+                  size="sm"
+                  className="bg-green-600 hover:bg-green-700"
+                  onClick={() => {
+                    onStatus("aprovado", { link_teste: linkTeste.trim() || null });
+                    setAcao("none");
+                  }}
+                >
+                  Confirmar aprovação
+                </Button>
+              </div>
+            )}
+
+            {/* Inline — reprovar com motivo */}
+            {acao === "reprovar" && (
+              <div className="space-y-2 rounded-md border border-red-200 bg-red-50 p-3">
+                <label className="text-xs font-medium text-red-800">Motivo da reprovação</label>
+                <Textarea
+                  value={motivoReprovacao}
+                  onChange={(e) => setMotivoReprovacao(e.target.value)}
+                  placeholder="Explique por que esta solicitação foi reprovada..."
+                  rows={3}
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-red-300 text-red-700 hover:bg-red-50"
+                  disabled={!motivoReprovacao.trim()}
+                  onClick={() => {
+                    onStatus("reprovado", { motivo_reprovacao: motivoReprovacao.trim() });
+                    setAcao("none");
+                  }}
+                >
+                  Confirmar reprovação
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

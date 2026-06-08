@@ -60,9 +60,12 @@ export const BASE_FATURAMENTO_ITEMS: Item[] = [
   { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
   { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
   { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
+  { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
   { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
 ];
 
+// Nota: pedro.bravir@gmail.com (admin) usa ADMIN_SECTIONS, não FLAT_MENU_STATIC,
+// portanto não vê "Minhas Solicitações" — este item é só para os demais roles.
 export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
   vendedor: [
     { title: "Meu Painel", url: "/meu-painel", icon: LayoutDashboard },
@@ -72,12 +75,14 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Minhas Tarefas", url: "/minhas-tarefas", icon: CheckSquare },
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
     { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
+    { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
   ],
   logistica: [
     { title: "Dashboard", url: "/logistica", icon: LayoutDashboard },
     { title: "Fila de Pedidos", url: "/logistica/fila", icon: ListChecks },
     { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
+    { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
   ],
   gestora: [
@@ -90,6 +95,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Gestão de Metas", url: "/admin/gestao-metas", icon: Target },
     { title: "Leads Evento", url: "/gestora/leads-evento", icon: UserCheck },
     { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
+    { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
   ],
   gestora_faturamento: [
@@ -102,6 +108,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
     { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
     { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardCheck },
+    { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Nova solicitação", url: "/solicitacao", icon: PlusSquare },
   ],
   trade: [
@@ -109,5 +116,6 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Campanhas", url: "/trade/campanhas", icon: Megaphone },
     { title: "Importar Faturamento", url: "/trade/importar-faturamento", icon: Upload },
     { title: "Importar Metas", url: "/trade/importar-metas", icon: Target },
+    { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
   ],
 };
