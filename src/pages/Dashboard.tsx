@@ -238,7 +238,7 @@ export default function Dashboard() {
 
     (async () => {
       try {
-        const [pedidosRes, metasRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, mensaisRes, fatPeriodoRes] = await Promise.all([
+        const [pedidosRes, metasGlobalRes, metasVendedorRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, mensaisRes, fatPeriodoRes] = await Promise.all([
           // Pedidos do período — base para ranking e top SKUs
           supabase
             .from("pedidos")
@@ -246,7 +246,15 @@ export default function Dashboard() {
             .gte("data_pedido", effectiveInicio)
             .lte("data_pedido", effectiveFim)
             .not("status", "in", '("rascunho")'),
-          // Meta total da empresa do mês do período filtrado (inclui vendedor_id para ranking individual)
+          // Meta global da empresa do mês do período filtrado (card "Meta de entrada")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("metas_globais")
+            .select("valor_meta_reais")
+            .eq("mes", mesFiltro)
+            .eq("ano", anoFiltro)
+            .maybeSingle(),
+          // Metas individuais por vendedor (ranking individual)
           supabase
             .from("metas")
             .select("vendedor_id, valor_meta_reais")
@@ -326,7 +334,7 @@ export default function Dashboard() {
         });
 
         // Meta total do mês
-        const metaSum = (metasRes.data ?? []).reduce((s, m) => s + Number(m.valor_meta_reais), 0);
+        const metaSum = metasGlobalRes.data ? Number(metasGlobalRes.data.valor_meta_reais) : 0;
         setMetaTotal(metaSum);
 
         // Faturamento mês atual para % da meta
@@ -340,7 +348,7 @@ export default function Dashboard() {
 
         // Meta mensal por vendedor
         const metasPorVendedor: Record<string, number> = {};
-        (metasRes.data ?? []).forEach((m) => {
+        (metasVendedorRes.data ?? []).forEach((m) => {
           if (m.vendedor_id) metasPorVendedor[m.vendedor_id] = Number(m.valor_meta_reais);
         });
 
