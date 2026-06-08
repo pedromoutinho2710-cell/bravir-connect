@@ -21,6 +21,7 @@ import {
   FileText,
   Calculator,
   CheckSquare,
+  BarChart2,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -32,6 +33,7 @@ export const ADMIN_SECTIONS: Section[] = [
     label: "Visão Geral",
     items: [
       { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+      { title: "Visão Macro", url: "/admin/visao-macro", icon: BarChart2 },
     ],
   },
   {
