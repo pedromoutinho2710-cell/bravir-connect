@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Bot, CheckCircle2, ExternalLink, Loader2, PencilLine, Send } from "lucide-react";
+import { Bot, CheckCircle2, ExternalLink, Loader2, PencilLine, PlusCircle, Send } from "lucide-react";
 
 const BRAND = "#0F6E56";
 
@@ -133,6 +133,7 @@ export default function MinhasSolicitacoes() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [corrigir, setCorrigir] = useState<Solicitacao | null>(null);
+  const [novaAberta, setNovaAberta] = useState(false);
 
   const { data: solicitacoes = [], isLoading } = useQuery({
     queryKey: ["minhas_solicitacoes", user?.id],
@@ -172,11 +173,17 @@ export default function MinhasSolicitacoes() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Minhas Solicitações</h1>
-        <p className="text-sm text-muted-foreground">
-          Acompanhe o andamento das suas solicitações e sugestões.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">Minhas Solicitações</h1>
+          <p className="text-sm text-muted-foreground">
+            Acompanhe o andamento das suas solicitações e sugestões.
+          </p>
+        </div>
+        <Button onClick={() => setNovaAberta(true)}>
+          <PlusCircle className="h-4 w-4 mr-2" />
+          Nova Solicitação
+        </Button>
       </div>
 
       {isLoading ? (
@@ -277,6 +284,18 @@ export default function MinhasSolicitacoes() {
               }}
             />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de nova solicitação com chat */}
+      <Dialog open={novaAberta} onOpenChange={setNovaAberta}>
+        <DialogContent className="p-0 gap-0 overflow-hidden w-screen h-[100dvh] max-w-none rounded-none sm:w-[480px] sm:h-[600px] sm:max-w-[480px] sm:rounded-2xl">
+          <ChatNovaSolicitacao
+            onSaved={() => {
+              setNovaAberta(false);
+              qc.invalidateQueries({ queryKey: ["minhas_solicitacoes", user?.id] });
+            }}
+          />
         </DialogContent>
       </Dialog>
     </div>
@@ -484,6 +503,211 @@ function ChatCorrigir({
           }}
           disabled={loading}
           placeholder="Escreva o que precisa ajustar..."
+          className="flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+        />
+        <button
+          type="button"
+          onClick={handleSend}
+          disabled={loading || !input.trim()}
+          aria-label="Enviar mensagem"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-40"
+          style={{ backgroundColor: BRAND }}
+        >
+          <Send className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────── Chat de nova solicitação ───────────────── */
+
+const GREETING_NOVA =
+  "Olá! Pode me contar sua dúvida, reportar um bug ou sugerir uma melhoria. Estou aqui para ajudar!";
+
+function ChatNovaSolicitacao({ onSaved }: { onSaved: () => void }) {
+  const { user, fullName } = useAuth();
+  const [messages, setMessages] = useState<ChatMsg[]>([
+    { id: 0, role: "assistant", content: GREETING_NOVA, kind: "greeting" },
+  ]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const idRef = useRef(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const nextId = () => {
+    idRef.current += 1;
+    return idRef.current;
+  };
+
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+  }, [messages, loading]);
+
+  async function salvarRegistro(registro: Registro, conversa: ChatMsg[]) {
+    const chatHistorico = conversa
+      .filter((m) => !m.kind)
+      .map((m) => ({ role: m.role, content: m.content }));
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- colunas novas ainda não estão no types.ts gerado
+    const { error } = await (supabase as any).from("solicitacoes_gestor").insert({
+      tipo: registro.tipo,
+      titulo: registro.titulo ?? null,
+      tela: registro.tela ?? null,
+      descricao: registro.descricao ?? registro.titulo ?? "(sem descrição)",
+      motivo: registro.motivo ?? null,
+      prioridade: registro.prioridade ?? "normal",
+      mockup_prompt: registro.mockup_prompt ?? null,
+      status: "aberto",
+      criado_por: user!.id,
+      criado_por_nome: fullName || user!.email || "Colaborador",
+      chat_historico: chatHistorico,
+    });
+
+    if (error) {
+      console.error("Erro ao salvar solicitação do agente:", error);
+      return false;
+    }
+    return true;
+  }
+
+  async function handleSend() {
+    const text = input.trim();
+    if (!text || loading) return;
+
+    const userMsg: ChatMsg = { id: nextId(), role: "user", content: text };
+    const baseConversa = [...messages, userMsg];
+    setMessages(baseConversa);
+    setInput("");
+    setLoading(true);
+
+    try {
+      const apiMessages = baseConversa
+        .filter((m) => !m.kind)
+        .map((m) => ({ role: m.role, content: m.content }));
+
+      const { data, error } = await supabase.functions.invoke("agente-chat", {
+        body: { messages: apiMessages },
+      });
+
+      if (error || !data?.text) {
+        throw error ?? new Error("Resposta vazia do assistente");
+      }
+
+      const { display, registro } = splitRegistro(data.text as string);
+      const assistantMsg: ChatMsg = { id: nextId(), role: "assistant", content: display };
+      const comResposta = [...baseConversa, assistantMsg];
+      setMessages(comResposta);
+
+      if (registro) {
+        const ok = await salvarRegistro(registro, comResposta);
+        if (ok) {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: nextId(),
+              role: "assistant",
+              content: "✓ Registrado! Pedro vai analisar sua solicitação em breve.",
+              kind: "confirmation",
+            },
+          ]);
+          setTimeout(onSaved, 1400);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: nextId(),
+              role: "assistant",
+              content: "Não consegui registrar agora. Pode tentar de novo em instantes?",
+            },
+          ]);
+        }
+      }
+    } catch (err) {
+      console.error("Erro no chat de nova solicitação:", err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId(),
+          role: "assistant",
+          content: "Ops, tive um problema para responder agora. Tente novamente em alguns segundos.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Header */}
+      <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: BRAND }}>
+        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20">
+          <Bot className="h-5 w-5" />
+        </div>
+        <div className="flex-1 leading-tight">
+          <p className="text-sm font-semibold">Assistente Bravir</p>
+          <p className="flex items-center gap-1.5 text-xs text-white/80">
+            <span className="inline-block h-2 w-2 rounded-full bg-green-300" />
+            Descreva sua sugestão, bug ou melhoria
+          </p>
+        </div>
+      </div>
+
+      {/* Mensagens */}
+      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-muted/30 px-3 py-4">
+        {messages.map((m) => {
+          if (m.kind === "confirmation") {
+            return (
+              <div
+                key={m.id}
+                className="flex items-start gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800"
+              >
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+                <span>{m.content}</span>
+              </div>
+            );
+          }
+          const isUser = m.role === "user";
+          return (
+            <div key={m.id} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+              <div
+                className={`max-w-[80%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${
+                  isUser
+                    ? "rounded-br-sm text-white"
+                    : "rounded-bl-sm border border-border bg-background text-foreground"
+                }`}
+                style={isUser ? { backgroundColor: BRAND } : undefined}
+              >
+                {m.content}
+              </div>
+            </div>
+          );
+        })}
+
+        {loading && (
+          <div className="flex justify-start">
+            <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-border bg-background px-3 py-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Digitando...
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="flex items-center gap-2 border-t border-border bg-background px-3 py-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleSend();
+            }
+          }}
+          disabled={loading}
+          placeholder="Escreva sua mensagem..."
           className="flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
         />
         <button
