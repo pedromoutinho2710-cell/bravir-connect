@@ -71,7 +71,6 @@ export default function NovoPedidoFaturamento() {
       .from("produtos")
       .select("id, nome, codigo_jiva, marca")
       .eq("ativo", true)
-      .eq("disponivel", true)
       .order("nome")
       .then(({ data }) => { if (data) setProdutos(data); });
   }, []);
