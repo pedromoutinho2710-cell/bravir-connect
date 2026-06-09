@@ -261,7 +261,6 @@ export function SecaoProdutos({
       const precoEspecial = produto?.codigo_jiva ? precosEspeciais[produto.codigo_jiva] : undefined;
       const usarEspecial = !preservarDescontos
         && precoEspecial !== undefined
-        && precoEspecial > precos_calc.preco_final
         && vigenciaId === "311fd93d-f3d1-4160-bd17-fc08472606c0";
 
       if (usarEspecial) {
