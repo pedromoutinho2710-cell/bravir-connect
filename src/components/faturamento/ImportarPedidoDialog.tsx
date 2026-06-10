@@ -120,8 +120,8 @@ export default function ImportarPedidoDialog({
 
       const tabelaRaw = cel(2, 7); // H3
       const tabela_preco = tabelaRaw.match(/\d+|suframa/i)?.[0]?.toLowerCase() ?? "";
-      const codigo_cliente = cel(3, 14); // O4
-      const cond_pagamento = cel(5, 14); // O6
+      const codigo_cliente = cel(2, 11); // L3
+      const cond_pagamento = cel(4, 10); // K5
 
       // Agendamento: linha 13 (índice 12), coluna E (índice 4) = "X" ou coluna F (índice 5) = "SIM"
       const agendamento = cel(12, 4).toUpperCase() === "X" || cel(12, 5).toUpperCase() === "SIM";
@@ -176,7 +176,7 @@ export default function ImportarPedidoDialog({
 
       // Buscar cliente
       if (!codigo_cliente) {
-        setErroCliente("Código do cliente não encontrado na planilha (célula O4).");
+        setErroCliente("Código do cliente não encontrado na planilha (célula L3).");
         setDados({
           codigo_cliente,
           cond_pagamento,
