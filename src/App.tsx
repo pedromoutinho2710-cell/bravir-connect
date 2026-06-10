@@ -26,6 +26,7 @@ import Metas from "./pages/admin/Metas";
 import GestaoMetas from "./pages/admin/GestaoMetas";
 import Dashboard from "./pages/Dashboard";
 import VisaoMacro from "./pages/admin/VisaoMacro";
+import BlingCallback from "@/pages/admin/BlingCallback";
 import Trade from "./pages/Trade";
 import TradeCampanhas from "./pages/TradeCampanhas";
 import ImportarFaturamento from "./pages/trade/ImportarFaturamento";
@@ -113,6 +114,7 @@ const App = () => (
             <Route element={<ProtectedRoute allow={["admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/admin/visao-macro" element={<VisaoMacro />} />
+              <Route path="/admin/bling-callback" element={<BlingCallback />} />
               <Route path="/admin/equipe" element={<Equipe />} />
               <Route path="/admin/metas" element={<Metas />} />
               <Route path="/admin/formularios" element={<Formularios />} />
