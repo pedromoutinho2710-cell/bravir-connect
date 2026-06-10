@@ -96,7 +96,7 @@ export function SecaoProdutos({
   const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
   const [precos, setPrecos] = useState<Record<string, Record<string, number>>>({});
-  const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, number>>({});
+  const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, { preco: number; origem: string }>>({});
 
   // Recarrega preços quando vigência muda
   useEffect(() => {
@@ -120,12 +120,12 @@ export function SecaoProdutos({
     console.log("[DEBUG] precosEspeciais:", precosEspeciais);
     supabase
       .from("precos_cliente_produto")
-      .select("codigo_produto, preco_unitario")
+      .select("codigo_produto, preco_unitario, origem")
       .eq("codigo_parceiro", codigoParceiro)
       .then(({ data, error }) => {
         console.log("[DEBUG] data:", data, "error:", error);
-        const map: Record<string, number> = {};
-        data?.forEach((p) => { map[p.codigo_produto] = Number(p.preco_unitario); });
+        const map: Record<string, { preco: number; origem: string }> = {};
+        data?.forEach((p) => { map[p.codigo_produto] = { preco: Number(p.preco_unitario), origem: p.origem }; });
         console.log("[DEBUG] mapa carregado:", map);
         setPrecosEspeciais(map);
       });
@@ -259,22 +259,33 @@ export function SecaoProdutos({
 
       const produto = produtos.find((p) => p.id === i.produto_id);
       const precoEspecial = produto?.codigo_jiva ? precosEspeciais[produto.codigo_jiva] : undefined;
-      const usarEspecial = !preservarDescontos
+      const naVigenciaEspecial = !preservarDescontos
         && precoEspecial !== undefined
         && vigenciaId === "311fd93d-f3d1-4160-bd17-fc08472606c0";
 
-      if (usarEspecial) {
-        const dPerfilEspecial = bruto > 0 ? Math.max(0, 1 - precoEspecial / bruto) : 0;
-        const precos_especial_com = calcularPrecos(bruto, dPerfilEspecial, i.desconto_comercial, i.desconto_trade, i.quantidade);
-        return {
-          ...i,
-          preco_bruto: bruto,
-          desconto_perfil: dPerfilEspecial,
-          preco_apos_perfil: precos_especial_com.preco_apos_perfil,
-          preco_apos_comercial: precos_especial_com.preco_apos_comercial,
-          preco_final: precos_especial_com.preco_final,
-          total: precos_especial_com.total,
-        };
+      if (naVigenciaEspecial && precoEspecial) {
+        // 'acordo' sempre prevalece; 'historico' funciona como piso de preço
+        // (só vence se for maior que o preço líquido calculado pelo cluster).
+        const liquidoCluster = precos_calc.preco_apos_perfil;
+        const precoEfetivo = precoEspecial.origem === "acordo"
+          ? precoEspecial.preco
+          : Math.max(precoEspecial.preco, liquidoCluster);
+        const aplicarEspecial = precoEspecial.origem === "acordo" || precoEfetivo > liquidoCluster;
+
+        if (aplicarEspecial) {
+          const dPerfilEspecial = bruto > 0 ? Math.max(0, 1 - precoEfetivo / bruto) : 0;
+          const precos_especial_com = calcularPrecos(bruto, dPerfilEspecial, i.desconto_comercial, i.desconto_trade, i.quantidade);
+          return {
+            ...i,
+            preco_bruto: bruto,
+            desconto_perfil: dPerfilEspecial,
+            preco_apos_perfil: precos_especial_com.preco_apos_perfil,
+            preco_apos_comercial: precos_especial_com.preco_apos_comercial,
+            preco_final: precos_especial_com.preco_final,
+            total: precos_especial_com.total,
+          };
+        }
+        // origem 'historico' com preço <= cluster: cai para o cálculo normal do cluster abaixo.
       }
 
       return {
