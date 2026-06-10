@@ -118,7 +118,7 @@ export default function ImportarPedidoDialog({
       );
       const offset = jivaColIdx === 3 ? 1 : 0;
 
-      const tabelaRaw = cel(2, 7); // H3
+      const tabelaRaw = cel(1, 7); // H2
       const tabela_preco = tabelaRaw.match(/\d+|suframa/i)?.[0]?.toLowerCase() ?? "";
       const codigo_cliente = cel(2, 11); // L3
       const cond_pagamento = cel(4, 10); // K5
