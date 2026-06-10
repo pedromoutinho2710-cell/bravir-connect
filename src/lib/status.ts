@@ -15,6 +15,8 @@ export const STATUS_LABEL: Record<string, string> = {
   revisao_necessaria: "Revisão necessária",
   sem_estoque: "Pedido sem estoque",
   aguardando_faturamento: "Aguardando faturamento",
+  aguardando_pagamento: "Aguardando pagamento",
+  pagamento_confirmado: "Pagamento confirmado",
 };
 
 export const STATUS_COLOR: Record<string, string> = {
@@ -34,4 +36,6 @@ export const STATUS_COLOR: Record<string, string> = {
   revisao_necessaria: "bg-red-100 text-red-800 border-red-300",
   sem_estoque: "bg-amber-100 text-amber-800 border-amber-300",
   aguardando_faturamento: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  aguardando_pagamento: "bg-amber-100 text-amber-900 border-amber-400",
+  pagamento_confirmado: "bg-emerald-100 text-emerald-800 border-emerald-300",
 };

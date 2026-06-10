@@ -34,6 +34,7 @@ type PedidoFat = {
   status: string;
   status_atualizado_em: string | null;
   cond_pagamento: string | null;
+  pagamento_vista: boolean;
   observacoes: string | null;
   responsavel_id: string | null;
   motivo: string | null;
@@ -244,6 +245,14 @@ const ABAS = [
     descricao: "Pedidos aguardando reposição de estoque",
     activeClass: "data-[state=active]:bg-red-50 data-[state=active]:border-red-300 data-[state=active]:text-red-800",
     badgeClass: "bg-red-100 text-red-800",
+  },
+  {
+    key: "a_vista",
+    label: "À Vista",
+    status: [],
+    descricao: "Pedidos com pagamento à vista (todos os status)",
+    activeClass: "data-[state=active]:bg-emerald-50 data-[state=active]:border-emerald-300 data-[state=active]:text-emerald-800",
+    badgeClass: "bg-emerald-100 text-emerald-800",
   },
   {
     key: "faturado",
@@ -472,7 +481,7 @@ export default function Faturamento() {
         .from("pedidos")
         .select(`
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
-          cond_pagamento, observacoes, ordem_compra, pedido_origem_id, responsavel_id, motivo, vendedor_id, flag_prioridade,
+          cond_pagamento, pagamento_vista, observacoes, ordem_compra, pedido_origem_id, responsavel_id, motivo, vendedor_id, flag_prioridade,
           cliente_id, perfil_cliente, tabela_preco, agendamento, total,
           clientes(razao_social, nome_parceiro, cnpj, cidade, uf, comprador, cep, codigo_parceiro, codigo_cliente, cluster, aceita_saldo, negativado, email, rua, numero, bairro, telefone),
           itens_pedido(
@@ -505,6 +514,7 @@ export default function Faturamento() {
           status: p.status,
           status_atualizado_em: p.status_atualizado_em ?? null,
           cond_pagamento: p.cond_pagamento,
+          pagamento_vista: p.pagamento_vista ?? false,
           observacoes: p.observacoes,
           responsavel_id: p.responsavel_id,
           responsavel_nome: p.responsavel_id ? (profiles[p.responsavel_id] ?? null) : null,
@@ -636,6 +646,7 @@ export default function Faturamento() {
     if (!aba) return [];
 
     let lista = pedidos.filter((p) => {
+      if (abaAtiva === "a_vista") return p.pagamento_vista === true && p.status !== "cancelado";
       if (aba.status.includes(p.status)) return true;
       if (abaAtiva === "cadastrados_sankhya" && p.status === "sem_estoque") {
         return p.itens.some((item) => (item.qtd_faturada ?? 0) > 0);
@@ -2097,9 +2108,10 @@ export default function Faturamento() {
       />
 
       <Tabs value={abaAtiva} onValueChange={(v) => { setAbaAtiva(v); setFiltroStatusAba("todos"); setFiltroProdutoPreFat(""); setSemEstoqueOrdem(null); }}>
-        <TabsList className="w-full grid grid-cols-6">
+        <TabsList className="w-full grid grid-cols-7">
           {ABAS.map((aba) => {
             const count = pedidos.filter((p) => {
+              if (aba.key === "a_vista") return p.pagamento_vista === true && p.status !== "cancelado";
               if (!aba.status.includes(p.status)) return false;
               if (aba.key === "em_aberto") return (p.status === "pendente_sankhya" && !p.responsavel_id) || p.status === "devolvido" || p.status === "cancelado" || p.status === "com_problema";
               if (aba.key === "assumidos") return p.status === "pendente_sankhya" && !!p.responsavel_id;
@@ -2240,6 +2252,11 @@ export default function Faturamento() {
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-mono font-bold text-sm">#{p.numero_pedido}</span>
                               <StatusBadge status={p.status} />
+                              {p.pagamento_vista && (
+                                <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                  À VISTA
+                                </span>
+                              )}
                               {aba.key === "sem_estoque" && <FlagBadge flag={p.flag_prioridade} />}
                             </div>
                             {p.tipo === "Bonificação" && (

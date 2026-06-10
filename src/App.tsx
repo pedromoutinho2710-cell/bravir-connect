@@ -63,6 +63,7 @@ import ClientesGestora from "./pages/gestora/ClientesGestora";
 import NovoPedidoGestora from "./pages/gestora/NovoPedidoGestora";
 import PedidosGestora from "./pages/gestora/PedidosGestora";
 import HistoricoFaturamento from "@/pages/gestora/HistoricoFaturamento";
+import FilaFinanceiro from "./pages/financeiro/FilaFinanceiro";
 
 const MeuPipeline = lazy(() => import("./pages/vendedor/MeuPipeline"));
 const PropostaPublica = lazy(() => import("./pages/PropostaPublica"));
@@ -134,12 +135,12 @@ const App = () => (
             </Route>
 
             {/* Nova solicitação de melhoria — acessível por todos os roles */}
-            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento"]}><AppLayout /></ProtectedRoute>}>
+            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento", "financeiro"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/solicitacao" element={<NovaSolicitacao />} />
             </Route>
 
             {/* Minhas Solicitações — colaborador acompanha as próprias solicitações */}
-            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento", "trade"]}><AppLayout /></ProtectedRoute>}>
+            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento", "trade", "financeiro"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/minhas-solicitacoes" element={<MinhasSolicitacoes />} />
             </Route>
 
@@ -201,6 +202,11 @@ const App = () => (
             {/* Gestora Faturamento */}
             <Route element={<ProtectedRoute allow={["gestora_faturamento", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/gestora/historico-faturamento" element={<HistoricoFaturamento />} />
+            </Route>
+
+            {/* Financeiro — fila de pagamentos à vista */}
+            <Route element={<ProtectedRoute allow={["financeiro", "admin"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/financeiro" element={<FilaFinanceiro />} />
             </Route>
 
             {/* Logística */}

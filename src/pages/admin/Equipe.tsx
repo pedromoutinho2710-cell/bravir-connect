@@ -21,8 +21,8 @@ type UsuarioRow = {
   role: AppRole | null;
 };
 
-const ROLES: AppRole[] = ["admin", "gestora", "vendedor", "faturamento", "logistica", "trade"];
-const ROLE_ORDER: AppRole[] = ["admin", "gestora", "vendedor", "faturamento", "logistica", "trade"];
+const ROLES: AppRole[] = ["admin", "gestora", "vendedor", "faturamento", "logistica", "trade", "financeiro"];
+const ROLE_ORDER: AppRole[] = ["admin", "gestora", "vendedor", "faturamento", "logistica", "trade", "financeiro"];
 
 const ROLE_COLOR: Record<string, string> = {
   admin: "bg-purple-100 text-purple-800 border-purple-300",
@@ -30,6 +30,7 @@ const ROLE_COLOR: Record<string, string> = {
   faturamento: "bg-green-100 text-green-800 border-green-300",
   logistica: "bg-orange-100 text-orange-800 border-orange-300",
   trade: "bg-yellow-100 text-yellow-800 border-yellow-300",
+  financeiro: "bg-emerald-100 text-emerald-800 border-emerald-300",
 };
 
 export default function Equipe() {

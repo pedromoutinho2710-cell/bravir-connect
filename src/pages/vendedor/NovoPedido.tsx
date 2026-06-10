@@ -116,6 +116,7 @@ export default function NovoPedido() {
         cluster: cl.cluster ?? "",
         tabela_preco: cl.tabela_preco ?? "",
         cond_pagamento: ped.cond_pagamento ?? "",
+        pagamento_vista: ped.pagamento_vista ?? false,
         observacoes: ped.observacoes ?? "",
         agendamento: ped.agendamento ?? false,
         codigo_cliente: cl.codigo_parceiro ?? cl.codigo_cliente ?? "",

@@ -9,7 +9,10 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { formatCNPJ, formatCEP, isValidCNPJ, onlyDigits, formatBRL, formatDate } from "@/lib/format";
 import { UFS } from "@/lib/constants";
-import { AlertCircle, CheckCircle2, Search, PlusCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, Search, PlusCircle, Banknote } from "lucide-react";
+
+/** Texto legível gravado em cond_pagamento quando o pedido é à vista. */
+export const COND_A_VISTA = "À Vista";
 
 export type DadosCliente = {
   cliente_id?: string;
@@ -23,6 +26,7 @@ export type DadosCliente = {
   tabela_preco: string;
   tipo: string;
   cond_pagamento: string;
+  pagamento_vista: boolean;
   agendamento: boolean;
   observacoes: string;
   codigo_cliente: string;
@@ -515,7 +519,19 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-base font-semibold">Tipo *</Label>
-            <Select value={value.tipo} onValueChange={(v) => set("tipo", v)}>
+            <Select
+              value={value.tipo}
+              onValueChange={(v) =>
+                onChange({
+                  ...valueRef.current,
+                  tipo: v,
+                  // Bonificação não tem pagamento à vista
+                  ...(v === "Bonificação" && valueRef.current.pagamento_vista
+                    ? { pagamento_vista: false, cond_pagamento: "" }
+                    : {}),
+                })
+              }
+            >
               <SelectTrigger className="h-11 text-base"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="Pedido">Pedido</SelectItem>
@@ -525,19 +541,46 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
           </div>
           <div className="space-y-1.5">
             <Label className="text-base font-semibold">Condição de pagamento *</Label>
-            <Input
-              value={value.cond_pagamento}
-              onChange={(e) => !negativado && set("cond_pagamento", e.target.value)}
-              readOnly={negativado}
-              disabled={negativado}
-              placeholder="Ex: 28/35/42 DDL, 30/60 dias..."
-              className={`h-11 text-base ${
-                cnpjStatus === "encontrado" && !value.cond_pagamento.trim()
-                  ? "border-red-400 focus-visible:ring-red-400"
-                  : ""
-              }`}
-            />
-            {!negativado && (
+            <div className="flex items-center gap-2">
+              <Input
+                value={value.cond_pagamento}
+                onChange={(e) => !negativado && !value.pagamento_vista && set("cond_pagamento", e.target.value)}
+                readOnly={negativado || value.pagamento_vista}
+                disabled={negativado || value.pagamento_vista}
+                placeholder="Ex: 28/35/42 DDL, 30/60 dias..."
+                className={`h-11 text-base ${
+                  cnpjStatus === "encontrado" && !value.cond_pagamento.trim()
+                    ? "border-red-400 focus-visible:ring-red-400"
+                    : ""
+                }`}
+              />
+              {!negativado && value.tipo !== "Bonificação" && (
+                <Button
+                  type="button"
+                  variant={value.pagamento_vista ? "default" : "outline"}
+                  className={`h-11 shrink-0 whitespace-nowrap ${
+                    value.pagamento_vista ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "border-emerald-500 text-emerald-700 hover:bg-emerald-50"
+                  }`}
+                  onClick={() =>
+                    onChange({
+                      ...valueRef.current,
+                      pagamento_vista: !valueRef.current.pagamento_vista,
+                      cond_pagamento: !valueRef.current.pagamento_vista ? COND_A_VISTA : "",
+                    })
+                  }
+                >
+                  <Banknote className="mr-1.5 h-4 w-4" />
+                  À Vista
+                </Button>
+              )}
+            </div>
+            {value.pagamento_vista && (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-300 bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">
+                <Banknote className="h-3.5 w-3.5" />
+                Pagamento à vista — passa pelo financeiro antes do despacho
+              </span>
+            )}
+            {!negativado && !value.pagamento_vista && (
               <Button
                 type="button"
                 size="sm"

@@ -57,6 +57,8 @@ const STATUS_LABEL: Record<string, string> = {
   aguardando_faturamento: "Aguardando Faturamento",
   parcialmente_faturado: "Parc. Faturado",
   faturado: "Faturado",
+  aguardando_pagamento: "Aguardando Pagamento",
+  pagamento_confirmado: "Pagamento Confirmado",
   despachado: "Despachado",
   em_rota: "Em Rota",
   entregue: "Entregue",
@@ -66,6 +68,8 @@ const STATUS_COLOR: Record<string, string> = {
   aguardando_faturamento: "bg-purple-100 text-purple-800 border-purple-300",
   parcialmente_faturado: "bg-orange-100 text-orange-800 border-orange-300",
   faturado: "bg-green-100 text-green-800 border-green-300",
+  aguardando_pagamento: "bg-amber-100 text-amber-900 border-amber-400",
+  pagamento_confirmado: "bg-emerald-100 text-emerald-800 border-emerald-300",
   despachado: "bg-indigo-100 text-indigo-800 border-indigo-300",
   em_rota: "bg-violet-100 text-violet-800 border-violet-300",
   entregue: "bg-emerald-100 text-emerald-800 border-emerald-300",
@@ -77,6 +81,12 @@ const ABAS_LOGISTICA = [
     label: "A Faturar",
     status: ["no_sankhya", "aguardando_faturamento", "parcialmente_faturado"],
     descricao: "Pedidos aguardando confirmação de faturamento",
+  },
+  {
+    key: "a_vista",
+    label: "À Vista",
+    status: ["aguardando_pagamento", "pagamento_confirmado"],
+    descricao: "Pagamento à vista — aguardando ou já confirmado pelo financeiro",
   },
   {
     key: "faturado",
@@ -117,6 +127,7 @@ type Pedido = {
   data_pedido: string;
   status: string;
   cond_pagamento: string | null;
+  pagamento_vista: boolean;
   observacoes: string | null;
   vendedor_id: string;
   cliente_id: string | null;
@@ -169,14 +180,14 @@ export default function FilaLogistica() {
     const { data, error } = await (supabase as any)
       .from("pedidos")
       .select(`
-        id, numero_pedido, data_pedido, status, cond_pagamento, observacoes, vendedor_id, cliente_id,
+        id, numero_pedido, data_pedido, status, cond_pagamento, pagamento_vista, observacoes, vendedor_id, cliente_id,
         clientes(razao_social, nome_parceiro, cnpj, cidade, uf, email, negativado, cep, rua, numero, bairro, codigo_parceiro, codigo_cliente, comprador),
         itens_pedido(
           id, quantidade, qtd_faturada, total_item, preco_final, preco_unitario_bruto,
           produtos(nome, codigo_jiva, cx_embarque, peso_unitario)
         )
       `)
-      .in("status", ["no_sankhya", "aguardando_faturamento", "parcialmente_faturado", "faturado", "despachado", "em_rota", "entregue"])
+      .in("status", ["no_sankhya", "aguardando_faturamento", "parcialmente_faturado", "aguardando_pagamento", "pagamento_confirmado", "faturado", "despachado", "em_rota", "entregue"])
       .order("data_pedido", { ascending: true });
 
     if (error) { toast.error("Erro ao carregar pedidos"); setLoading(false); return; }
@@ -197,6 +208,7 @@ export default function FilaLogistica() {
         data_pedido: p.data_pedido,
         status: p.status,
         cond_pagamento: p.cond_pagamento,
+        pagamento_vista: p.pagamento_vista ?? false,
         observacoes: p.observacoes,
         vendedor_id: p.vendedor_id,
         cliente_id: p.cliente_id ?? null,
@@ -273,11 +285,15 @@ export default function FilaLogistica() {
       nf_pdf_url = upData?.path ?? null;
     }
 
+    // Pedido à vista bifurca o fluxo: vai para o financeiro antes do despacho.
+    const aVista = selecionado.pagamento_vista;
+    const novoStatus = aVista ? "aguardando_pagamento" : "faturado";
+
     // Atualizar status do pedido
     const { error: updErr } = await supabase
       .from("pedidos")
       .update({
-        status: "faturado",
+        status: novoStatus,
         faturado_em: new Date().toISOString(),
         status_atualizado_em: new Date().toISOString(),
       } as any)
@@ -299,32 +315,62 @@ export default function FilaLogistica() {
       usuario_id: user?.id ?? null,
     } as any);
 
-    // Notificar vendedor
-    await supabase.from("notificacoes").insert({
-      destinatario_id: selecionado.vendedor_id,
-      destinatario_role: "vendedor",
-      tipo: "pedido_faturado",
-      mensagem: `Seu pedido #${selecionado.numero_pedido} foi faturado!${nfNumero.trim() ? ` NF: ${nfNumero.trim()}` : ""}`,
-    } as any);
+    if (aVista) {
+      // Notificar vendedor (faturado, aguardando pagamento)
+      await supabase.from("notificacoes").insert({
+        destinatario_id: selecionado.vendedor_id,
+        destinatario_role: "vendedor",
+        tipo: "pedido_faturado",
+        mensagem: `Seu pedido #${selecionado.numero_pedido} foi faturado e aguarda confirmação de pagamento (à vista).${nfNumero.trim() ? ` NF: ${nfNumero.trim()}` : ""}`,
+      } as any);
 
-    // Notificar equipe de faturamento
-    const { data: fatRoles } = await supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", "faturamento");
+      // Notificar o financeiro para confirmar o recebimento
+      const { data: finRoles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "financeiro");
 
-    if (fatRoles && fatRoles.length > 0) {
-      await supabase.from("notificacoes").insert(
-        fatRoles.map((r) => ({
-          destinatario_id: r.user_id,
-          destinatario_role: "faturamento",
-          tipo: "pedido_faturado",
-          mensagem: `Pedido #${selecionado.numero_pedido} confirmado pela logística`,
-        })) as any
-      );
+      if (finRoles && finRoles.length > 0) {
+        await supabase.from("notificacoes").insert(
+          finRoles.map((r) => ({
+            destinatario_id: r.user_id,
+            destinatario_role: "financeiro",
+            tipo: "aguardando_pagamento",
+            pedido_id: selecionado.id,
+            mensagem: `Pedido à vista #${selecionado.numero_pedido} (${selecionado.razao_social}) aguardando confirmação de pagamento`,
+          })) as any
+        );
+      }
+
+      toast.success(`Pedido #${selecionado.numero_pedido} faturado — aguardando confirmação do financeiro`);
+    } else {
+      // Notificar vendedor
+      await supabase.from("notificacoes").insert({
+        destinatario_id: selecionado.vendedor_id,
+        destinatario_role: "vendedor",
+        tipo: "pedido_faturado",
+        mensagem: `Seu pedido #${selecionado.numero_pedido} foi faturado!${nfNumero.trim() ? ` NF: ${nfNumero.trim()}` : ""}`,
+      } as any);
+
+      // Notificar equipe de faturamento
+      const { data: fatRoles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "faturamento");
+
+      if (fatRoles && fatRoles.length > 0) {
+        await supabase.from("notificacoes").insert(
+          fatRoles.map((r) => ({
+            destinatario_id: r.user_id,
+            destinatario_role: "faturamento",
+            tipo: "pedido_faturado",
+            mensagem: `Pedido #${selecionado.numero_pedido} confirmado pela logística`,
+          })) as any
+        );
+      }
+
+      toast.success(`Pedido #${selecionado.numero_pedido} confirmado!`);
     }
-
-    toast.success(`Pedido #${selecionado.numero_pedido} confirmado!`);
     setConfirmando(false);
     setSelecionado(null);
     carregar();
@@ -398,6 +444,38 @@ export default function FilaLogistica() {
       } as any);
     }
 
+    setSelecionado(null);
+    carregar();
+  };
+
+  // Pedido à vista já confirmado pelo financeiro: logística libera para despacho.
+  // Status final conforme quantidades faturadas vs. pedidas.
+  const liberarDespacho = async () => {
+    if (!selecionado) return;
+    setConfirmando(true);
+
+    const totalQtd = selecionado.itens.reduce((s, i) => s + i.quantidade, 0);
+    const totalFat = selecionado.itens.reduce((s, i) => s + i.qtd_faturada, 0);
+    const novoStatus = totalFat > 0 && totalFat < totalQtd ? "parcialmente_faturado" : "faturado";
+
+    const { error } = await supabase
+      .from("pedidos")
+      .update({
+        status: novoStatus,
+        status_atualizado_em: new Date().toISOString(),
+      } as any)
+      .eq("id", selecionado.id);
+    setConfirmando(false);
+    if (error) { toast.error("Erro ao liberar pedido: " + error.message); return; }
+
+    await supabase.from("notificacoes").insert({
+      destinatario_id: selecionado.vendedor_id,
+      destinatario_role: "vendedor",
+      tipo: "pedido_faturado",
+      mensagem: `Pagamento confirmado — Pedido #${selecionado.numero_pedido} liberado para despacho.`,
+    } as any);
+
+    toast.success(`Pedido #${selecionado.numero_pedido} liberado (${STATUS_LABEL[novoStatus]})`);
     setSelecionado(null);
     carregar();
   };
@@ -619,9 +697,16 @@ export default function FilaLogistica() {
                             {formatBRL(p.total)}
                           </TableCell>
                           <TableCell>
-                            <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[p.status] ?? "bg-gray-100 text-gray-700 border-gray-300"}`}>
-                              {STATUS_LABEL[p.status] ?? p.status}
-                            </span>
+                            <div className="flex flex-col gap-1 items-start">
+                              <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[p.status] ?? "bg-gray-100 text-gray-700 border-gray-300"}`}>
+                                {STATUS_LABEL[p.status] ?? p.status}
+                              </span>
+                              {p.pagamento_vista && (
+                                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                  <PackageCheck className="h-3 w-3" /> À VISTA
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1.5">
@@ -789,6 +874,39 @@ export default function FilaLogistica() {
                   <div className="text-sm rounded-md bg-amber-50 border border-amber-200 px-3 py-2">
                     <span className="font-medium text-amber-900">Obs. do pedido: </span>
                     <span className="text-amber-800">{selecionado.observacoes}</span>
+                  </div>
+                )}
+
+                {/* À vista — aguardando confirmação do financeiro */}
+                {selecionado.status === "aguardando_pagamento" && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                    <div className="font-semibold mb-1">Pagamento à vista — aguardando financeiro</div>
+                    Este pedido já foi faturado e está aguardando o financeiro confirmar o recebimento.
+                    Assim que confirmado, ele poderá ser liberado para despacho aqui.
+                  </div>
+                )}
+
+                {/* À vista — pagamento confirmado: liberar para despacho */}
+                {selecionado.status === "pagamento_confirmado" && (
+                  <div className="rounded-md border border-emerald-300 bg-emerald-50 p-4 space-y-3">
+                    <div className="font-semibold text-sm text-emerald-900">
+                      Pagamento confirmado pelo financeiro
+                    </div>
+                    <p className="text-sm text-emerald-800">
+                      Libere o pedido para despacho. O status final será definido conforme as
+                      quantidades faturadas.
+                    </p>
+                    <Button
+                      className="bg-emerald-600 hover:bg-emerald-700"
+                      onClick={liberarDespacho}
+                      disabled={confirmando}
+                    >
+                      {confirmando
+                        ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        : <PackageCheck className="h-4 w-4 mr-2" />
+                      }
+                      Liberar para despacho
+                    </Button>
                   </div>
                 )}
 

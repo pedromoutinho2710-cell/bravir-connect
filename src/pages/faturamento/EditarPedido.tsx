@@ -48,6 +48,7 @@ const INITIAL_CLIENTE: DadosCliente = {
   tabela_preco: "",
   tipo: "Pedido",
   cond_pagamento: "",
+  pagamento_vista: false,
   agendamento: false,
   observacoes: "",
   codigo_cliente: "",
@@ -112,7 +113,7 @@ export default function EditarPedido() {
         supabase
           .from("pedidos")
           .select(`
-            id, numero_pedido, tipo, status, cond_pagamento, observacoes, agendamento,
+            id, numero_pedido, tipo, status, cond_pagamento, pagamento_vista, observacoes, agendamento,
             cliente_id, vigencia_id, tabela_preco, perfil_cliente,
             clientes(id, razao_social, cnpj, cidade, uf, cep, comprador, cluster,
                      tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, email),
@@ -235,6 +236,7 @@ export default function EditarPedido() {
         tabela_preco: p.tabela_preco ?? cl?.tabela_preco ?? "",
         tipo: p.tipo ?? "Pedido",
         cond_pagamento: p.cond_pagamento ?? "",
+        pagamento_vista: (p as { pagamento_vista?: boolean }).pagamento_vista ?? false,
         agendamento: p.agendamento ?? false,
         observacoes: p.observacoes ?? "",
         codigo_cliente: cl?.codigo_parceiro ?? cl?.codigo_cliente ?? "",
@@ -331,6 +333,7 @@ export default function EditarPedido() {
       .update({
         tipo: cliente.tipo,
         cond_pagamento: cliente.cond_pagamento || null,
+        pagamento_vista: cliente.pagamento_vista,
         observacoes: observacoes || null,
         agendamento: cliente.agendamento,
       })

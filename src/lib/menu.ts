@@ -21,6 +21,7 @@ import {
   Calculator,
   CheckSquare,
   BarChart2,
+  Wallet,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -97,6 +98,10 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Clientes", url: "/faturamento/clientes", icon: Users },
     { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
     { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
+    { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
+  ],
+  financeiro: [
+    { title: "Fila à Vista", url: "/financeiro", icon: Wallet },
     { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
   ],
   trade: [
