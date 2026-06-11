@@ -95,6 +95,8 @@ serve(async (req) => {
       }).eq("id", tokenRow.id);
       tokenRow = { ...tokenRow, access_token: refreshData.access_token };
     }
+    console.log("refresh status:", refreshData.access_token ? "ok" : "falhou", "error:", refreshData.error);
+    console.log("buscando vendas com token:", tokenRow.access_token?.slice(0, 8) + "...");
     const { dataInicial, dataFinal } = body;
     let pagina = 1;
     const todos: any[] = [];
@@ -107,7 +109,9 @@ serve(async (req) => {
       const res = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas?pagina=${pagina}&limite=100&dataInicial=${fmtBling(dataInicial)}&dataFinal=${fmtBling(dataFinal)}`, {
         headers: { "Authorization": `Bearer ${tokenRow.access_token}` },
       });
+      console.log("bling response status:", res.status);
       const data = await res.json();
+      console.log("bling data count:", data?.data?.length, "error:", data?.error);
       const itens = data?.data ?? [];
       todos.push(...itens);
       if (itens.length < 100) break;
