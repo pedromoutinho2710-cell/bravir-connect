@@ -72,12 +72,26 @@ serve(async (req) => {
   if (action === "vendas") {
     let { data: tokenRow } = await supabase.from("bling_tokens").select("*").order("created_at", { ascending: false }).limit(1).maybeSingle();
     if (!tokenRow) return new Response(JSON.stringify({ error: "não conectado" }), { status: 401, headers: cors });
-    if (new Date(tokenRow.expires_at) < new Date()) {
-      const refreshRes = await fetch(`${SUPABASE_URL}/functions/v1/bling-oauth?action=refresh`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}` },
-      });
-      const refreshData = await refreshRes.json();
+    // Sempre tenta renovar o token antes de usar
+    const refreshRes = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Basic ${basicAuth}`,
+      },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokenRow.refresh_token,
+      }),
+    });
+    const refreshData = await refreshRes.json();
+    if (refreshData.access_token) {
+      await supabase.from("bling_tokens").update({
+        access_token: refreshData.access_token,
+        refresh_token: refreshData.refresh_token,
+        expires_at: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", tokenRow.id);
       tokenRow = { ...tokenRow, access_token: refreshData.access_token };
     }
     const { dataInicial, dataFinal } = body;
