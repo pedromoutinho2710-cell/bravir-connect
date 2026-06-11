@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { Bot, CheckCircle2, ExternalLink, Loader2, PencilLine, PlusCircle, Send } from "lucide-react";
+import { Bot, CheckCircle2, ExternalLink, Loader2, Paperclip, PencilLine, PlusCircle, Send } from "lucide-react";
 
 const BRAND = "#0F6E56";
 
@@ -33,7 +33,7 @@ interface Solicitacao {
   mockup_prompt?: string | null;
   chat_historico?: ChatMensagem[] | null;
   link_teste?: string | null;
-  motivo_reprovacao?: string | null;
+  motivo_devolucao?: string | null;
 }
 
 /* ───────────────────────── Metadados de exibição ───────────────────────── */
@@ -216,12 +216,12 @@ export default function MinhasSolicitacoes() {
                   )}
 
                   {/* Motivo da reprovação */}
-                  {s.status === "reprovado" && s.motivo_reprovacao && (
+                  {s.status === "reprovado" && s.motivo_devolucao && (
                     <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                       <p className="text-xs font-semibold uppercase tracking-wide text-red-700">
                         Motivo da reprovação
                       </p>
-                      <p className="whitespace-pre-wrap">{s.motivo_reprovacao}</p>
+                      <p className="whitespace-pre-wrap">{s.motivo_devolucao}</p>
                     </div>
                   )}
 
@@ -328,6 +328,10 @@ function ChatCorrigir({
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [imagensPendentes, setImagensPendentes] = useState<
+    { id: number; base64: string; mimeType: string; nome: string }[]
+  >([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -339,6 +343,28 @@ function ChatCorrigir({
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  function fileToBase64(file: File): Promise<string> {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res((r.result as string).split(",")[1]);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function processarArquivos(files: FileList | File[]) {
+    const arr = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    const novas = await Promise.all(
+      arr.map(async (f) => ({
+        id: Date.now() + Math.random(),
+        base64: await fileToBase64(f),
+        mimeType: f.type,
+        nome: f.name,
+      })),
+    );
+    setImagensPendentes((prev) => [...prev, ...novas]);
+  }
 
   async function salvarDevolucao(registro: Registro, conversa: ChatMsg[]) {
     const chatHistorico = conversa
@@ -367,19 +393,38 @@ function ChatCorrigir({
   }
 
   async function handleSend() {
-    const text = input.trim();
-    if (!text || loading) return;
+    const text = input;
+    if (loading || (!text.trim() && imagensPendentes.length === 0)) return;
 
-    const userMsg: ChatMsg = { id: nextId(), role: "user", content: text };
+    const contentParaApi =
+      imagensPendentes.length > 0
+        ? [
+            ...imagensPendentes.map((img) => ({
+              type: "image",
+              source: { type: "base64", media_type: img.mimeType, data: img.base64 },
+            })),
+            ...(text.trim() ? [{ type: "text", text: text.trim() }] : []),
+          ]
+        : text.trim();
+
+    const contentParaExibir = [
+      ...imagensPendentes.map((img) => `[imagem: ${img.nome}]`),
+      ...(text.trim() ? [text.trim()] : []),
+    ].join(" ");
+
+    const userMsg: ChatMsg = { id: nextId(), role: "user", content: contentParaExibir };
+    setImagensPendentes([]);
     const baseConversa = [...messages, userMsg];
     setMessages(baseConversa);
     setInput("");
     setLoading(true);
 
     try {
-      const apiMessages = baseConversa
-        .filter((m) => !m.kind)
-        .map((m) => ({ role: m.role, content: m.content }));
+      const naoKind = baseConversa.filter((m) => !m.kind);
+      const apiMessages = naoKind.map((m, i) => ({
+        role: m.role,
+        content: i === naoKind.length - 1 ? contentParaApi : m.content,
+      }));
 
       const { data, error } = await supabase.functions.invoke("agente-chat", {
         body: { messages: apiMessages },
@@ -491,30 +536,78 @@ function ChatCorrigir({
       </div>
 
       {/* Input */}
-      <div className="flex items-center gap-2 border-t border-border bg-background px-3 py-2">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          disabled={loading}
-          placeholder="Escreva o que precisa ajustar..."
-          className="flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
-        />
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={loading || !input.trim()}
-          aria-label="Enviar mensagem"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-40"
-          style={{ backgroundColor: BRAND }}
-        >
-          <Send className="h-4 w-4" />
-        </button>
+      <div className="border-t border-border bg-background">
+        {imagensPendentes.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-3 pt-2">
+            {imagensPendentes.map((img) => (
+              <div key={img.id} className="relative">
+                <img
+                  src={`data:${img.mimeType};base64,${img.base64}`}
+                  alt={img.nome}
+                  className="h-16 w-16 rounded-lg object-cover border border-border"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setImagensPendentes((prev) => prev.filter((i) => i.id !== img.id))
+                  }
+                  className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white text-xs leading-none"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-end gap-2 px-3 py-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => e.target.files && processarArquivos(e.target.files)}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted transition-colors disabled:opacity-40"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            onPaste={(e) => {
+              const files = e.clipboardData?.files;
+              if (files && files.length > 0) {
+                e.preventDefault();
+                processarArquivos(files);
+              }
+            }}
+            disabled={loading}
+            rows={1}
+            placeholder="Escreva o que precisa ajustar..."
+            className="flex-1 resize-none max-h-32 rounded-2xl border border-border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+          />
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={loading || (!input.trim() && imagensPendentes.length === 0)}
+            aria-label="Enviar mensagem"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-40"
+            style={{ backgroundColor: BRAND }}
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -532,6 +625,10 @@ function ChatNovaSolicitacao({ onSaved }: { onSaved: () => void }) {
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [imagensPendentes, setImagensPendentes] = useState<
+    { id: number; base64: string; mimeType: string; nome: string }[]
+  >([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const idRef = useRef(0);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -543,6 +640,28 @@ function ChatNovaSolicitacao({ onSaved }: { onSaved: () => void }) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
+
+  function fileToBase64(file: File): Promise<string> {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res((r.result as string).split(",")[1]);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function processarArquivos(files: FileList | File[]) {
+    const arr = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    const novas = await Promise.all(
+      arr.map(async (f) => ({
+        id: Date.now() + Math.random(),
+        base64: await fileToBase64(f),
+        mimeType: f.type,
+        nome: f.name,
+      })),
+    );
+    setImagensPendentes((prev) => [...prev, ...novas]);
+  }
 
   async function salvarRegistro(registro: Registro, conversa: ChatMsg[]) {
     const chatHistorico = conversa
@@ -572,19 +691,38 @@ function ChatNovaSolicitacao({ onSaved }: { onSaved: () => void }) {
   }
 
   async function handleSend() {
-    const text = input.trim();
-    if (!text || loading) return;
+    const text = input;
+    if (loading || (!text.trim() && imagensPendentes.length === 0)) return;
 
-    const userMsg: ChatMsg = { id: nextId(), role: "user", content: text };
+    const contentParaApi =
+      imagensPendentes.length > 0
+        ? [
+            ...imagensPendentes.map((img) => ({
+              type: "image",
+              source: { type: "base64", media_type: img.mimeType, data: img.base64 },
+            })),
+            ...(text.trim() ? [{ type: "text", text: text.trim() }] : []),
+          ]
+        : text.trim();
+
+    const contentParaExibir = [
+      ...imagensPendentes.map((img) => `[imagem: ${img.nome}]`),
+      ...(text.trim() ? [text.trim()] : []),
+    ].join(" ");
+
+    const userMsg: ChatMsg = { id: nextId(), role: "user", content: contentParaExibir };
+    setImagensPendentes([]);
     const baseConversa = [...messages, userMsg];
     setMessages(baseConversa);
     setInput("");
     setLoading(true);
 
     try {
-      const apiMessages = baseConversa
-        .filter((m) => !m.kind)
-        .map((m) => ({ role: m.role, content: m.content }));
+      const naoKind = baseConversa.filter((m) => !m.kind);
+      const apiMessages = naoKind.map((m, i) => ({
+        role: m.role,
+        content: i === naoKind.length - 1 ? contentParaApi : m.content,
+      }));
 
       const { data, error } = await supabase.functions.invoke("agente-chat", {
         body: { messages: apiMessages },
@@ -696,30 +834,78 @@ function ChatNovaSolicitacao({ onSaved }: { onSaved: () => void }) {
       </div>
 
       {/* Input */}
-      <div className="flex items-center gap-2 border-t border-border bg-background px-3 py-2">
-        <input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              handleSend();
-            }
-          }}
-          disabled={loading}
-          placeholder="Escreva sua mensagem..."
-          className="flex-1 rounded-full border border-border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
-        />
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={loading || !input.trim()}
-          aria-label="Enviar mensagem"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-40"
-          style={{ backgroundColor: BRAND }}
-        >
-          <Send className="h-4 w-4" />
-        </button>
+      <div className="border-t border-border bg-background">
+        {imagensPendentes.length > 0 && (
+          <div className="flex flex-wrap gap-2 px-3 pt-2">
+            {imagensPendentes.map((img) => (
+              <div key={img.id} className="relative">
+                <img
+                  src={`data:${img.mimeType};base64,${img.base64}`}
+                  alt={img.nome}
+                  className="h-16 w-16 rounded-lg object-cover border border-border"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setImagensPendentes((prev) => prev.filter((i) => i.id !== img.id))
+                  }
+                  className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-white text-xs leading-none"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="flex items-end gap-2 px-3 py-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            className="hidden"
+            onChange={(e) => e.target.files && processarArquivos(e.target.files)}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground hover:bg-muted transition-colors disabled:opacity-40"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+            onPaste={(e) => {
+              const files = e.clipboardData?.files;
+              if (files && files.length > 0) {
+                e.preventDefault();
+                processarArquivos(files);
+              }
+            }}
+            disabled={loading}
+            rows={1}
+            placeholder="Escreva sua mensagem..."
+            className="flex-1 resize-none max-h-32 rounded-2xl border border-border bg-background px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-60"
+          />
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={loading || (!input.trim() && imagensPendentes.length === 0)}
+            aria-label="Enviar mensagem"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-40"
+            style={{ backgroundColor: BRAND }}
+          >
+            <Send className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
