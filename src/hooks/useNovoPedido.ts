@@ -110,7 +110,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
 
       const [pRes, dRes, vigRes] = await Promise.all([
         prodQuery,
-        supabase.from("descontos").select("*"),
+        supabase.from("descontos").select("*").limit(2000),
         supabase
           .from("tabelas_vigencia")
           .select("id, nome, created_at, desconto_livre")
