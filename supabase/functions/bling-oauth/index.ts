@@ -101,7 +101,7 @@ serve(async (req) => {
     let pagina = 1;
     const todos: any[] = [];
     while (pagina <= 20) {
-      const res = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas?pagina=${pagina}&limite=100&dataInicial=${dataInicial}&dataFinal=${dataFinal}`, {
+      const res = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas?pagina=${pagina}&limite=100&dataEmissaoInicial=${dataInicial}&dataEmissaoFinal=${dataFinal}`, {
         headers: { "Authorization": `Bearer ${tokenRow.access_token}` },
       });
       console.log("bling response status:", res.status);
