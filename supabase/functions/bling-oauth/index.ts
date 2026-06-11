@@ -108,7 +108,11 @@ serve(async (req) => {
       const data = await res.json();
       console.log("bling data count:", data?.data?.length, "error:", data?.error);
       const itens = data?.data ?? [];
-      todos.push(...itens);
+      const itensMapeados = itens.map((item: any) => ({
+        data: item.data,
+        total: Number(item.totalProdutos ?? item.total ?? 0),
+      }));
+      todos.push(...itensMapeados);
       if (itens.length < 100) break;
       pagina++;
     }
