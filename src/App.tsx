@@ -39,6 +39,7 @@ import GestaoEstoque from "./pages/faturamento/GestaoEstoque";
 import NovoPedidoFaturamento from "./pages/faturamento/NovoPedidoFaturamento";
 import EditarPedido from "./pages/faturamento/EditarPedido";
 import EditarPedidoFaturamento from "@/pages/faturamento/EditarPedidoFaturamento";
+import GestaoEstoqueAdmin from "./pages/admin/GestaoEstoque";
 import PedidosAdmin from "./pages/admin/PedidosAdmin";
 import Solicitacoes from "./pages/admin/Solicitacoes";
 import NovaSolicitacao from "./pages/NovaSolicitacao";
@@ -124,6 +125,11 @@ const App = () => (
               <Route path="/admin/tabelas-preco" element={<TabelasPreco />} />
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
               <Route path="/admin/campanhas" element={<Campanhas />} />
+            </Route>
+
+            {/* Gestão de Estoque (mockado — Sankhya) — admin e gestora */}
+            <Route element={<ProtectedRoute allow={["admin", "gestora"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/admin/gestao-estoque" element={<GestaoEstoqueAdmin />} />
             </Route>
 
             {/* Solicitações de melhoria — admin e pedro.menezes (liberado por email) */}
