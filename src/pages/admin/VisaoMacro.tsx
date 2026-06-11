@@ -178,7 +178,7 @@ export default function VisaoMacro() {
     enabled: !!blingConectado,
     queryFn: async () => {
       const { data, error } = await supabase.functions.invoke("bling-oauth", {
-        body: { dataInicial: `01/01/${ano}`, dataFinal: `31/12/${ano}` },
+        body: { dataInicial: `${ano}-01-01`, dataFinal: `${ano}-12-31` },
         headers: { "x-action": "vendas" },
       });
       if (error) {
