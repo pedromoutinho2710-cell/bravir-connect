@@ -98,12 +98,12 @@ serve(async (req) => {
     const { dataInicial, dataFinal } = body;
     let pagina = 1;
     const todos: any[] = [];
-    while (true) {
-      // Bling API v3 espera datas no formato DD/MM/YYYY
-      const fmtBling = (iso: string) => {
-        const [y, m, d] = iso.split("-");
-        return `${d}/${m}/${y}`;
-      };
+    // Bling API v3 espera datas no formato DD/MM/YYYY
+    const fmtBling = (iso: string) => {
+      const [y, m, d] = iso.split("-");
+      return `${d}/${m}/${y}`;
+    };
+    while (pagina <= 5) {
       const res = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas?pagina=${pagina}&limite=100&dataInicial=${fmtBling(dataInicial)}&dataFinal=${fmtBling(dataFinal)}`, {
         headers: { "Authorization": `Bearer ${tokenRow.access_token}` },
       });
