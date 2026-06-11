@@ -44,7 +44,7 @@ interface Solicitacao {
   mockup_prompt?: string | null;
   chat_historico?: ChatMensagem[] | null;
   link_teste?: string | null;
-  motivo_reprovacao?: string | null;
+  motivo_devolucao?: string | null;
 }
 
 /* ───────────────────────── Metadados de exibição ───────────────────────── */
@@ -119,6 +119,9 @@ export default function Solicitacoes() {
   const isMobile = useIsMobile();
   const [filterTipo, setFilterTipo] = useState<string>("todos");
   const [filterStatus, setFilterStatus] = useState<string>("todos");
+  const [filterColaborador, setFilterColaborador] = useState<string>("");
+  const [filterDataDe, setFilterDataDe] = useState<string>("");
+  const [filterDataAte, setFilterDataAte] = useState<string>("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // KPIs — count do Supabase por status.
@@ -160,17 +163,14 @@ export default function Solicitacoes() {
     mutationFn: async ({
       id,
       status,
-      link_teste,
-      motivo_reprovacao,
+      motivo_devolucao,
     }: {
       id: string;
       status: string;
-      link_teste?: string | null;
-      motivo_reprovacao?: string | null;
+      motivo_devolucao?: string | null;
     }) => {
       const patch: Record<string, unknown> = { status };
-      if (link_teste !== undefined) patch.link_teste = link_teste;
-      if (motivo_reprovacao !== undefined) patch.motivo_reprovacao = motivo_reprovacao;
+      if (motivo_devolucao !== undefined) patch.motivo_devolucao = motivo_devolucao;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- colunas novas ainda não estão no types.ts gerado
       const { error } = await (supabase as any)
         .from("solicitacoes_gestor")
@@ -194,6 +194,17 @@ export default function Solicitacoes() {
   const filtered = solicitacoes.filter((s) => {
     if (filterTipo !== "todos" && s.tipo !== filterTipo) return false;
     if (filterStatus !== "todos" && s.status !== filterStatus) return false;
+    if (
+      filterColaborador.trim() &&
+      !(s.criado_por_nome ?? "").toLowerCase().includes(filterColaborador.trim().toLowerCase())
+    )
+      return false;
+    if (filterDataDe || filterDataAte) {
+      const dia = s.created_at ? s.created_at.slice(0, 10) : "";
+      if (!dia) return false;
+      if (filterDataDe && dia < filterDataDe) return false;
+      if (filterDataAte && dia > filterDataAte) return false;
+    }
     return true;
   });
 
@@ -366,6 +377,30 @@ export default function Solicitacoes() {
               <Sheet className="mr-2 h-4 w-4" />
               Exportar Excel
             </Button>
+
+            {/* Segunda linha — colaborador e datas */}
+            <div className="flex flex-wrap items-center gap-3 w-full">
+              <Input
+                value={filterColaborador}
+                onChange={(e) => setFilterColaborador(e.target.value)}
+                placeholder="Buscar colaborador..."
+                className="w-48"
+              />
+              <Input
+                type="date"
+                value={filterDataDe}
+                onChange={(e) => setFilterDataDe(e.target.value)}
+                className="w-36"
+                title="De"
+              />
+              <Input
+                type="date"
+                value={filterDataAte}
+                onChange={(e) => setFilterDataAte(e.target.value)}
+                className="w-36"
+                title="Até"
+              />
+            </div>
           </div>
 
           {/* Lista */}
@@ -472,7 +507,7 @@ function DetalhePainel({
   solicitacao: Solicitacao;
   onStatus: (
     status: string,
-    extra?: { link_teste?: string | null; motivo_reprovacao?: string | null },
+    extra?: { motivo_devolucao?: string | null },
   ) => void;
 }) {
   const tm = tipoMeta(s.tipo);
@@ -481,9 +516,8 @@ function DetalhePainel({
 
   const chat = Array.isArray(s.chat_historico) ? s.chat_historico : [];
 
-  // Sub-formulários inline para aprovar (link de teste) e reprovar (motivo).
-  const [acao, setAcao] = useState<"none" | "aprovar" | "reprovar">("none");
-  const [linkTeste, setLinkTeste] = useState(s.link_teste ?? "");
+  // Sub-formulário inline para reprovar (motivo). Aprovação é direta.
+  const [acao, setAcao] = useState<"none" | "reprovar">("none");
   const [motivoReprovacao, setMotivoReprovacao] = useState("");
 
   return (
@@ -516,32 +550,17 @@ function DetalhePainel({
                 <dd className="whitespace-pre-wrap">{s.motivo}</dd>
               </div>
             )}
-            {s.status === "aprovado" && s.link_teste && (
-              <div>
-                <dt className="text-xs uppercase tracking-wide text-muted-foreground">Link de teste</dt>
-                <dd>
-                  <a
-                    href={s.link_teste}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-emerald-700 underline break-all"
-                  >
-                    {s.link_teste}
-                  </a>
-                </dd>
-              </div>
-            )}
-            {s.status === "reprovado" && s.motivo_reprovacao && (
+            {s.status === "reprovado" && s.motivo_devolucao && (
               <div>
                 <dt className="text-xs uppercase tracking-wide text-muted-foreground">Motivo da reprovação</dt>
-                <dd className="whitespace-pre-wrap text-red-700">{s.motivo_reprovacao}</dd>
+                <dd className="whitespace-pre-wrap text-red-700">{s.motivo_devolucao}</dd>
               </div>
             )}
             {s.status === "devolvido" && (
               <div className="rounded-md border border-purple-200 bg-purple-50 p-2">
                 <dt className="text-xs uppercase tracking-wide text-purple-700">Motivo da devolução</dt>
                 <dd className="whitespace-pre-wrap text-purple-900">
-                  {s.motivo_reprovacao || "O colaborador devolveu a solicitação com ajustes."}
+                  {s.motivo_devolucao || "O colaborador devolveu a solicitação com ajustes."}
                 </dd>
               </div>
             )}
@@ -574,7 +593,10 @@ function DetalhePainel({
               <Button
                 size="sm"
                 className="bg-green-600 hover:bg-green-700"
-                onClick={() => setAcao((a) => (a === "aprovar" ? "none" : "aprovar"))}
+                onClick={() => {
+                  setAcao("none");
+                  onStatus("aprovado");
+                }}
               >
                 Aprovar
               </Button>
@@ -587,30 +609,6 @@ function DetalhePainel({
                 Reprovar
               </Button>
             </div>
-
-            {/* Inline — aprovar com link de teste */}
-            {acao === "aprovar" && (
-              <div className="space-y-2 rounded-md border border-emerald-200 bg-emerald-50 p-3">
-                <label className="text-xs font-medium text-emerald-800">
-                  Link de teste da melhoria (opcional)
-                </label>
-                <Input
-                  value={linkTeste}
-                  onChange={(e) => setLinkTeste(e.target.value)}
-                  placeholder="https://..."
-                />
-                <Button
-                  size="sm"
-                  className="bg-green-600 hover:bg-green-700"
-                  onClick={() => {
-                    onStatus("aprovado", { link_teste: linkTeste.trim() || null });
-                    setAcao("none");
-                  }}
-                >
-                  Confirmar aprovação
-                </Button>
-              </div>
-            )}
 
             {/* Inline — reprovar com motivo */}
             {acao === "reprovar" && (
@@ -628,7 +626,7 @@ function DetalhePainel({
                   className="border-red-300 text-red-700 hover:bg-red-50"
                   disabled={!motivoReprovacao.trim()}
                   onClick={() => {
-                    onStatus("reprovado", { motivo_reprovacao: motivoReprovacao.trim() });
+                    onStatus("reprovado", { motivo_devolucao: motivoReprovacao.trim() });
                     setAcao("none");
                   }}
                 >
