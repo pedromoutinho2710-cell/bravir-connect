@@ -295,7 +295,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         vigencia_id: vigenciaId || null,
         status,
       };
-      if (isGestora) updatePayload.vendedor_id = pedidoVendedorId;
+      updatePayload.vendedor_id = pedidoVendedorId;
       if (status === "pendente_sankhya") {
         updatePayload.data_pedido = new Date().toISOString().slice(0, 10);
       }
