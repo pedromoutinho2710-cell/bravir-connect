@@ -9,6 +9,7 @@ const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 serve(async (req) => {
   const action = new URL(req.url).searchParams.get("action") ?? req.headers.get("x-action");
+  console.log("action recebida:", action, "method:", req.method);
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
   const body = req.method === "POST" ? await req.json() : {};
   const cors = {
