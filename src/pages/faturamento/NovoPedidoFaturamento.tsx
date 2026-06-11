@@ -50,7 +50,8 @@ export default function NovoPedidoFaturamento() {
   const [aceitaSaldo, setAceitaSaldo] = useState(true);
 
   // ── Campos do pedido ────────────────────────────────────────────
-  const [vendedorNome, setVendedorNome] = useState("");
+  const [vendedorId, setVendedorId] = useState<string>("");
+  const [vendedores, setVendedores] = useState<{ id: string; nome: string }[]>([]);
   const [condPagamento, setCondPagamento] = useState("");
   const [tipo, setTipo] = useState<"Pedido" | "Bonificação">("Pedido");
   const [ordemCompra, setOrdemCompra] = useState("");
@@ -73,6 +74,27 @@ export default function NovoPedidoFaturamento() {
       .eq("ativo", true)
       .order("nome")
       .then(({ data }) => { if (data) setProdutos(data); });
+  }, []);
+
+  // Carrega vendedores (perfis com role vendedor ou gestora)
+  useEffect(() => {
+    (async () => {
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .in("role", ["vendedor", "gestora"]);
+      if (!roles || roles.length === 0) { setVendedores([]); return; }
+      const ids = [...new Set(roles.map((r) => r.user_id))];
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", ids);
+      if (!profiles) { setVendedores([]); return; }
+      const lista = profiles
+        .map((p) => ({ id: p.id, nome: p.full_name || p.email || "" }))
+        .sort((a, b) => a.nome.localeCompare(b.nome));
+      setVendedores(lista);
+    })();
   }, []);
 
   // Busca clientes (modo cadastrado)
@@ -160,7 +182,6 @@ export default function NovoPedidoFaturamento() {
       { produto_id: p.id, nome: `${p.codigo_jiva} — ${p.nome}`, quantidade: 1, preco_unitario: 0, desconto: 0, total: 0 },
     ]);
     setProdutoBusca("");
-    setProdutosSugeridos([]);
   }
 
   function atualizarItem(idx: number, field: "quantidade" | "preco_unitario" | "desconto", val: number) {
@@ -180,7 +201,7 @@ export default function NovoPedidoFaturamento() {
 
   async function salvar() {
     if (itens.length === 0) { toast.error("Adicione ao menos um produto"); return; }
-    if (!vendedorNome.trim()) { toast.error("Preencha o nome do vendedor"); return; }
+    if (!vendedorId) { toast.error("Selecione o vendedor"); return; }
     if (!condPagamento.trim()) { toast.error("Preencha a condição de pagamento"); return; }
     if (modoCliente === "cadastrado" && !clienteId) { toast.error("Selecione um cliente"); return; }
     if (modoCliente === "nao_cadastrado" && !clienteRazaoSocial.trim()) { toast.error("Preencha o nome do cliente"); return; }
@@ -190,7 +211,6 @@ export default function NovoPedidoFaturamento() {
     // Monta observacoes com prefixos
     const partes: string[] = [];
     if (modoCliente === "nao_cadastrado") partes.push(`[Cliente: ${clienteRazaoSocial.trim()}]`);
-    partes.push(`[Vendedor: ${vendedorNome.trim()}]`);
     if (clienteEmailXml && modoCliente === "nao_cadastrado") partes.push(`[Email XML: ${clienteEmailXml}]`);
     if (observacoes.trim()) partes.push(observacoes.trim());
     const obsCompleta = partes.join(" ").trim() || null;
@@ -200,7 +220,7 @@ export default function NovoPedidoFaturamento() {
       tipo,
       status: "pendente_sankhya",
       cliente_id: clienteId ?? null,
-      vendedor_id: user?.id ?? null,
+      vendedor_id: vendedorId,
       responsavel_id: user?.id ?? null,
       cond_pagamento: condPagamento,
       observacoes: obsCompleta,
@@ -383,8 +403,14 @@ export default function NovoPedidoFaturamento() {
             <CardContent className="space-y-3">
               <div className="space-y-1.5">
                 <Label>Vendedor *</Label>
-                <Input placeholder="Nome do vendedor" value={vendedorNome}
-                  onChange={(e) => setVendedorNome(e.target.value)} />
+                <Select value={vendedorId} onValueChange={setVendedorId}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o vendedor..." /></SelectTrigger>
+                  <SelectContent>
+                    {vendedores.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-1.5">
