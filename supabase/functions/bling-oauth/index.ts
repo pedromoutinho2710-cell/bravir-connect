@@ -98,25 +98,46 @@ serve(async (req) => {
     console.log("refresh status:", refreshData.access_token ? "ok" : "falhou", "error:", refreshData.error);
     console.log("buscando vendas com token:", tokenRow.access_token?.slice(0, 8) + "...");
     const { dataInicial, dataFinal } = body;
-    let pagina = 1;
+    // Extrai ano do dataInicial (formato DD/MM/YYYY)
+    const ano = dataInicial.slice(6, 10);
     const todos: any[] = [];
-    while (pagina <= 20) {
-      const res = await fetch(`https://www.bling.com.br/Api/v3/pedidos/vendas?pagina=${pagina}&limite=100&dataEmissaoInicial=${dataInicial}&dataEmissaoFinal=${dataFinal}`, {
-        headers: { "Authorization": `Bearer ${tokenRow.access_token}` },
-      });
-      console.log("bling response status:", res.status);
+
+    const meses = [
+      { ini: `01/01/${ano}`, fim: `31/01/${ano}` },
+      { ini: `01/02/${ano}`, fim: `28/02/${ano}` },
+      { ini: `01/03/${ano}`, fim: `31/03/${ano}` },
+      { ini: `01/04/${ano}`, fim: `30/04/${ano}` },
+      { ini: `01/05/${ano}`, fim: `31/05/${ano}` },
+      { ini: `01/06/${ano}`, fim: `30/06/${ano}` },
+      { ini: `01/07/${ano}`, fim: `31/07/${ano}` },
+      { ini: `01/08/${ano}`, fim: `31/08/${ano}` },
+      { ini: `01/09/${ano}`, fim: `30/09/${ano}` },
+      { ini: `01/10/${ano}`, fim: `31/10/${ano}` },
+      { ini: `01/11/${ano}`, fim: `30/11/${ano}` },
+      { ini: `01/12/${ano}`, fim: `31/12/${ano}` },
+    ];
+
+    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+    for (const mes of meses) {
+      await sleep(400);
+      const res = await fetch(
+        `https://www.bling.com.br/Api/v3/pedidos/vendas?pagina=1&limite=100&dataEmissaoInicial=${mes.ini}&dataEmissaoFinal=${mes.fim}`,
+        { headers: { "Authorization": `Bearer ${tokenRow.access_token}` } }
+      );
       const data = await res.json();
-      console.log("bling data count:", data?.data?.length, "error:", data?.error);
       const itens = data?.data ?? [];
       const itensMapeados = itens.map((item: any) => ({
         data: item.data,
         total: Number(item.totalProdutos ?? item.total ?? 0),
       }));
       todos.push(...itensMapeados);
-      if (itens.length < 100) break;
-      pagina++;
+      console.log(`mes ${mes.ini}: ${itens.length} pedidos`);
     }
-    return new Response(JSON.stringify({ data: todos }), { headers: { ...cors, "Content-Type": "application/json" } });
+
+    return new Response(JSON.stringify({ data: todos }), {
+      headers: { ...cors, "Content-Type": "application/json" }
+    });
   }
 
   return new Response(JSON.stringify({ error: "action inválida" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
