@@ -181,14 +181,13 @@ export default function VisaoMacro() {
         body: { dataInicial: `${ano}-01-01`, dataFinal: `${ano}-12-31` },
         headers: { "x-action": "vendas" },
       });
-      if (error) throw error;
-      return ((data?.data ?? []) as BlingVenda[]);
-    },
-    onSuccess: (data) => {
-      console.log("Bling vendas recebidas:", data?.length, data?.[0]);
-    },
-    onError: (err) => {
-      console.error("Erro Bling vendas:", err);
+      if (error) {
+        console.error("Erro Bling vendas:", error);
+        throw error;
+      }
+      const vendas = (data?.data ?? []) as BlingVenda[];
+      console.log("Bling vendas recebidas:", vendas.length, vendas[0]);
+      return vendas;
     },
   });
 
