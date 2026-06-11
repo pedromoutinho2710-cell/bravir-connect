@@ -184,6 +184,12 @@ export default function VisaoMacro() {
       if (error) throw error;
       return ((data?.data ?? []) as BlingVenda[]);
     },
+    onSuccess: (data) => {
+      console.log("Bling vendas recebidas:", data?.length, data?.[0]);
+    },
+    onError: (err) => {
+      console.error("Erro Bling vendas:", err);
+    },
   });
 
   const metaB2B = metas?.meta_b2b ?? 0;
@@ -347,6 +353,8 @@ export default function VisaoMacro() {
       setSalvando(false);
     }
   }
+
+  console.log("blingConectado:", blingConectado, "vendasOnline:", vendasOnline?.length, "onlinePorMes:", onlinePorMes);
 
   return (
     <div className="space-y-6 p-4 md:p-6">
