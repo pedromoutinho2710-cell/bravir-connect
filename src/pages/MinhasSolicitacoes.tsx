@@ -8,7 +8,7 @@ import { ptBR } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Bot, CheckCircle2, ExternalLink, Loader2, Paperclip, PencilLine, PlusCircle, Send } from "lucide-react";
 
 const BRAND = "#0F6E56";
@@ -275,6 +275,10 @@ export default function MinhasSolicitacoes() {
       {/* Modal de correção com chat */}
       <Dialog open={!!corrigir} onOpenChange={(o) => !o && setCorrigir(null)}>
         <DialogContent className="p-0 gap-0 overflow-hidden w-screen h-[100dvh] max-w-none rounded-none sm:w-[480px] sm:h-[560px] sm:max-w-[480px] sm:rounded-2xl">
+          <DialogTitle className="sr-only">Corrigir solicitação</DialogTitle>
+          <DialogDescription className="sr-only">
+            Chat com o Assistente Bravir para ajustar sua solicitação anterior.
+          </DialogDescription>
           {corrigir && (
             <ChatCorrigir
               solicitacao={corrigir}
@@ -290,6 +294,10 @@ export default function MinhasSolicitacoes() {
       {/* Modal de nova solicitação com chat */}
       <Dialog open={novaAberta} onOpenChange={setNovaAberta}>
         <DialogContent className="p-0 gap-0 overflow-hidden w-screen h-[100dvh] max-w-none rounded-none sm:w-[480px] sm:h-[600px] sm:max-w-[480px] sm:rounded-2xl">
+          <DialogTitle className="sr-only">Assistente Bravir</DialogTitle>
+          <DialogDescription className="sr-only">
+            Chat com o Assistente Bravir para registrar uma nova solicitação, bug ou melhoria.
+          </DialogDescription>
           <ChatNovaSolicitacao
             onSaved={() => {
               setNovaAberta(false);
@@ -479,7 +487,7 @@ function ChatCorrigir({
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="absolute inset-0 flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: BRAND }}>
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20">
@@ -495,7 +503,7 @@ function ChatCorrigir({
       </div>
 
       {/* Mensagens */}
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-muted/30 px-3 py-4">
+      <div ref={scrollRef} className="flex-1 min-h-0 space-y-3 overflow-y-auto bg-muted/30 px-3 py-4">
         {messages.map((m) => {
           if (m.kind === "confirmation") {
             return (
@@ -777,7 +785,7 @@ function ChatNovaSolicitacao({ onSaved }: { onSaved: () => void }) {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="absolute inset-0 flex flex-col">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: BRAND }}>
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20">
@@ -793,7 +801,7 @@ function ChatNovaSolicitacao({ onSaved }: { onSaved: () => void }) {
       </div>
 
       {/* Mensagens */}
-      <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-muted/30 px-3 py-4">
+      <div ref={scrollRef} className="flex-1 min-h-0 space-y-3 overflow-y-auto bg-muted/30 px-3 py-4">
         {messages.map((m) => {
           if (m.kind === "confirmation") {
             return (
