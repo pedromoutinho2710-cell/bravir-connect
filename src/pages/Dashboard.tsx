@@ -12,7 +12,7 @@ import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 import { exportDashboardExcel } from "@/lib/exportDashboardExcel";
 import { Download } from "lucide-react";
 
-type Periodo = "hoje" | "semana" | "mes" | "ano";
+type Periodo = "hoje" | "semana" | "mes" | "mes_anterior" | "ano";
 
 function getDateRange(periodo: Periodo): { dataInicio: string; dataFim: string } {
   const today = new Date();
@@ -33,6 +33,13 @@ function getDateRange(periodo: Periodo): { dataInicio: string; dataFim: string }
   if (periodo === "mes") {
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
     return { dataInicio: fmt(start), dataFim: fmt(today) };
+  }
+  if (periodo === "mes_anterior") {
+    const ano = today.getMonth() === 0 ? today.getFullYear() - 1 : today.getFullYear();
+    const mes = today.getMonth() === 0 ? 11 : today.getMonth() - 1;
+    const start = new Date(ano, mes, 1);
+    const end = new Date(ano, mes + 1, 0);
+    return { dataInicio: fmt(start), dataFim: fmt(end) };
   }
   // ano
   const start = new Date(today.getFullYear(), 0, 1);
@@ -112,6 +119,7 @@ const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "hoje", label: "Hoje" },
   { key: "semana", label: "Semana" },
   { key: "mes", label: "Mês" },
+  { key: "mes_anterior", label: "Mês anterior" },
   { key: "ano", label: "Ano" },
 ];
 
