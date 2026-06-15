@@ -210,6 +210,7 @@ export default function MeuPainel() {
   const [vendedorFullName, setVendedorFullName] = useState<string | null>(null);
   const [vendedorNomeSankhya, setVendedorNomeSankhya] = useState<string | null>(null);
   const [rankingPosicoes, setRankingPosicoes] = useState<{ nome: string; isVoce: boolean }[]>([]);
+  const [fatMensalVendedor, setFatMensalVendedor] = useState<{ mes: string; valor: number }[]>([]);
   const [produtosIndisponiveis, setProdutosIndisponiveis] = useState<{ id: string; nome: string }[]>([]);
   const [modalIndispOpen, setModalIndispOpen] = useState(false);
   const [historicoMeses, setHistoricoMeses] = useState<HistoricoMes[]>([]);
@@ -611,6 +612,49 @@ export default function MeuPainel() {
     return () => { cancelado = true; };
   }, [user, periodo, customAtivo, customInicio, customFim, vendedorFullName, vendedorNomeSankhya]);
 
+  // Faturamento mensal (Sankhya) do próprio vendedor — últimos 6 meses.
+  // Mesma lógica/visual do Dashboard admin, filtrado por nome_vendedor
+  // (nome_sankhya exato quando preenchido, senão %full_name%).
+  useEffect(() => {
+    if (!user) return;
+    const matchPattern = vendedorNomeSankhya
+      ? vendedorNomeSankhya
+      : (vendedorFullName ? `%${vendedorFullName}%` : null);
+    if (!matchPattern) { setFatMensalVendedor([]); return; }
+    let cancelado = false;
+    (async () => {
+      const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+      const agora = new Date();
+      const meses6 = Array.from({ length: 6 }, (_, i) => {
+        const d = new Date(agora.getFullYear(), agora.getMonth() - (5 - i), 1);
+        const ano = d.getFullYear();
+        const mesNum = d.getMonth() + 1;
+        const inicio = `${ano}-${String(mesNum).padStart(2, "0")}-01`;
+        const fim = new Date(ano, mesNum, 0).toISOString().slice(0, 10);
+        return { mes: MESES_ABREV[d.getMonth()], inicio, fim };
+      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any)
+        .from("faturamentos_sankhya")
+        .select("data_faturamento, valor_liquido")
+        .ilike("nome_vendedor", matchPattern)
+        .gte("data_faturamento", meses6[0].inicio)
+        .lte("data_faturamento", meses6[meses6.length - 1].fim)
+        .not("tipo_operacao", "ilike", "%devolução%");
+      if (cancelado) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = (data ?? []) as any[];
+      const arr = meses6.map((m) => ({
+        mes: m.mes,
+        valor: rows
+          .filter((r) => r.data_faturamento && r.data_faturamento >= m.inicio && r.data_faturamento <= m.fim)
+          .reduce((s, r) => s + Number(r.valor_liquido ?? 0), 0),
+      }));
+      setFatMensalVendedor(arr);
+    })();
+    return () => { cancelado = true; };
+  }, [user, vendedorFullName, vendedorNomeSankhya]);
+
   useEffect(() => {
     if (!user) return;
     const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
@@ -700,6 +744,7 @@ export default function MeuPainel() {
     return () => { cancelado = true; };
   }, []);
 
+  const maxFatMensalVendedor = Math.max(...fatMensalVendedor.map((m) => m.valor), 1);
   const metaPct = kpis.meta > 0 ? Math.min((kpis.faturamento / kpis.meta) * 100, 100) : 0;
   const metaColor = metaPct >= 80 ? "bg-green-500" : metaPct >= 50 ? "bg-yellow-400" : "bg-red-500";
 
@@ -902,6 +947,35 @@ export default function MeuPainel() {
           )}
         </CardContent>
       </Card>
+
+      {/* Faturamento mensal (Sankhya) — últimos 6 meses, gráfico de barras div+Tailwind */}
+      {fatMensalVendedor.some((m) => m.valor > 0) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Faturamento mensal (últimos 6 meses)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-end justify-between gap-2 h-48">
+              {fatMensalVendedor.map((m, idx) => (
+                <div key={m.mes} className="flex flex-col items-center flex-1 h-full justify-end">
+                  <span className="text-xs font-medium mb-1 text-center leading-tight">
+                    {formatBRL(m.valor)}
+                  </span>
+                  <div
+                    className="w-full rounded-t transition-all"
+                    style={{
+                      height: `${(m.valor / maxFatMensalVendedor) * 100}%`,
+                      backgroundColor: idx === fatMensalVendedor.length - 1 ? "#1A6B3A" : "#A7C7B7",
+                      minHeight: m.valor > 0 ? "4px" : "0px",
+                    }}
+                  />
+                  <span className="text-xs text-muted-foreground mt-1">{m.mes}</span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
