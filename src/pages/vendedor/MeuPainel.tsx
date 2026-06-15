@@ -347,7 +347,7 @@ export default function MeuPainel() {
           pedidosSemEstoque++;
           valorSemEstoque += total;
         }
-        if (p.status === "no_sankhya" || p.status === "parcialmente_faturado") {
+        if (p.status === "no_sankhya" || p.status === "parcialmente_faturado" || p.status === "nao_liberado_envio" || p.status === "liberado_envio") {
           aFaturar += total;
         }
       });
@@ -449,7 +449,7 @@ export default function MeuPainel() {
           const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
           entrada += total;
           if (p.status === "faturado" || p.status === "parcialmente_faturado") faturado += total;
-          if (p.status === "no_sankhya" || p.status === "parcialmente_faturado") aFaturar += total;
+          if (p.status === "no_sankhya" || p.status === "parcialmente_faturado" || p.status === "nao_liberado_envio" || p.status === "liberado_envio") aFaturar += total;
         }
         setPeriodTotais({ entrada, faturado, aFaturar });
       }
