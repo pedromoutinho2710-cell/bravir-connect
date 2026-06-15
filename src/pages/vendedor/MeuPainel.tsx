@@ -211,6 +211,7 @@ export default function MeuPainel() {
   const [vendedorNomeSankhya, setVendedorNomeSankhya] = useState<string | null>(null);
   const [rankingPosicoes, setRankingPosicoes] = useState<{ nome: string; isVoce: boolean }[]>([]);
   const [fatMensalVendedor, setFatMensalVendedor] = useState<{ mes: string; valor: number }[]>([]);
+  const [topClientes, setTopClientes] = useState<{ cliente_id: string; nome: string; total: number }[]>([]);
   const [produtosIndisponiveis, setProdutosIndisponiveis] = useState<{ id: string; nome: string }[]>([]);
   const [modalIndispOpen, setModalIndispOpen] = useState(false);
   const [historicoMeses, setHistoricoMeses] = useState<HistoricoMes[]>([]);
@@ -654,6 +655,40 @@ export default function MeuPainel() {
     })();
     return () => { cancelado = true; };
   }, [user, vendedorFullName, vendedorNomeSankhya]);
+
+  // Top 5 clientes do vendedor por valor de entrada no período (RLS limita aos próprios pedidos)
+  useEffect(() => {
+    if (!user) return;
+    let cancelado = false;
+    const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
+    (async () => {
+      const { data, error } = await supabase
+        .from("pedidos")
+        .select("cliente_id, clientes(razao_social, nome_parceiro), itens_pedido(total_item)")
+        .eq("vendedor_id", user.id)
+        .gte("data_pedido", inicio)
+        .lte("data_pedido", fim)
+        .not("status", "in", '("rascunho","cancelado","devolvido")');
+      if (cancelado) return;
+      if (error || !data) { setTopClientes([]); return; }
+      const agg: Record<string, { nome: string; total: number }> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data as any[]).forEach((p) => {
+        if (!p.cliente_id) return;
+        const nome = p.clientes?.nome_parceiro || p.clientes?.razao_social || "—";
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item ?? 0), 0);
+        if (!agg[p.cliente_id]) agg[p.cliente_id] = { nome, total: 0 };
+        agg[p.cliente_id].total += total;
+      });
+      const lista = Object.entries(agg)
+        .map(([cliente_id, v]) => ({ cliente_id, nome: v.nome, total: v.total }))
+        .sort((a, b) => b.total - a.total)
+        .slice(0, 5);
+      setTopClientes(lista);
+    })();
+    return () => { cancelado = true; };
+  }, [user, periodo, customAtivo, customInicio, customFim]);
 
   useEffect(() => {
     if (!user) return;
@@ -1166,6 +1201,30 @@ export default function MeuPainel() {
                       Você
                     </span>
                   )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Top clientes — top 5 do vendedor por valor de entrada no período */}
+      {topClientes.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2 pb-3">
+            <Trophy className="h-5 w-5 text-amber-500" />
+            <CardTitle>Top clientes</CardTitle>
+            <span className="ml-auto text-xs text-muted-foreground">por entrada no período</span>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1.5">
+              {topClientes.map((c, idx) => (
+                <div key={c.cliente_id} className="flex items-center gap-3 rounded-md border px-3 py-2">
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold tabular-nums">
+                    {idx + 1}
+                  </span>
+                  <span className="flex-1 text-sm font-medium truncate">{c.nome}</span>
+                  <span className="text-sm font-semibold text-green-700 tabular-nums">{formatBRL(c.total)}</span>
                 </div>
               ))}
             </div>
