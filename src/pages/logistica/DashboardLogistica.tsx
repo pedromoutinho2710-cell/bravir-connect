@@ -17,6 +17,12 @@ type PedidoRecente = {
   peso_total: number;
 };
 
+// Qualquer pedido que já passou pelo faturamento (qualquer etapa pós-faturamento)
+const STATUS_POS_FATURAMENTO = [
+  "no_sankhya", "nao_liberado_envio", "liberado_envio", "em_transito",
+  "faturado", "parcialmente_faturado",
+];
+
 export default function DashboardLogistica() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -37,17 +43,17 @@ export default function DashboardLogistica() {
         (supabase as any)
           .from("pedidos")
           .select("id", { count: "exact", head: true })
-          .in("status", ["no_sankhya", "aguardando_faturamento", "parcialmente_faturado"]),
+          .in("status", ["no_sankhya", "nao_liberado_envio", "liberado_envio", "parcialmente_faturado"]),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
           .from("pedidos")
           .select("id", { count: "exact", head: true })
-          .in("status", ["despachado", "em_rota"]),
+          .in("status", ["em_transito"]),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
           .from("pedidos")
           .select("id", { count: "exact", head: true })
-          .eq("status", "faturado")
+          .in("status", STATUS_POS_FATURAMENTO)
           .gte("faturado_em", `${hojeStr}T00:00:00`),
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
@@ -57,7 +63,7 @@ export default function DashboardLogistica() {
             clientes(razao_social, nome_parceiro),
             itens_pedido(quantidade, total_item, produtos(peso_unitario))
           `)
-          .eq("status", "faturado")
+          .in("status", STATUS_POS_FATURAMENTO)
           .order("faturado_em", { ascending: false })
           .limit(10),
       ]);
@@ -93,7 +99,7 @@ export default function DashboardLogistica() {
       const { data: pedHoje } = await (supabase as any)
         .from("pedidos")
         .select("itens_pedido(quantidade, produtos(peso_unitario))")
-        .eq("status", "faturado")
+        .in("status", STATUS_POS_FATURAMENTO)
         .gte("faturado_em", `${hojeStr}T00:00:00`);
 
       if (pedHoje) {
@@ -152,7 +158,7 @@ export default function DashboardLogistica() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-indigo-700">{emTransito}</div>
-            <div className="text-xs text-muted-foreground mt-1">despachados ou em rota</div>
+            <div className="text-xs text-muted-foreground mt-1">pedidos enviados</div>
           </CardContent>
         </Card>
 
