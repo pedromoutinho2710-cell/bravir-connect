@@ -179,12 +179,13 @@ Deno.serve(async (req) => {
 
   // ── atualizar_usuario ─────────────────────────────────────────────────────
   if (acao === "atualizar_usuario") {
-    const { user_id, full_name, email, role, senha } = body as {
+    const { user_id, full_name, email, role, senha, nome_sankhya } = body as {
       user_id: string;
       full_name: string;
       email: string;
       role: string;
       senha?: string;
+      nome_sankhya?: string | null;
     };
 
     if (!user_id || !full_name || !email || !role) {
@@ -198,9 +199,11 @@ Deno.serve(async (req) => {
     if (authErr) return err("Erro ao atualizar autenticação: " + authErr.message);
 
     // Update profile
+    const profileUpdate: Record<string, unknown> = { full_name, email };
+    if (nome_sankhya !== undefined) profileUpdate.nome_sankhya = nome_sankhya;
     const { error: profErr } = await supabaseAdmin
       .from("profiles")
-      .update({ full_name, email })
+      .update(profileUpdate)
       .eq("id", user_id);
     if (profErr) return err("Erro ao atualizar profile: " + profErr.message);
 

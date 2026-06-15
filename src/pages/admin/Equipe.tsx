@@ -17,6 +17,7 @@ type UsuarioRow = {
   id: string;
   email: string;
   full_name: string | null;
+  nome_sankhya: string | null;
   ativo: boolean | null;
   role: AppRole | null;
 };
@@ -49,6 +50,7 @@ export default function Equipe() {
   const [editUser, setEditUser] = useState<UsuarioRow | null>(null);
   const [editNome, setEditNome] = useState("");
   const [editEmail, setEditEmail] = useState("");
+  const [editNomeSankhya, setEditNomeSankhya] = useState("");
   const [editRole, setEditRole] = useState<AppRole>("vendedor");
   const [editSenha, setEditSenha] = useState("");
   const [salvandoEdit, setSalvandoEdit] = useState(false);
@@ -97,7 +99,7 @@ export default function Equipe() {
   const carregar = async () => {
     setLoading(true);
     const [profRes, rolesRes] = await Promise.all([
-      supabase.from("profiles").select("id, email, full_name, ativo").order("full_name"),
+      supabase.from("profiles").select("id, email, full_name, nome_sankhya, ativo").order("full_name"),
       supabase.from("user_roles").select("user_id, role"),
     ]);
 
@@ -109,6 +111,7 @@ export default function Equipe() {
         id: p.id,
         email: p.email,
         full_name: p.full_name,
+        nome_sankhya: p.nome_sankhya ?? null,
         ativo: p.ativo ?? true,
         role: rolesMap[p.id] ?? null,
       })),
@@ -122,6 +125,7 @@ export default function Equipe() {
     setEditUser(u);
     setEditNome(u.full_name ?? "");
     setEditEmail(u.email);
+    setEditNomeSankhya(u.nome_sankhya ?? "");
     setEditRole(u.role ?? "vendedor");
     setEditSenha("");
   };
@@ -158,6 +162,7 @@ export default function Equipe() {
       user_id: editUser.id,
       full_name: editNome.trim(),
       email: editEmail.trim(),
+      nome_sankhya: editNomeSankhya.trim() || null,
       role: editRole,
     };
     if (editSenha.trim()) body.senha = editSenha.trim();
@@ -420,6 +425,17 @@ export default function Equipe() {
                 onChange={(e) => setEditEmail(e.target.value)}
                 placeholder="email@empresa.com"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Nome no Sankhya</Label>
+              <Input
+                value={editNomeSankhya}
+                onChange={(e) => setEditNomeSankhya(e.target.value)}
+                placeholder="Ex: PEDRO MOUTINHO"
+              />
+              <p className="text-xs text-muted-foreground">
+                Usado para cruzar faturamento Sankhya com o vendedor
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Perfil *</Label>
