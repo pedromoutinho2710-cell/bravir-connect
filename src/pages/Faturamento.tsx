@@ -95,6 +95,11 @@ type ExcelItemRaw = {
 const STATUS_TERMINAL = new Set(["faturado", "devolvido", "cancelado"]);
 const STATUS_ACTIVE = new Set(["pendente_sankhya", "no_sankhya", "parcialmente_faturado", "com_problema", "em_faturamento", "sem_estoque"]);
 
+// Status após faturar por completo: pedido à vista vai para a fila do financeiro
+// (nao_liberado_envio); pedido a prazo segue o fluxo normal (no_sankhya).
+const statusPosFaturado = (pagamentoVista: boolean): string =>
+  pagamentoVista ? "nao_liberado_envio" : "no_sankhya";
+
 function tempoAguardando(dt: string | null): string | null {
   if (!dt) return null;
   try {
@@ -839,10 +844,11 @@ export default function Faturamento() {
   };
 
   const cadastrarNoSankhya = async (p: PedidoFat) => {
-    const ok = await atualizar(p.id, { status: "no_sankhya", responsavel_id: user?.id });
+    const novoStatus = statusPosFaturado(p.pagamento_vista);
+    const ok = await atualizar(p.id, { status: novoStatus, responsavel_id: user?.id });
     if (ok) {
       toast.success(`Pedido #${p.numero_pedido} cadastrado no Sankhya`);
-      await insertHistorico(p.id, p.status, "no_sankhya", "cadastrou_sankhya", "Pedido cadastrado no Sankhya");
+      await insertHistorico(p.id, p.status, novoStatus, "cadastrou_sankhya", "Pedido cadastrado no Sankhya");
     }
   };
 
@@ -998,7 +1004,7 @@ export default function Faturamento() {
     }
 
     const todosCompletos = faturarDialog.itens.every((item) => (totalFaturadoMap[item.id] ?? 0) >= item.quantidade);
-    const novoStatus = todosCompletos ? "no_sankhya" : "parcialmente_faturado";
+    const novoStatus = todosCompletos ? statusPosFaturado(faturarDialog.pagamento_vista) : "parcialmente_faturado";
 
     const { error: updErr } = await supabase
       .from("pedidos")
@@ -1014,12 +1020,12 @@ export default function Faturamento() {
       destinatario_id: faturarDialog.vendedor_id,
       destinatario_role: "vendedor",
       tipo: "pedido_faturado",
-      mensagem: novoStatus === "faturado"
+      mensagem: todosCompletos
         ? `Pedido #${faturarDialog.numero_pedido} faturado!${nfNumero ? ` NF: ${nfNumero}` : ""}`
         : `Pedido #${faturarDialog.numero_pedido} parcialmente faturado${nfNumero ? ` — NF: ${nfNumero}` : ""}`,
     });
 
-    toast.success(novoStatus === "faturado"
+    toast.success(todosCompletos
       ? `Pedido #${faturarDialog.numero_pedido} faturado completamente`
       : `Pedido #${faturarDialog.numero_pedido} parcialmente faturado`);
     await insertHistorico(
@@ -1206,7 +1212,7 @@ export default function Faturamento() {
 
     if (itensSemFat.length === 0) {
       await supabase.from("pedidos").update({
-        status: "no_sankhya",
+        status: statusPosFaturado(pedido.pagamento_vista),
         status_atualizado_em: nowIso,
       }).eq("id", pedido.id);
       toast.success("Faturamento salvo!");
@@ -1285,7 +1291,7 @@ export default function Faturamento() {
     }
 
     await supabase.from("pedidos").update({
-      status: "no_sankhya",
+      status: statusPosFaturado(pedido.pagamento_vista),
       status_atualizado_em: nowIso,
     }).eq("id", pedido.id);
 
@@ -2491,7 +2497,14 @@ export default function Faturamento() {
                             })()}
                           </TableCell>
                           <TableCell>
-                            <StatusBadge status={p.status} />
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <StatusBadge status={p.status} />
+                              {p.pagamento_vista && (
+                                <span className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                                  À VISTA
+                                </span>
+                              )}
+                            </div>
                             {aba.key === "sem_estoque" && p.flag_prioridade && (
                               <div className="mt-1">
                                 <FlagBadge flag={p.flag_prioridade} />
