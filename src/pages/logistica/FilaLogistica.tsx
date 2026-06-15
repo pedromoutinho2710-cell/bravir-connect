@@ -34,7 +34,6 @@ import { toast } from "sonner";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Loader2,
-  CheckCircle2,
   RefreshCw,
   FileText,
   Trash2,
@@ -53,58 +52,50 @@ const ICMS_UF: Record<string, number> = {
 };
 
 const STATUS_LABEL: Record<string, string> = {
-  no_sankhya: "No Sankhya",
-  aguardando_faturamento: "Aguardando Faturamento",
-  parcialmente_faturado: "Parc. Faturado",
-  faturado: "Faturado",
-  aguardando_pagamento: "Aguardando Pagamento",
-  pagamento_confirmado: "Pagamento Confirmado",
-  despachado: "Despachado",
-  em_rota: "Em Rota",
-  entregue: "Entregue",
+  pendente_sankhya: "A Faturar",
+  no_sankhya: "Faturado",
+  nao_liberado_envio: "Não Liberado p/ Envio",
+  liberado_envio: "Liberado p/ Envio",
+  em_transito: "Em Trânsito",
 };
 const STATUS_COLOR: Record<string, string> = {
+  pendente_sankhya: "bg-yellow-100 text-yellow-800 border-yellow-300",
   no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
-  aguardando_faturamento: "bg-purple-100 text-purple-800 border-purple-300",
-  parcialmente_faturado: "bg-orange-100 text-orange-800 border-orange-300",
-  faturado: "bg-green-100 text-green-800 border-green-300",
-  aguardando_pagamento: "bg-amber-100 text-amber-900 border-amber-400",
-  pagamento_confirmado: "bg-emerald-100 text-emerald-800 border-emerald-300",
-  despachado: "bg-indigo-100 text-indigo-800 border-indigo-300",
-  em_rota: "bg-violet-100 text-violet-800 border-violet-300",
-  entregue: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  nao_liberado_envio: "bg-amber-100 text-amber-900 border-amber-400",
+  liberado_envio: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  em_transito: "bg-indigo-100 text-indigo-800 border-indigo-300",
 };
 
 const ABAS_LOGISTICA = [
   {
     key: "a_faturar",
     label: "A Faturar",
-    status: ["no_sankhya", "aguardando_faturamento", "parcialmente_faturado"],
-    descricao: "Pedidos aguardando confirmação de faturamento",
-  },
-  {
-    key: "a_vista",
-    label: "À Vista",
-    status: ["aguardando_pagamento", "pagamento_confirmado"],
-    descricao: "Pagamento à vista — aguardando ou já confirmado pelo financeiro",
+    status: ["pendente_sankhya"],
+    descricao: "Pedidos aguardando faturamento pela equipe de faturamento",
   },
   {
     key: "faturado",
     label: "Faturado",
-    status: ["faturado"],
-    descricao: "Pedidos confirmados aguardando despacho",
+    status: ["no_sankhya"],
+    descricao: "Faturados — a prazo seguem para envio; à vista aguardam o financeiro",
+  },
+  {
+    key: "nao_liberado",
+    label: "Não Liberado p/ Envio",
+    status: ["nao_liberado_envio"],
+    descricao: "Pedidos à vista aguardando aprovação de pagamento do financeiro",
+  },
+  {
+    key: "liberado",
+    label: "Liberado p/ Envio",
+    status: ["liberado_envio"],
+    descricao: "Pedidos liberados — registre a NF e marque como em trânsito",
   },
   {
     key: "em_transito",
     label: "Em Trânsito",
-    status: ["despachado", "em_rota"],
-    descricao: "Pedidos despachados",
-  },
-  {
-    key: "entregues",
-    label: "Entregues",
-    status: ["entregue"],
-    descricao: "Pedidos concluídos",
+    status: ["em_transito"],
+    descricao: "Pedidos enviados",
   },
 ];
 
@@ -187,7 +178,7 @@ export default function FilaLogistica() {
           produtos(nome, codigo_jiva, cx_embarque, peso_unitario)
         )
       `)
-      .in("status", ["no_sankhya", "aguardando_faturamento", "parcialmente_faturado", "aguardando_pagamento", "pagamento_confirmado", "faturado", "despachado", "em_rota", "entregue"])
+      .in("status", ["pendente_sankhya", "no_sankhya", "nao_liberado_envio", "liberado_envio", "em_transito"])
       .order("data_pedido", { ascending: true });
 
     if (error) { toast.error("Erro ao carregar pedidos"); setLoading(false); return; }
@@ -265,7 +256,26 @@ export default function FilaLogistica() {
     setNfFile(null);
   };
 
-  const confirmarFaturamento = async () => {
+  // Pedido a prazo faturado (no_sankhya): logística libera para envio.
+  const liberarParaEnvio = async () => {
+    if (!selecionado) return;
+    setConfirmando(true);
+    const { error } = await supabase
+      .from("pedidos")
+      .update({
+        status: "liberado_envio",
+        status_atualizado_em: new Date().toISOString(),
+      } as any)
+      .eq("id", selecionado.id);
+    setConfirmando(false);
+    if (error) { toast.error("Erro ao liberar pedido: " + error.message); return; }
+    toast.success(`Pedido #${selecionado.numero_pedido} liberado para envio`);
+    setSelecionado(null);
+    carregar();
+  };
+
+  // Pedido liberado (liberado_envio): logística registra a NF/rastreio e envia.
+  const marcarEmTransito = async () => {
     if (!selecionado) return;
     setConfirmando(true);
 
@@ -285,16 +295,11 @@ export default function FilaLogistica() {
       nf_pdf_url = upData?.path ?? null;
     }
 
-    // Pedido à vista bifurca o fluxo: vai para o financeiro antes do despacho.
-    const aVista = selecionado.pagamento_vista;
-    const novoStatus = aVista ? "aguardando_pagamento" : "faturado";
-
-    // Atualizar status do pedido
+    // Atualizar status do pedido para em trânsito
     const { error: updErr } = await supabase
       .from("pedidos")
       .update({
-        status: novoStatus,
-        faturado_em: new Date().toISOString(),
+        status: "em_transito",
         status_atualizado_em: new Date().toISOString(),
       } as any)
       .eq("id", selecionado.id);
@@ -305,73 +310,28 @@ export default function FilaLogistica() {
       return;
     }
 
-    // Registrar faturamento com NF, rastreio e obs
-    await supabase.from("faturamentos").insert({
-      pedido_id: selecionado.id,
-      nota_fiscal: nfNumero.trim() || null,
-      nf_pdf_url,
-      rastreio: nfRastreio.trim() || null,
-      obs: obsLogistica.trim() || null,
-      usuario_id: user?.id ?? null,
+    // Registrar NF/rastreio/obs do envio, se houver algo preenchido
+    if (nfNumero.trim() || nfRastreio.trim() || obsLogistica.trim() || nf_pdf_url) {
+      await supabase.from("faturamentos").insert({
+        pedido_id: selecionado.id,
+        nota_fiscal: nfNumero.trim() || null,
+        nf_pdf_url,
+        rastreio: nfRastreio.trim() || null,
+        obs: obsLogistica.trim() || null,
+        usuario_id: user?.id ?? null,
+      } as any);
+    }
+
+    // Notificar vendedor que o pedido saiu para entrega
+    await supabase.from("notificacoes").insert({
+      destinatario_id: selecionado.vendedor_id,
+      destinatario_role: "vendedor",
+      tipo: "pedido_em_transito",
+      mensagem: `Pedido #${selecionado.numero_pedido} saiu para entrega (em trânsito).${nfNumero.trim() ? ` NF: ${nfNumero.trim()}` : ""}${nfRastreio.trim() ? ` Rastreio: ${nfRastreio.trim()}` : ""}`,
     } as any);
 
-    if (aVista) {
-      // Notificar vendedor (faturado, aguardando pagamento)
-      await supabase.from("notificacoes").insert({
-        destinatario_id: selecionado.vendedor_id,
-        destinatario_role: "vendedor",
-        tipo: "pedido_faturado",
-        mensagem: `Seu pedido #${selecionado.numero_pedido} foi faturado e aguarda confirmação de pagamento (à vista).${nfNumero.trim() ? ` NF: ${nfNumero.trim()}` : ""}`,
-      } as any);
-
-      // Notificar o financeiro para confirmar o recebimento
-      const { data: finRoles } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "financeiro");
-
-      if (finRoles && finRoles.length > 0) {
-        await supabase.from("notificacoes").insert(
-          finRoles.map((r) => ({
-            destinatario_id: r.user_id,
-            destinatario_role: "financeiro",
-            tipo: "aguardando_pagamento",
-            pedido_id: selecionado.id,
-            mensagem: `Pedido à vista #${selecionado.numero_pedido} (${selecionado.razao_social}) aguardando confirmação de pagamento`,
-          })) as any
-        );
-      }
-
-      toast.success(`Pedido #${selecionado.numero_pedido} faturado — aguardando confirmação do financeiro`);
-    } else {
-      // Notificar vendedor
-      await supabase.from("notificacoes").insert({
-        destinatario_id: selecionado.vendedor_id,
-        destinatario_role: "vendedor",
-        tipo: "pedido_faturado",
-        mensagem: `Seu pedido #${selecionado.numero_pedido} foi faturado!${nfNumero.trim() ? ` NF: ${nfNumero.trim()}` : ""}`,
-      } as any);
-
-      // Notificar equipe de faturamento
-      const { data: fatRoles } = await supabase
-        .from("user_roles")
-        .select("user_id")
-        .eq("role", "faturamento");
-
-      if (fatRoles && fatRoles.length > 0) {
-        await supabase.from("notificacoes").insert(
-          fatRoles.map((r) => ({
-            destinatario_id: r.user_id,
-            destinatario_role: "faturamento",
-            tipo: "pedido_faturado",
-            mensagem: `Pedido #${selecionado.numero_pedido} confirmado pela logística`,
-          })) as any
-        );
-      }
-
-      toast.success(`Pedido #${selecionado.numero_pedido} confirmado!`);
-    }
     setConfirmando(false);
+    toast.success(`Pedido #${selecionado.numero_pedido} marcado como Em Trânsito`);
     setSelecionado(null);
     carregar();
   };
@@ -420,65 +380,6 @@ export default function FilaLogistica() {
     const aba = ABAS_LOGISTICA.find((a) => a.key === abaAtiva);
     return (aba?.status.includes(p.status) ?? false) && matchFiltros(p);
   });
-
-  const atualizarStatusEntrega = async (novoStatus: string) => {
-    if (!selecionado) return;
-    setConfirmando(true);
-    const { error } = await supabase
-      .from("pedidos")
-      .update({
-        status: novoStatus,
-        status_atualizado_em: new Date().toISOString(),
-      } as any)
-      .eq("id", selecionado.id);
-    setConfirmando(false);
-    if (error) { toast.error("Erro ao atualizar status"); return; }
-    toast.success(`Pedido #${selecionado.numero_pedido} marcado como ${STATUS_LABEL[novoStatus]}`);
-
-    if (novoStatus === "entregue") {
-      await supabase.from("notificacoes").insert({
-        destinatario_id: selecionado.vendedor_id,
-        destinatario_role: "vendedor",
-        tipo: "pedido_entregue",
-        mensagem: `Pedido #${selecionado.numero_pedido} foi entregue!`,
-      } as any);
-    }
-
-    setSelecionado(null);
-    carregar();
-  };
-
-  // Pedido à vista já confirmado pelo financeiro: logística libera para despacho.
-  // Status final conforme quantidades faturadas vs. pedidas.
-  const liberarDespacho = async () => {
-    if (!selecionado) return;
-    setConfirmando(true);
-
-    const totalQtd = selecionado.itens.reduce((s, i) => s + i.quantidade, 0);
-    const totalFat = selecionado.itens.reduce((s, i) => s + i.qtd_faturada, 0);
-    const novoStatus = totalFat > 0 && totalFat < totalQtd ? "parcialmente_faturado" : "faturado";
-
-    const { error } = await supabase
-      .from("pedidos")
-      .update({
-        status: novoStatus,
-        status_atualizado_em: new Date().toISOString(),
-      } as any)
-      .eq("id", selecionado.id);
-    setConfirmando(false);
-    if (error) { toast.error("Erro ao liberar pedido: " + error.message); return; }
-
-    await supabase.from("notificacoes").insert({
-      destinatario_id: selecionado.vendedor_id,
-      destinatario_role: "vendedor",
-      tipo: "pedido_faturado",
-      mensagem: `Pagamento confirmado — Pedido #${selecionado.numero_pedido} liberado para despacho.`,
-    } as any);
-
-    toast.success(`Pedido #${selecionado.numero_pedido} liberado (${STATUS_LABEL[novoStatus]})`);
-    setSelecionado(null);
-    carregar();
-  };
 
   // Gerar PDF para impressão
   const gerarPdf = (p: Pedido) => {
@@ -621,7 +522,7 @@ export default function FilaLogistica() {
               </Button>
             )}
           </div>
-          <TabsList className="w-full grid grid-cols-4">
+          <TabsList className="w-full grid grid-cols-2 sm:grid-cols-5">
             {ABAS_LOGISTICA.map((aba) => {
               const count = pedidos.filter((p) => aba.status.includes(p.status) && matchFiltros(p)).length;
               return (
@@ -877,86 +778,61 @@ export default function FilaLogistica() {
                   </div>
                 )}
 
-                {/* À vista — aguardando confirmação do financeiro */}
-                {selecionado.status === "aguardando_pagamento" && (
-                  <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-                    <div className="font-semibold mb-1">Pagamento à vista — aguardando financeiro</div>
-                    Este pedido já foi faturado e está aguardando o financeiro confirmar o recebimento.
-                    Assim que confirmado, ele poderá ser liberado para despacho aqui.
+                {/* A faturar — aguardando equipe de faturamento */}
+                {selecionado.status === "pendente_sankhya" && (
+                  <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-900">
+                    <div className="font-semibold mb-1">Aguardando faturamento</div>
+                    Este pedido ainda será faturado pela equipe de faturamento. Quando faturado,
+                    seguirá para o envio (ou, se for à vista, para a aprovação do financeiro).
                   </div>
                 )}
 
-                {/* À vista — pagamento confirmado: liberar para despacho */}
-                {selecionado.status === "pagamento_confirmado" && (
-                  <div className="rounded-md border border-emerald-300 bg-emerald-50 p-4 space-y-3">
-                    <div className="font-semibold text-sm text-emerald-900">
-                      Pagamento confirmado pelo financeiro
-                    </div>
-                    <p className="text-sm text-emerald-800">
-                      Libere o pedido para despacho. O status final será definido conforme as
-                      quantidades faturadas.
+                {/* Faturado a prazo (no_sankhya) — liberar para envio */}
+                {selecionado.status === "no_sankhya" && !selecionado.pagamento_vista && (
+                  <div className="rounded-md border border-blue-300 bg-blue-50 p-4 space-y-3">
+                    <div className="font-semibold text-sm text-blue-900">Faturado — pronto para envio</div>
+                    <p className="text-sm text-blue-800">
+                      Libere o pedido para envio. Ele seguirá para a coluna "Liberado p/ Envio".
                     </p>
-                    <Button
-                      className="bg-emerald-600 hover:bg-emerald-700"
-                      onClick={liberarDespacho}
-                      disabled={confirmando}
-                    >
+                    <Button onClick={liberarParaEnvio} disabled={confirmando}>
                       {confirmando
                         ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         : <PackageCheck className="h-4 w-4 mr-2" />
                       }
-                      Liberar para despacho
+                      Liberar p/ Envio
                     </Button>
                   </div>
                 )}
 
-                {/* Ações de entrega — faturado */}
-                {selecionado.status === "faturado" && (
-                  <div className="rounded-md border p-4 space-y-3">
-                    <div className="font-semibold text-sm">Atualizar status de entrega</div>
-                    <div className="flex gap-2 flex-wrap">
-                      <Button
-                        variant="outline"
-                        onClick={() => atualizarStatusEntrega("despachado")}
-                        disabled={confirmando}
-                      >
-                        <Truck className="h-4 w-4 mr-1" />
-                        Marcar como Despachado
-                      </Button>
-                    </div>
+                {/* Faturado à vista (no_sankhya) — aguardando financeiro */}
+                {selecionado.status === "no_sankhya" && selecionado.pagamento_vista && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                    <div className="font-semibold mb-1">Pagamento à vista — aguardando financeiro</div>
+                    Pedido à vista. Ele só será liberado para envio após o financeiro aprovar o pagamento.
                   </div>
                 )}
 
-                {/* Ações de entrega — em trânsito */}
-                {(selecionado.status === "despachado" || selecionado.status === "em_rota") && (
-                  <div className="rounded-md border p-4 space-y-3">
-                    <div className="font-semibold text-sm">Atualizar status de entrega</div>
-                    <div className="flex gap-2 flex-wrap">
-                      {selecionado.status === "despachado" && (
-                        <Button
-                          variant="outline"
-                          onClick={() => atualizarStatusEntrega("em_rota")}
-                          disabled={confirmando}
-                        >
-                          <Truck className="h-4 w-4 mr-1" />
-                          Marcar Em Rota
-                        </Button>
-                      )}
-                      <Button
-                        onClick={() => atualizarStatusEntrega("entregue")}
-                        disabled={confirmando}
-                      >
-                        <PackageCheck className="h-4 w-4 mr-1" />
-                        Confirmar Entrega
-                      </Button>
-                    </div>
+                {/* Não liberado p/ envio — à vista aguardando financeiro */}
+                {selecionado.status === "nao_liberado_envio" && (
+                  <div className="rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+                    <div className="font-semibold mb-1">Não liberado para envio</div>
+                    Pedido à vista faturado, aguardando o financeiro aprovar o pagamento.
+                    Assim que aprovado, ele aparecerá em "Liberado p/ Envio".
                   </div>
                 )}
 
-                {/* Campos de confirmação */}
-                {(selecionado.status === "no_sankhya" || selecionado.status === "aguardando_faturamento" || selecionado.status === "parcialmente_faturado") && (
+                {/* Em trânsito — já enviado */}
+                {selecionado.status === "em_transito" && (
+                  <div className="rounded-md border border-indigo-300 bg-indigo-50 p-4 text-sm text-indigo-900">
+                    <div className="font-semibold mb-1">Em trânsito</div>
+                    Pedido já enviado.
+                  </div>
+                )}
+
+                {/* Liberado p/ envio — registrar NF e marcar em trânsito */}
+                {selecionado.status === "liberado_envio" && (
                 <div className="rounded-md border p-4 space-y-4">
-                  <div className="font-semibold text-sm">Registrar faturamento</div>
+                  <div className="font-semibold text-sm">Registrar envio (NF e rastreio)</div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5">
@@ -1018,13 +894,13 @@ export default function FilaLogistica() {
                   <XCircle className="h-4 w-4 mr-1" />
                   Fechar
                 </Button>
-                {(selecionado.status === "no_sankhya" || selecionado.status === "aguardando_faturamento" || selecionado.status === "parcialmente_faturado") && (
-                  <Button onClick={confirmarFaturamento} disabled={confirmando}>
+                {selecionado.status === "liberado_envio" && (
+                  <Button onClick={marcarEmTransito} disabled={confirmando}>
                     {confirmando
                       ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      : <CheckCircle2 className="h-4 w-4 mr-2" />
+                      : <Truck className="h-4 w-4 mr-2" />
                     }
-                    Confirmar faturamento
+                    Marcar Em Trânsito
                   </Button>
                 )}
               </DialogFooter>
