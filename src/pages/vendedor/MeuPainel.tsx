@@ -11,7 +11,7 @@ import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, Briefcase, Gift, Trophy, PackageX } from "lucide-react";
+import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, UserPlus, Briefcase, Gift, Trophy, PackageX } from "lucide-react";
 import { toast } from "sonner";
 
 type KPIs = {
@@ -147,6 +147,7 @@ type ClienteSemPedido = {
 type ClientesPeriodo = {
   carteira: number;
   comPedido: number;
+  novos: number;
   semPedidoList: ClienteSemPedido[];
 };
 
@@ -196,7 +197,7 @@ export default function MeuPainel() {
   const [tarefasDia, setTarefasDia] = useState<TarefaDia[]>([]);
   const [loading, setLoading] = useState(true);
   const [baixandoTabela, setBaixandoTabela] = useState(false);
-  const [clientesPeriodo, setClientesPeriodo] = useState<ClientesPeriodo>({ carteira: 0, comPedido: 0, semPedidoList: [] });
+  const [clientesPeriodo, setClientesPeriodo] = useState<ClientesPeriodo>({ carteira: 0, comPedido: 0, novos: 0, semPedidoList: [] });
   const [modalSemPedidoOpen, setModalSemPedidoOpen] = useState(false);
   const [campanhaAtiva, setCampanhaAtiva] = useState<CampanhaAtiva | null>(null);
   const [campanhaMarcas, setCampanhaMarcas] = useState<string[]>([]);
@@ -563,7 +564,7 @@ export default function MeuPainel() {
     if (!user) return;
     const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
     (async () => {
-      const [carteiraRes, pedidosRes] = await Promise.all([
+      const [carteiraRes, pedidosRes, novosRes] = await Promise.all([
         supabase
           .from("clientes")
           .select("id, razao_social, nome_parceiro, cidade", { count: "exact" })
@@ -576,9 +577,17 @@ export default function MeuPainel() {
           .gte("data_pedido", inicio)
           .lte("data_pedido", fim)
           .not("status", "in", '("cancelado","devolvido")'),
+        // Novos clientes: criados dentro do período filtrado
+        supabase
+          .from("clientes")
+          .select("id", { count: "exact", head: true })
+          .eq("vendedor_id", user.id)
+          .eq("status", "ativo")
+          .gte("created_at", inicio)
+          .lte("created_at", `${fim}T23:59:59`),
       ]);
 
-      if (carteiraRes.error || pedidosRes.error) {
+      if (carteiraRes.error || pedidosRes.error || novosRes.error) {
         toast.error("Erro ao carregar clientes");
         return;
       }
@@ -616,6 +625,7 @@ export default function MeuPainel() {
       setClientesPeriodo({
         carteira: carteira.length,
         comPedido: idsComPedido.size,
+        novos: novosRes.count ?? 0,
         semPedidoList,
       });
     })();
@@ -940,6 +950,17 @@ export default function MeuPainel() {
           <CardContent>
             <div className="text-2xl font-bold text-green-700">{clientesPeriodo.comPedido}</div>
             <p className="text-xs text-muted-foreground mt-1">{customAtivo ? "Período personalizado" : PERIODO_LABEL[periodo]}</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Novos clientes</CardTitle>
+            <UserPlus className="h-4 w-4 text-blue-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-700">{clientesPeriodo.novos}</div>
+            <p className="text-xs text-muted-foreground mt-1">cadastrados no período</p>
           </CardContent>
         </Card>
 
