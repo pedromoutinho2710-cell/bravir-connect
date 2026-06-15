@@ -220,7 +220,7 @@ export default function PropostaPublica() {
 
       await supabase
         .from("pedidos")
-        .update({ status: "aguardando_faturamento" })
+        .update({ status: "pendente_sankhya" })
         .eq("id", proposta.pedido.id);
 
       await (supabase as any).from("notificacoes").insert({

@@ -1134,14 +1134,14 @@ export default function Faturamento() {
   const restaurarPedido = async (p: PedidoFat) => {
     setAtualizando(p.id);
     const { error } = await supabase.from("pedidos").update({
-      status: "aguardando_faturamento",
+      status: "pendente_sankhya",
       motivo: null,
       status_atualizado_em: new Date().toISOString(),
     }).eq("id", p.id);
     setAtualizando(null);
     if (error) { toast.error("Erro ao restaurar: " + error.message); return; }
     toast.success(`Pedido #${p.numero_pedido} restaurado`);
-    await insertHistorico(p.id, "cancelado", "aguardando_faturamento", "restaurou", "Pedido restaurado do histórico de cancelados");
+    await insertHistorico(p.id, "cancelado", "pendente_sankhya", "restaurou", "Pedido restaurado do histórico de cancelados");
     setRefreshKey((k) => k + 1);
   };
 
