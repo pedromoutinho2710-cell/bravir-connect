@@ -273,6 +273,23 @@ export function SecaoProdutos({
         const aplicarEspecial = precoEspecial.origem === "acordo" || precoEfetivo > liquidoCluster;
 
         if (aplicarEspecial) {
+          if (precoEspecial.origem === "acordo") {
+            // 'acordo': o preço acordado é o líquido-base (preco_final = precoEfetivo),
+            // independente do bruto. Comercial e trade são aplicados POR CIMA do acordo,
+            // evitando o desconto de perfil negativo quando o acordo é maior que o bruto.
+            const precos_acordo = calcularPrecos(precoEfetivo, 0, i.desconto_comercial, i.desconto_trade, i.quantidade);
+            const dPerfilAcordo = bruto > 0 ? 1 - precoEfetivo / bruto : 0;
+            return {
+              ...i,
+              preco_bruto: bruto,
+              desconto_perfil: dPerfilAcordo,
+              preco_apos_perfil: precos_acordo.preco_apos_perfil,
+              preco_apos_comercial: precos_acordo.preco_apos_comercial,
+              preco_final: precos_acordo.preco_final,
+              total: precos_acordo.total,
+            };
+          }
+          // origem 'historico': preço funciona como piso; desconto de perfil clampado em 0.
           const dPerfilEspecial = bruto > 0 ? Math.max(0, 1 - precoEfetivo / bruto) : 0;
           const precos_especial_com = calcularPrecos(bruto, dPerfilEspecial, i.desconto_comercial, i.desconto_trade, i.quantidade);
           return {
