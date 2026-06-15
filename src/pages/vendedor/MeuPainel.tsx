@@ -208,6 +208,7 @@ export default function MeuPainel() {
   const [faturamentoRealMes, setFaturamentoRealMes] = useState<number | null>(null);
   const [faturamentoRealMesAnterior, setFaturamentoRealMesAnterior] = useState<number | null>(null);
   const [vendedorFullName, setVendedorFullName] = useState<string | null>(null);
+  const [rankingPosicoes, setRankingPosicoes] = useState<{ nome: string; isVoce: boolean }[]>([]);
   const [produtosIndisponiveis, setProdutosIndisponiveis] = useState<{ id: string; nome: string }[]>([]);
   const [modalIndispOpen, setModalIndispOpen] = useState(false);
   const [historicoMeses, setHistoricoMeses] = useState<HistoricoMes[]>([]);
@@ -559,6 +560,48 @@ export default function MeuPainel() {
       setHistoricoMeses(resultados);
     })();
   }, [user]);
+
+  // Mini-ranking de posições — faturado real (Sankhya) por vendedor no período.
+  // Mostra a posição de todos SEM valores; o próprio vendedor é destacado via
+  // match de profiles.full_name (vendedorFullName) com nome_vendedor.
+  useEffect(() => {
+    if (!user) return;
+    let cancelado = false;
+    const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
+    (async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any)
+        .from("faturamentos_sankhya")
+        .select("nome_vendedor, valor_liquido")
+        .gte("data_faturamento", inicio)
+        .lte("data_faturamento", fim)
+        .not("tipo_operacao", "ilike", "%devolução%");
+      if (cancelado) return;
+      if (error || !data) {
+        setRankingPosicoes([]);
+        return;
+      }
+      const somaPorVendedor: Record<string, number> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data as any[]).forEach((r) => {
+        const nome = (r.nome_vendedor ?? "").trim();
+        if (!nome) return;
+        somaPorVendedor[nome] = (somaPorVendedor[nome] ?? 0) + Number(r.valor_liquido ?? 0);
+      });
+      const fullNameNorm = (vendedorFullName ?? "").trim().toLowerCase();
+      const lista = Object.entries(somaPorVendedor)
+        .sort(([, a], [, b]) => b - a)
+        .map(([nome]) => {
+          const nomeNorm = nome.toLowerCase();
+          const isVoce =
+            fullNameNorm.length > 0 &&
+            (nomeNorm.includes(fullNameNorm) || fullNameNorm.includes(nomeNorm));
+          return { nome, isVoce };
+        });
+      setRankingPosicoes(lista);
+    })();
+    return () => { cancelado = true; };
+  }, [user, periodo, customAtivo, customInicio, customFim, vendedorFullName]);
 
   useEffect(() => {
     if (!user) return;
@@ -1016,6 +1059,37 @@ export default function MeuPainel() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Minha posição no ranking — posições de todos, sem valores */}
+      {rankingPosicoes.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center gap-2 pb-3">
+            <Trophy className="h-5 w-5 text-primary" />
+            <CardTitle>Minha posição no ranking</CardTitle>
+            <span className="ml-auto text-xs text-muted-foreground">faturado no período · sem valores</span>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-1.5">
+              {rankingPosicoes.map((r, idx) => (
+                <div
+                  key={`${r.nome}-${idx}`}
+                  className={`flex items-center gap-3 rounded-md border px-3 py-2 ${r.isVoce ? "bg-emerald-50 border-emerald-300" : ""}`}
+                >
+                  <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-bold tabular-nums">
+                    {idx + 1}
+                  </span>
+                  <span className="flex-1 text-sm font-medium truncate">{r.nome}</span>
+                  {r.isVoce && (
+                    <span className="inline-flex items-center rounded-full bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5">
+                      Você
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Produtos indisponíveis — bloco discreto */}
       {produtosIndisponiveis.length > 0 && (
