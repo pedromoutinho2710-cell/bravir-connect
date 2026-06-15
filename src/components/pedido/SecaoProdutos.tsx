@@ -278,11 +278,12 @@ export function SecaoProdutos({
             // independente do bruto. Comercial e trade são aplicados POR CIMA do acordo,
             // evitando o desconto de perfil negativo quando o acordo é maior que o bruto.
             const precos_acordo = calcularPrecos(precoEfetivo, 0, i.desconto_comercial, i.desconto_trade, i.quantidade);
-            const dPerfilAcordo = bruto > 0 ? 1 - precoEfetivo / bruto : 0;
             return {
               ...i,
-              preco_bruto: bruto,
-              desconto_perfil: dPerfilAcordo,
+              // P. Bruto passa a ser o próprio preço acordado e o desconto de perfil
+              // fica 0%, evitando exibir bruto da tabela com desconto negativo (ágio).
+              preco_bruto: precoEfetivo,
+              desconto_perfil: 0,
               preco_apos_perfil: precos_acordo.preco_apos_perfil,
               preco_apos_comercial: precos_acordo.preco_apos_comercial,
               preco_final: precos_acordo.preco_final,
