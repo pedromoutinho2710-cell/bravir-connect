@@ -208,6 +208,7 @@ export default function MeuPainel() {
   const [faturamentoRealMes, setFaturamentoRealMes] = useState<number | null>(null);
   const [faturamentoRealMesAnterior, setFaturamentoRealMesAnterior] = useState<number | null>(null);
   const [vendedorFullName, setVendedorFullName] = useState<string | null>(null);
+  const [vendedorNomeSankhya, setVendedorNomeSankhya] = useState<string | null>(null);
   const [rankingPosicoes, setRankingPosicoes] = useState<{ nome: string; isVoce: boolean }[]>([]);
   const [produtosIndisponiveis, setProdutosIndisponiveis] = useState<{ id: string; nome: string }[]>([]);
   const [modalIndispOpen, setModalIndispOpen] = useState(false);
@@ -466,14 +467,19 @@ export default function MeuPainel() {
     (async () => {
       const { data: prof } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("full_name, nome_sankhya")
         .eq("id", user.id)
         .maybeSingle();
       const fullName = prof?.full_name?.trim() || null;
+      const nomeSankhya = prof?.nome_sankhya?.trim() || null;
       if (cancelado) return;
       setVendedorFullName(fullName);
+      setVendedorNomeSankhya(nomeSankhya);
 
-      if (!fullName) {
+      // nome_sankhya tem prioridade (match exato, sem wildcards);
+      // sem ele, usa o full_name com %...% como fallback.
+      const matchPattern = nomeSankhya ? nomeSankhya : (fullName ? `%${fullName}%` : null);
+      if (!matchPattern) {
         setFaturadoMesAtual(0);
         setFaturamentoRealMes(null);
         setFaturamentoRealMesAnterior(null);
@@ -494,7 +500,7 @@ export default function MeuPainel() {
         (supabase as any)
           .from("faturamentos_sankhya")
           .select("valor_liquido")
-          .ilike("nome_vendedor", `%${fullName}%`)
+          .ilike("nome_vendedor", matchPattern)
           .gte("data_faturamento", mesInicio)
           .lte("data_faturamento", mesFim)
           .not("tipo_operacao", "ilike", "%devolução%"),
@@ -502,7 +508,7 @@ export default function MeuPainel() {
         (supabase as any)
           .from("faturamentos_sankhya")
           .select("valor_liquido")
-          .ilike("nome_vendedor", `%${fullName}%`)
+          .ilike("nome_vendedor", matchPattern)
           .gte("data_faturamento", antInicio)
           .lte("data_faturamento", antFim)
           .not("tipo_operacao", "ilike", "%devolução%"),
@@ -563,7 +569,7 @@ export default function MeuPainel() {
 
   // Mini-ranking de posições — faturado real (Sankhya) por vendedor no período.
   // Mostra a posição de todos SEM valores; o próprio vendedor é destacado via
-  // match de profiles.full_name (vendedorFullName) com nome_vendedor.
+  // match com nome_vendedor: nome_sankhya (exato) quando preenchido, senão full_name.
   useEffect(() => {
     if (!user) return;
     let cancelado = false;
@@ -588,20 +594,22 @@ export default function MeuPainel() {
         if (!nome) return;
         somaPorVendedor[nome] = (somaPorVendedor[nome] ?? 0) + Number(r.valor_liquido ?? 0);
       });
+      const nomeSankhyaNorm = (vendedorNomeSankhya ?? "").trim().toLowerCase();
       const fullNameNorm = (vendedorFullName ?? "").trim().toLowerCase();
       const lista = Object.entries(somaPorVendedor)
         .sort(([, a], [, b]) => b - a)
         .map(([nome]) => {
           const nomeNorm = nome.toLowerCase();
-          const isVoce =
-            fullNameNorm.length > 0 &&
-            (nomeNorm.includes(fullNameNorm) || fullNameNorm.includes(nomeNorm));
+          const isVoce = nomeSankhyaNorm
+            ? nomeNorm === nomeSankhyaNorm
+            : fullNameNorm.length > 0 &&
+              (nomeNorm.includes(fullNameNorm) || fullNameNorm.includes(nomeNorm));
           return { nome, isVoce };
         });
       setRankingPosicoes(lista);
     })();
     return () => { cancelado = true; };
-  }, [user, periodo, customAtivo, customInicio, customFim, vendedorFullName]);
+  }, [user, periodo, customAtivo, customInicio, customFim, vendedorFullName, vendedorNomeSankhya]);
 
   useEffect(() => {
     if (!user) return;
