@@ -215,6 +215,7 @@ const App = () => (
             {/* Financeiro — fila de pagamentos à vista */}
             <Route element={<ProtectedRoute allow={["financeiro", "admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/financeiro" element={<FilaFinanceiro />} />
+              <Route path="/financeiro/fila" element={<FilaFinanceiro />} />
             </Route>
 
             {/* Logística */}

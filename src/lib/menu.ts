@@ -49,6 +49,12 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
     ],
   },
+  {
+    label: "Financeiro",
+    items: [
+      { title: "Fila Financeiro", url: "/financeiro/fila", icon: Wallet },
+    ],
+  },
 ];
 
 export const BASE_FATURAMENTO_ITEMS: Item[] = [
@@ -101,7 +107,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
   ],
   financeiro: [
-    { title: "Fila à Vista", url: "/financeiro", icon: Wallet },
+    { title: "Fila Financeiro", url: "/financeiro/fila", icon: Wallet },
     { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
   ],
   trade: [
