@@ -37,11 +37,12 @@ type PedidoVista = {
   razao_social: string;
   total: number;
   motivo: string | null;
+  comprovante_url: string | null;
 };
 
 const ABAS = [
-  { key: "aguardando", label: "Aguardando pagamento", status: "aguardando_pagamento" },
-  { key: "confirmados", label: "Confirmados", status: "pagamento_confirmado" },
+  { key: "aguardando", label: "Aguardando aprovação", status: "nao_liberado_envio" },
+  { key: "aprovados", label: "Aprovados", status: "liberado_envio" },
   { key: "lixeira", label: "Lixeira", status: "cancelado" },
 ] as const;
 
@@ -54,6 +55,7 @@ export default function FilaFinanceiro() {
   const [busca, setBusca] = useState("");
   const [confirmar, setConfirmar] = useState<PedidoVista | null>(null);
   const [confirmando, setConfirmando] = useState(false);
+  const [comprovanteFile, setComprovanteFile] = useState<File | null>(null);
   const [devolver, setDevolver] = useState<PedidoVista | null>(null);
   const [motivo, setMotivo] = useState("");
   const [apagar, setApagar] = useState<PedidoVista | null>(null);
@@ -65,12 +67,12 @@ export default function FilaFinanceiro() {
     const { data, error } = await (supabase as any)
       .from("pedidos")
       .select(`
-        id, numero_pedido, data_pedido, status, vendedor_id, total, motivo,
+        id, numero_pedido, data_pedido, status, vendedor_id, total, motivo, comprovante_url,
         clientes(razao_social, nome_parceiro),
         itens_pedido(total_item)
       `)
       .eq("pagamento_vista", true)
-      .in("status", ["aguardando_pagamento", "pagamento_confirmado", "cancelado"])
+      .in("status", ["nao_liberado_envio", "liberado_envio", "cancelado"])
       .order("data_pedido", { ascending: true });
 
     if (error) {
@@ -94,6 +96,7 @@ export default function FilaFinanceiro() {
         razao_social: cl?.nome_parceiro || cl?.razao_social || "—",
         total: totalItens > 0 ? totalItens : Number(p.total ?? 0),
         motivo: p.motivo ?? null,
+        comprovante_url: p.comprovante_url ?? null,
       };
     });
 
@@ -112,20 +115,37 @@ export default function FilaFinanceiro() {
     });
   }, []);
 
-  const confirmarRecebimento = async () => {
+  const aprovarPagamento = async () => {
     if (!confirmar) return;
     setConfirmando(true);
+
+    // Upload do comprovante, se anexado (opcional)
+    let comprovante_url: string | null = null;
+    if (comprovanteFile) {
+      const ext = comprovanteFile.name.split(".").pop()?.toLowerCase() || "pdf";
+      const path = `${confirmar.id}/${Date.now()}.${ext}`;
+      const { data: upData, error: upErr } = await supabase.storage
+        .from("comprovantes")
+        .upload(path, comprovanteFile);
+      if (upErr) {
+        toast.error("Erro ao enviar comprovante: " + upErr.message);
+        setConfirmando(false);
+        return;
+      }
+      comprovante_url = upData?.path ?? null;
+    }
 
     const { error: updErr } = await supabase
       .from("pedidos")
       .update({
-        status: "pagamento_confirmado",
+        status: "liberado_envio",
+        comprovante_url,
         status_atualizado_em: new Date().toISOString(),
       })
       .eq("id", confirmar.id);
 
     if (updErr) {
-      toast.error("Erro ao confirmar recebimento: " + updErr.message);
+      toast.error("Erro ao aprovar pagamento: " + updErr.message);
       setConfirmando(false);
       return;
     }
@@ -142,16 +162,17 @@ export default function FilaFinanceiro() {
           logIds.map((uid) => ({
             destinatario_id: uid,
             destinatario_role: "logistica",
-            tipo: "pagamento_confirmado",
+            tipo: "pagamento_aprovado",
             pedido_id: confirmar.id,
-            mensagem: `Pagamento confirmado — Pedido #${confirmar.numero_pedido} (${confirmar.razao_social}) liberado para despacho`,
+            mensagem: `Pagamento aprovado — Pedido #${confirmar.numero_pedido} (${confirmar.razao_social}) liberado para envio`,
           })),
         );
       }
     } catch { /* best-effort */ }
 
-    toast.success(`Recebimento do pedido #${confirmar.numero_pedido} confirmado — logística notificada`);
+    toast.success(`Pagamento do pedido #${confirmar.numero_pedido} aprovado — logística notificada`);
     setConfirmar(null);
+    setComprovanteFile(null);
     setConfirmando(false);
     carregar();
   };
@@ -205,13 +226,13 @@ export default function FilaFinanceiro() {
     carregar();
   };
 
-  // Restaurar da lixeira → volta para aguardando_pagamento
+  // Restaurar da lixeira → volta para nao_liberado_envio
   const restaurar = async (p: PedidoVista) => {
     setAcaoLoading(true);
     const { error } = await supabase
       .from("pedidos")
       .update({
-        status: "aguardando_pagamento",
+        status: "nao_liberado_envio",
         motivo: null,
         status_atualizado_em: new Date().toISOString(),
       })
@@ -240,7 +261,7 @@ export default function FilaFinanceiro() {
             Fila Financeiro — Pagamentos à Vista
           </h1>
           <p className="text-sm text-muted-foreground">
-            Confirme o recebimento dos pedidos à vista para liberar o despacho pela logística.
+            Aprove o pagamento dos pedidos à vista para liberar o envio pela logística.
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={carregar} disabled={loading}>
@@ -284,8 +305,8 @@ export default function FilaFinanceiro() {
               </div>
             ) : lista.length === 0 ? (
               <div className="rounded-md border border-dashed py-16 text-center text-muted-foreground">
-                {a.key === "aguardando" && "Nenhum pedido aguardando pagamento."}
-                {a.key === "confirmados" && "Nenhum pedido confirmado."}
+                {a.key === "aguardando" && "Nenhum pedido aguardando aprovação."}
+                {a.key === "aprovados" && "Nenhum pedido aprovado."}
                 {a.key === "lixeira" && "Nenhum pedido na lixeira."}
               </div>
             ) : (
@@ -316,14 +337,14 @@ export default function FilaFinanceiro() {
                           <div className="text-xs text-muted-foreground">Valor total</div>
                           <div className="text-lg font-bold text-emerald-700">{formatBRL(p.total)}</div>
                         </div>
-                        {p.status === "aguardando_pagamento" && (
+                        {p.status === "nao_liberado_envio" && (
                           <div className="flex items-center gap-2 flex-wrap">
                             <Button
                               className="bg-emerald-600 hover:bg-emerald-700"
-                              onClick={() => setConfirmar(p)}
+                              onClick={() => { setConfirmar(p); setComprovanteFile(null); }}
                             >
                               <CheckCircle2 className="h-4 w-4 mr-1.5" />
-                              Confirmar Recebimento
+                              Aprovar pagamento
                             </Button>
                             <Button
                               variant="outline"
@@ -361,11 +382,11 @@ export default function FilaFinanceiro() {
         ))}
       </Tabs>
 
-      {/* Dialog de confirmação de recebimento */}
-      <Dialog open={!!confirmar} onOpenChange={(o) => !o && setConfirmar(null)}>
+      {/* Dialog de aprovação de pagamento */}
+      <Dialog open={!!confirmar} onOpenChange={(o) => { if (!o) { setConfirmar(null); setComprovanteFile(null); } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Confirmar recebimento do pagamento</DialogTitle>
+            <DialogTitle>Aprovar pagamento</DialogTitle>
             <DialogDescription>
               {confirmar && (
                 <>
@@ -374,18 +395,31 @@ export default function FilaFinanceiro() {
                   Valor: <strong>{formatBRL(confirmar.total)}</strong>
                   <br />
                   <br />
-                  Ao confirmar, o pedido será liberado para despacho e a logística será notificada.
+                  Ao aprovar, o pedido será liberado para envio e a logística será notificada.
                 </>
               )}
             </DialogDescription>
           </DialogHeader>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Comprovante (opcional)</label>
+            <Input
+              type="file"
+              accept=".pdf,image/*"
+              onChange={(e) => setComprovanteFile(e.target.files?.[0] ?? null)}
+            />
+            {comprovanteFile && (
+              <p className="text-xs text-muted-foreground">
+                Arquivo selecionado: {comprovanteFile.name}
+              </p>
+            )}
+          </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmar(null)} disabled={confirmando}>
+            <Button variant="outline" onClick={() => { setConfirmar(null); setComprovanteFile(null); }} disabled={confirmando}>
               Cancelar
             </Button>
-            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={confirmarRecebimento} disabled={confirmando}>
+            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={aprovarPagamento} disabled={confirmando}>
               {confirmando ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <CheckCircle2 className="h-4 w-4 mr-1.5" />}
-              Confirmar Recebimento
+              Aprovar pagamento
             </Button>
           </DialogFooter>
         </DialogContent>

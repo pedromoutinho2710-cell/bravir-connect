@@ -17,6 +17,9 @@ export const STATUS_LABEL: Record<string, string> = {
   aguardando_faturamento: "Aguardando faturamento",
   aguardando_pagamento: "Aguardando pagamento",
   pagamento_confirmado: "Pagamento confirmado",
+  nao_liberado_envio: "Não liberado p/ envio",
+  liberado_envio: "Liberado p/ envio",
+  em_transito: "Em trânsito",
 };
 
 export const STATUS_COLOR: Record<string, string> = {
@@ -38,4 +41,7 @@ export const STATUS_COLOR: Record<string, string> = {
   aguardando_faturamento: "bg-yellow-100 text-yellow-800 border-yellow-300",
   aguardando_pagamento: "bg-amber-100 text-amber-900 border-amber-400",
   pagamento_confirmado: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  nao_liberado_envio: "bg-amber-100 text-amber-900 border-amber-400",
+  liberado_envio: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  em_transito: "bg-indigo-100 text-indigo-800 border-indigo-300",
 };
