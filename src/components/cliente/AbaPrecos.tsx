@@ -5,9 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Loader2, Pencil, Plus, Trash2, Check, X, Search } from "lucide-react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Loader2, Trash2, Search } from "lucide-react";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -22,8 +20,9 @@ type Props = {
   descontoAdicional: number | null;
 };
 
-// Uma linha = um produto da tabela de preço do cliente. O preço especial
-// (precos_cliente_produto) pode ou não existir; quando existe, prevalece.
+// Uma linha = um produto da tabela de preço do cliente. O preço do cliente
+// (precos_cliente_produto) pode ou não existir; quando existe, prevalece. O
+// desconto do cliente (desconto_perfil, 0–100) é aplicado sobre o preço final.
 type LinhaProduto = {
   produtoId: string;
   codigo: string;
@@ -34,6 +33,7 @@ type LinhaProduto = {
   precoComCluster: number;
   especialId: string | null;
   precoEspecial: number | null;
+  descontoPerfil: number | null; // percentual (0–100)
   origem: string | null;
 };
 
@@ -51,7 +51,13 @@ const ordemMarca = (m: string | null) => {
   return i === -1 ? ORDEM_MARCAS.length : i;
 };
 
-const precoFinalDe = (l: LinhaProduto) => l.precoEspecial ?? l.precoComCluster;
+// Preço final = (preço do cliente ou preço c/ cluster) com o desconto do
+// cliente aplicado: base × (1 - desconto_perfil / 100).
+const precoFinalDe = (l: LinhaProduto) => {
+  const base = l.precoEspecial ?? l.precoComCluster;
+  const desc = l.descontoPerfil ?? 0;
+  return base * (1 - desc / 100);
+};
 
 export function AbaPrecos({
   clienteId,
@@ -71,23 +77,14 @@ export function AbaPrecos({
   const [linhas, setLinhas] = useState<LinhaProduto[]>([]);
   const [busca, setBusca] = useState("");
 
-  // edição inline (chaveada por produtoId)
-  const [editandoId, setEditandoId] = useState<string | null>(null);
-  const [editValor, setEditValor] = useState("");
-  const [salvandoEdit, setSalvandoEdit] = useState(false);
+  // edição direta inline — rascunhos por produtoId enquanto o usuário digita.
+  const [precoInput, setPrecoInput] = useState<Record<string, string>>({});
+  const [descInput, setDescInput] = useState<Record<string, string>>({});
+  const [salvando, setSalvando] = useState<Record<string, boolean>>({});
 
-  // exclusão (guarda a linha cujo preço especial será removido)
+  // exclusão (guarda a linha cujo preço do cliente será removido)
   const [excluirLinha, setExcluirLinha] = useState<LinhaProduto | null>(null);
   const [excluindo, setExcluindo] = useState(false);
-
-  // novo preço especial (modal de busca de produto avulso)
-  const [novoOpen, setNovoOpen] = useState(false);
-  const [buscaProduto, setBuscaProduto] = useState("");
-  const [resultadosProduto, setResultadosProduto] = useState<ProdutoBusca[]>([]);
-  const [buscandoProduto, setBuscandoProduto] = useState(false);
-  const [produtoSelecionado, setProdutoSelecionado] = useState<ProdutoBusca | null>(null);
-  const [novoPreco, setNovoPreco] = useState("");
-  const [salvandoNovo, setSalvandoNovo] = useState(false);
 
   const carregar = async () => {
     if (!clienteTabela) {
@@ -150,18 +147,22 @@ export function AbaPrecos({
       });
     }
 
-    // 5) Preços especiais do cliente (acordo/histórico), chaveados por codigo_jiva.
-    const especialMap: Record<string, { id: string; preco: number | null; origem: string }> = {};
+    // 5) Preços/descontos do cliente, chaveados por codigo_jiva.
+    const especialMap: Record<
+      string,
+      { id: string; preco: number | null; desconto: number | null; origem: string }
+    > = {};
     if (clienteCodigoParceiro) {
       const { data: especiais } = await supabase
         .from("precos_cliente_produto")
-        .select("id, codigo_produto, preco_unitario, origem")
+        .select("id, codigo_produto, preco_unitario, desconto_perfil, origem")
         .eq("codigo_parceiro", clienteCodigoParceiro);
       (especiais ?? []).forEach((e) => {
         if (e.codigo_produto != null) {
           especialMap[e.codigo_produto] = {
             id: e.id,
             preco: e.preco_unitario != null ? Number(e.preco_unitario) : null,
+            desconto: e.desconto_perfil != null ? Number(e.desconto_perfil) : null,
             origem: e.origem,
           };
         }
@@ -185,6 +186,7 @@ export function AbaPrecos({
           precoComCluster: precoBruto * (1 - descontoCluster),
           especialId: especial?.id ?? null,
           precoEspecial: especial?.preco ?? null,
+          descontoPerfil: especial?.desconto ?? null,
           origem: especial?.origem ?? null,
         };
       });
@@ -200,6 +202,8 @@ export function AbaPrecos({
     });
 
     setLinhas(montadas);
+    setPrecoInput({});
+    setDescInput({});
     setLoading(false);
   };
 
@@ -238,44 +242,48 @@ export function AbaPrecos({
     toast.success("Desconto adicional salvo");
   };
 
-  const iniciarEdicao = (l: LinhaProduto) => {
-    setEditandoId(l.produtoId);
-    setEditValor(l.precoEspecial != null ? String(l.precoEspecial) : "");
+  const limparRascunho = (
+    setter: React.Dispatch<React.SetStateAction<Record<string, string>>>,
+    id: string,
+  ) => {
+    setter((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
   };
 
-  const cancelarEdicao = () => {
-    setEditandoId(null);
-    setEditValor("");
-  };
-
-  // Salva o preço especial inline: atualiza se já existe, cria (origem "acordo")
-  // caso contrário. Exige código do parceiro para gravar.
-  const salvarEdicao = async (l: LinhaProduto) => {
-    if (!clienteCodigoParceiro) {
-      toast.error("Cliente sem código de parceiro");
+  // Salva o preço do cliente direto da tabela (onBlur / Enter). Atualiza se já
+  // existe registro; cria (origem "acordo") caso contrário. Sem mudança ou
+  // valor vazio: apenas descarta o rascunho.
+  const salvarPreco = async (l: LinhaProduto, raw: string) => {
+    if (!clienteCodigoParceiro) return;
+    const trimmed = raw.trim();
+    if (trimmed === "") {
+      limparRascunho(setPrecoInput, l.produtoId);
       return;
     }
-    const valor = Number(editValor);
+    const valor = Number(trimmed);
     if (!Number.isFinite(valor) || valor < 0) {
       toast.error("Informe um preço válido");
       return;
     }
-    setSalvandoEdit(true);
+    if (l.precoEspecial != null && valor === l.precoEspecial) {
+      limparRascunho(setPrecoInput, l.produtoId);
+      return;
+    }
+
+    const key = `${l.produtoId}:preco`;
+    setSalvando((s) => ({ ...s, [key]: true }));
+    let novoId = l.especialId;
+    let error;
     if (l.especialId) {
-      const { error } = await supabase
+      ({ error } = await supabase
         .from("precos_cliente_produto")
         .update({ preco_unitario: valor })
-        .eq("id", l.especialId);
-      setSalvandoEdit(false);
-      if (error) {
-        toast.error("Erro ao salvar: " + error.message);
-        return;
-      }
-      setLinhas((prev) =>
-        prev.map((x) => (x.produtoId === l.produtoId ? { ...x, precoEspecial: valor } : x)),
-      );
+        .eq("id", l.especialId));
     } else {
-      const { data, error } = await supabase
+      const res = await supabase
         .from("precos_cliente_produto")
         .insert({
           codigo_parceiro: clienteCodigoParceiro,
@@ -285,21 +293,95 @@ export function AbaPrecos({
         })
         .select("id")
         .single();
-      setSalvandoEdit(false);
-      if (error) {
-        toast.error("Erro ao salvar: " + error.message);
+      error = res.error;
+      novoId = res.data?.id ?? null;
+    }
+    setSalvando((s) => {
+      const next = { ...s };
+      delete next[key];
+      return next;
+    });
+    if (error) {
+      toast.error("Erro ao salvar: " + error.message);
+      return;
+    }
+    setLinhas((prev) =>
+      prev.map((x) =>
+        x.produtoId === l.produtoId
+          ? { ...x, especialId: novoId, precoEspecial: valor, origem: x.origem ?? "acordo" }
+          : x,
+      ),
+    );
+    limparRascunho(setPrecoInput, l.produtoId);
+    toast.success("Preço do cliente salvo");
+  };
+
+  // Salva o desconto do cliente (0–100) direto da tabela. Vazio remove o
+  // desconto (null). Cria o registro com origem "acordo" se ainda não existir.
+  const salvarDescontoPerfil = async (l: LinhaProduto, raw: string) => {
+    if (!clienteCodigoParceiro) return;
+    const trimmed = raw.trim();
+    let valor: number | null;
+    if (trimmed === "") {
+      valor = null;
+    } else {
+      valor = Number(trimmed);
+      if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
+        toast.error("Informe um desconto entre 0 e 100");
         return;
       }
-      setLinhas((prev) =>
-        prev.map((x) =>
-          x.produtoId === l.produtoId
-            ? { ...x, especialId: data.id, precoEspecial: valor, origem: "acordo" }
-            : x,
-        ),
-      );
     }
-    toast.success("Preço especial salvo");
-    cancelarEdicao();
+    if (valor === (l.descontoPerfil ?? null)) {
+      limparRascunho(setDescInput, l.produtoId);
+      return;
+    }
+    // Nada a gravar: limpar um desconto inexistente sem registro.
+    if (valor === null && !l.especialId) {
+      limparRascunho(setDescInput, l.produtoId);
+      return;
+    }
+
+    const key = `${l.produtoId}:desc`;
+    setSalvando((s) => ({ ...s, [key]: true }));
+    let novoId = l.especialId;
+    let error;
+    if (l.especialId) {
+      ({ error } = await supabase
+        .from("precos_cliente_produto")
+        .update({ desconto_perfil: valor })
+        .eq("id", l.especialId));
+    } else {
+      const res = await supabase
+        .from("precos_cliente_produto")
+        .insert({
+          codigo_parceiro: clienteCodigoParceiro,
+          codigo_produto: l.codigo,
+          desconto_perfil: valor,
+          origem: "acordo",
+        })
+        .select("id")
+        .single();
+      error = res.error;
+      novoId = res.data?.id ?? null;
+    }
+    setSalvando((s) => {
+      const next = { ...s };
+      delete next[key];
+      return next;
+    });
+    if (error) {
+      toast.error("Erro ao salvar: " + error.message);
+      return;
+    }
+    setLinhas((prev) =>
+      prev.map((x) =>
+        x.produtoId === l.produtoId
+          ? { ...x, especialId: novoId, descontoPerfil: valor, origem: x.origem ?? "acordo" }
+          : x,
+      ),
+    );
+    limparRascunho(setDescInput, l.produtoId);
+    toast.success("Desconto do cliente salvo");
   };
 
   const excluir = async () => {
@@ -314,73 +396,17 @@ export function AbaPrecos({
       toast.error("Erro ao excluir: " + error.message);
       return;
     }
-    toast.success("Preço especial excluído");
+    toast.success("Preço do cliente excluído");
     setLinhas((prev) =>
       prev.map((x) =>
         x.produtoId === excluirLinha.produtoId
-          ? { ...x, especialId: null, precoEspecial: null, origem: null }
+          ? { ...x, especialId: null, precoEspecial: null, descontoPerfil: null, origem: null }
           : x,
       ),
     );
+    limparRascunho(setPrecoInput, excluirLinha.produtoId);
+    limparRascunho(setDescInput, excluirLinha.produtoId);
     setExcluirLinha(null);
-  };
-
-  const buscarProdutos = async (termo: string) => {
-    setBuscaProduto(termo);
-    setProdutoSelecionado(null);
-    const t = termo.trim();
-    if (t.length < 2) {
-      setResultadosProduto([]);
-      return;
-    }
-    setBuscandoProduto(true);
-    const { data } = await supabase
-      .from("produtos")
-      .select("id, codigo_jiva, nome, marca")
-      .eq("disponivel", true)
-      .or(`nome.ilike.%${t}%,codigo_jiva.ilike.%${t}%`)
-      .limit(20);
-    setResultadosProduto((data ?? []) as ProdutoBusca[]);
-    setBuscandoProduto(false);
-  };
-
-  const abrirNovo = () => {
-    setBuscaProduto("");
-    setResultadosProduto([]);
-    setProdutoSelecionado(null);
-    setNovoPreco("");
-    setNovoOpen(true);
-  };
-
-  const criarNovo = async () => {
-    if (!clienteCodigoParceiro) {
-      toast.error("Cliente sem código de parceiro");
-      return;
-    }
-    if (!produtoSelecionado) {
-      toast.error("Selecione um produto");
-      return;
-    }
-    const valor = Number(novoPreco);
-    if (!Number.isFinite(valor) || valor < 0) {
-      toast.error("Informe um preço válido");
-      return;
-    }
-    setSalvandoNovo(true);
-    const { error } = await supabase.from("precos_cliente_produto").insert({
-      codigo_parceiro: clienteCodigoParceiro,
-      codigo_produto: produtoSelecionado.codigo_jiva,
-      preco_unitario: valor,
-      origem: "acordo",
-    });
-    setSalvandoNovo(false);
-    if (error) {
-      toast.error("Erro ao criar: " + error.message);
-      return;
-    }
-    toast.success("Preço especial criado");
-    setNovoOpen(false);
-    carregar();
   };
 
   return (
@@ -417,23 +443,13 @@ export function AbaPrecos({
       {/* BLOCO B — Tabela de preços do cliente (todos os produtos) */}
       <Card>
         <CardContent className="pt-6 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold">Preços por produto</h3>
-              <p className="text-xs text-muted-foreground">
-                Todos os produtos da tabela {clienteTabela ? `"${clienteTabela}"` : ""} com o
-                desconto do cluster aplicado. O preço especial (acordo) prevalece quando existe.
-              </p>
-            </div>
-            <Button
-              size="sm"
-              onClick={abrirNovo}
-              disabled={!clienteCodigoParceiro}
-              title={!clienteCodigoParceiro ? "Cliente sem código de parceiro" : undefined}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Novo preço especial
-            </Button>
+          <div>
+            <h3 className="text-sm font-semibold">Preços por produto</h3>
+            <p className="text-xs text-muted-foreground">
+              Todos os produtos da tabela {clienteTabela ? `"${clienteTabela}"` : ""} com o
+              desconto do cluster aplicado. Edite o preço e o desconto do cliente direto na
+              tabela — as alterações são salvas automaticamente.
+            </p>
           </div>
 
           {!clienteTabela ? (
@@ -455,7 +471,7 @@ export function AbaPrecos({
               {!clienteCodigoParceiro && (
                 <p className="text-xs text-muted-foreground">
                   Código do parceiro não cadastrado — exibindo apenas os preços de tabela; não é
-                  possível criar ou editar preços especiais.
+                  possível editar o preço ou o desconto do cliente.
                 </p>
               )}
 
@@ -480,14 +496,22 @@ export function AbaPrecos({
                         <th className="px-3 py-2 font-medium text-right">Preço bruto</th>
                         <th className="px-3 py-2 font-medium text-right">Desc. cluster</th>
                         <th className="px-3 py-2 font-medium text-right">Preço c/ cluster</th>
-                        <th className="px-3 py-2 font-medium text-right">Preço especial</th>
+                        <th className="px-3 py-2 font-medium text-right">Preço cliente</th>
+                        <th className="px-3 py-2 font-medium text-right">Desc. cliente (%)</th>
                         <th className="px-3 py-2 font-medium text-right">Preço final</th>
                         <th className="px-3 py-2 font-medium text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {linhasFiltradas.map((l) => {
-                        const emEdicao = editandoId === l.produtoId;
+                        const salvandoPreco = salvando[`${l.produtoId}:preco`];
+                        const salvandoDesc = salvando[`${l.produtoId}:desc`];
+                        const precoVal =
+                          precoInput[l.produtoId] ??
+                          (l.precoEspecial != null ? String(l.precoEspecial) : "");
+                        const descVal =
+                          descInput[l.produtoId] ??
+                          (l.descontoPerfil != null ? String(l.descontoPerfil) : "");
                         return (
                           <tr key={l.produtoId} className="border-t">
                             <td className="px-3 py-2 font-mono text-xs">{l.codigo}</td>
@@ -503,84 +527,66 @@ export function AbaPrecos({
                             </td>
                             <td className="px-3 py-2 text-right">{formatBRL(l.precoComCluster)}</td>
                             <td className="px-3 py-2 text-right">
-                              {emEdicao ? (
+                              <div className="flex items-center justify-end gap-1.5">
+                                {salvandoPreco && (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                                )}
                                 <Input
                                   type="number"
                                   min={0}
                                   step="0.01"
-                                  value={editValor}
-                                  onChange={(e) => setEditValor(e.target.value)}
+                                  value={precoVal}
+                                  disabled={!clienteCodigoParceiro || salvandoPreco}
+                                  onChange={(e) =>
+                                    setPrecoInput((p) => ({ ...p, [l.produtoId]: e.target.value }))
+                                  }
+                                  onBlur={(e) => salvarPreco(l, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") e.currentTarget.blur();
+                                  }}
                                   className="h-8 w-28 ml-auto text-right"
-                                  placeholder="Preço"
+                                  placeholder="—"
                                 />
-                              ) : l.precoEspecial != null ? (
-                                <div className="flex items-center justify-end gap-2">
-                                  {formatBRL(l.precoEspecial)}
-                                  {l.origem === "acordo" ? (
-                                    <Badge className="bg-green-100 text-green-800 border-green-300">
-                                      Acordo
-                                    </Badge>
-                                  ) : (
-                                    <Badge
-                                      variant="outline"
-                                      className="bg-gray-100 text-gray-600 border-gray-300"
-                                    >
-                                      Histórico
-                                    </Badge>
-                                  )}
-                                </div>
-                              ) : (
-                                "—"
-                              )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {salvandoDesc && (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                                )}
+                                <Input
+                                  type="number"
+                                  min={0}
+                                  max={100}
+                                  step="0.01"
+                                  value={descVal}
+                                  disabled={!clienteCodigoParceiro || salvandoDesc}
+                                  onChange={(e) =>
+                                    setDescInput((p) => ({ ...p, [l.produtoId]: e.target.value }))
+                                  }
+                                  onBlur={(e) => salvarDescontoPerfil(l, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter") e.currentTarget.blur();
+                                  }}
+                                  className="h-8 w-20 ml-auto text-right"
+                                  placeholder="—"
+                                />
+                              </div>
                             </td>
                             <td className="px-3 py-2 text-right font-semibold">
                               {formatBRL(precoFinalDe(l))}
                             </td>
                             <td className="px-3 py-2">
                               <div className="flex justify-end gap-1">
-                                {emEdicao ? (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => salvarEdicao(l)}
-                                      disabled={salvandoEdit}
-                                    >
-                                      {salvandoEdit ? (
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                      ) : (
-                                        <Check className="h-4 w-4 text-green-600" />
-                                      )}
-                                    </Button>
-                                    <Button size="sm" variant="ghost" onClick={cancelarEdicao}>
-                                      <X className="h-4 w-4" />
-                                    </Button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => iniciarEdicao(l)}
-                                      disabled={!clienteCodigoParceiro}
-                                      title={
-                                        l.precoEspecial != null
-                                          ? "Editar preço especial"
-                                          : "Definir preço especial"
-                                      }
-                                    >
-                                      <Pencil className="h-4 w-4" />
-                                    </Button>
-                                    {l.especialId && (
-                                      <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => setExcluirLinha(l)}
-                                      >
-                                        <Trash2 className="h-4 w-4 text-red-600" />
-                                      </Button>
-                                    )}
-                                  </>
+                                {l.especialId && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setExcluirLinha(l)}
+                                    title="Remover preço/desconto do cliente"
+                                  >
+                                    <Trash2 className="h-4 w-4 text-red-600" />
+                                  </Button>
                                 )}
                               </div>
                             </td>
@@ -596,108 +602,14 @@ export function AbaPrecos({
         </CardContent>
       </Card>
 
-      {/* Modal: novo preço especial */}
-      <Dialog open={novoOpen} onOpenChange={setNovoOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Novo preço especial</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label>Produto</Label>
-              {produtoSelecionado ? (
-                <div className="flex items-center justify-between rounded-md border bg-muted/30 px-3 py-2">
-                  <div>
-                    <div className="text-sm font-medium">{produtoSelecionado.nome}</div>
-                    <div className="text-xs text-muted-foreground font-mono">
-                      {produtoSelecionado.codigo_jiva}
-                      {produtoSelecionado.marca ? ` · ${produtoSelecionado.marca}` : ""}
-                    </div>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      setProdutoSelecionado(null);
-                      setBuscaProduto("");
-                      setResultadosProduto([]);
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ) : (
-                <>
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar por nome ou código..."
-                      value={buscaProduto}
-                      onChange={(e) => buscarProdutos(e.target.value)}
-                      className="pl-8"
-                    />
-                  </div>
-                  {buscandoProduto ? (
-                    <div className="flex justify-center py-3">
-                      <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                    </div>
-                  ) : resultadosProduto.length > 0 ? (
-                    <div className="max-h-48 overflow-y-auto rounded-md border divide-y">
-                      {resultadosProduto.map((prod) => (
-                        <button
-                          key={prod.id}
-                          type="button"
-                          className="w-full text-left px-3 py-2 hover:bg-muted/50 transition-colors"
-                          onClick={() => {
-                            setProdutoSelecionado(prod);
-                            setResultadosProduto([]);
-                          }}
-                        >
-                          <div className="text-sm font-medium">{prod.nome}</div>
-                          <div className="text-xs text-muted-foreground font-mono">
-                            {prod.codigo_jiva}
-                            {prod.marca ? ` · ${prod.marca}` : ""}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  ) : buscaProduto.trim().length >= 2 ? (
-                    <p className="text-xs text-muted-foreground px-1">Nenhum produto encontrado.</p>
-                  ) : null}
-                </>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label>Preço (R$)</Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                value={novoPreco}
-                onChange={(e) => setNovoPreco(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setNovoOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={criarNovo} disabled={salvandoNovo}>
-              {salvandoNovo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Criar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* AlertDialog: excluir preço especial */}
+      {/* AlertDialog: excluir preço/desconto do cliente */}
       <AlertDialog open={!!excluirLinha} onOpenChange={(o) => !o && setExcluirLinha(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir preço especial?</AlertDialogTitle>
+            <AlertDialogTitle>Remover preço/desconto do cliente?</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação é irreversível. O preço especial será removido para este cliente — o produto
-              volta a usar o preço de tabela com o desconto do cluster.
+              Esta ação é irreversível. O preço e o desconto do cliente serão removidos para este
+              produto — ele volta a usar o preço de tabela com o desconto do cluster.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
