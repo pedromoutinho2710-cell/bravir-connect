@@ -212,6 +212,7 @@ export default function MeuPainel() {
   const [rankingPosicoes, setRankingPosicoes] = useState<{ nome: string; isVoce: boolean }[]>([]);
   const [fatMensalVendedor, setFatMensalVendedor] = useState<{ mes: string; valor: number }[]>([]);
   const [topClientes, setTopClientes] = useState<{ cliente_id: string; nome: string; total: number }[]>([]);
+  const [entradaMarca, setEntradaMarca] = useState<Record<string, number>>({});
   const [produtosIndisponiveis, setProdutosIndisponiveis] = useState<{ id: string; nome: string }[]>([]);
   const [modalIndispOpen, setModalIndispOpen] = useState(false);
   const [historicoMeses, setHistoricoMeses] = useState<HistoricoMes[]>([]);
@@ -690,6 +691,35 @@ export default function MeuPainel() {
     return () => { cancelado = true; };
   }, [user, periodo, customAtivo, customInicio, customFim]);
 
+  // Entrada por marca do vendedor no período (donut) — soma total_item por marca do produto
+  useEffect(() => {
+    if (!user) return;
+    let cancelado = false;
+    const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
+    (async () => {
+      const { data, error } = await supabase
+        .from("pedidos")
+        .select("itens_pedido(total_item, produtos(marca))")
+        .eq("vendedor_id", user.id)
+        .gte("data_pedido", inicio)
+        .lte("data_pedido", fim)
+        .not("status", "in", '("rascunho","cancelado")');
+      if (cancelado) return;
+      if (error || !data) { setEntradaMarca({}); return; }
+      const agg: Record<string, number> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data as any[]).forEach((p) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (p.itens_pedido ?? []).forEach((i: any) => {
+          const marca = i.produtos?.marca ?? "Outros";
+          agg[marca] = (agg[marca] ?? 0) + Number(i.total_item ?? 0);
+        });
+      });
+      setEntradaMarca(agg);
+    })();
+    return () => { cancelado = true; };
+  }, [user, periodo, customAtivo, customInicio, customFim]);
+
   useEffect(() => {
     if (!user) return;
     const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
@@ -780,6 +810,21 @@ export default function MeuPainel() {
   }, []);
 
   const maxFatMensalVendedor = Math.max(...fatMensalVendedor.map((m) => m.valor), 1);
+
+  // Donut "Entrada por marca" — mesmos cálculos do Dashboard admin
+  const totalGeralMarca = Object.values(entradaMarca).reduce((s, v) => s + v, 0);
+  const donutCircumference = 2 * Math.PI * 70;
+  const marcasSorted = Object.entries(entradaMarca).sort(([, a], [, b]) => b - a);
+  const donutSlices = (() => {
+    let cum = 0;
+    return marcasSorted.map(([marca, valor]) => {
+      const pct = totalGeralMarca > 0 ? valor / totalGeralMarca : 0;
+      const dash = pct * donutCircumference;
+      const offset = -(cum * donutCircumference);
+      cum += pct;
+      return { marca, valor, pct, dash, offset };
+    });
+  })();
   // metaPct é o valor REAL (pode passar de 100%); metaPctBarra trava a barra em 100% visualmente.
   const metaPct = kpis.meta > 0 ? (kpis.faturamento / kpis.meta) * 100 : 0;
   const metaPctBarra = Math.min(metaPct, 100);
@@ -1032,6 +1077,68 @@ export default function MeuPainel() {
                   <span className="text-xs text-muted-foreground mt-1">{m.mes}</span>
                 </div>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Entrada por marca — donut (próprios pedidos no período) */}
+      {Object.keys(entradaMarca).length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Entrada por marca</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-6 items-center">
+              {/* Donut fixo 200x200 */}
+              <div className="relative shrink-0" style={{ width: 200, height: 200 }}>
+                <svg width="200" height="200" style={{ display: "block" }}>
+                  <circle cx="100" cy="100" r="70" fill="none" stroke="#e5e7eb" strokeWidth="38" />
+                  {donutSlices.map(({ marca, dash, offset }) => (
+                    <circle
+                      key={marca}
+                      cx="100" cy="100" r="70"
+                      fill="none"
+                      stroke={MARCA_CORES[marca] ?? "#888780"}
+                      strokeWidth="38"
+                      strokeDasharray={`${dash} ${donutCircumference - dash}`}
+                      strokeDashoffset={offset}
+                      transform="rotate(-90 100 100)"
+                    />
+                  ))}
+                </svg>
+                {/* Centro: Total + valor */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-xs text-muted-foreground leading-tight">Total</span>
+                  <span className="text-sm font-semibold leading-tight">{formatBRL(totalGeralMarca)}</span>
+                </div>
+              </div>
+
+              {/* Legenda compacta à direita */}
+              <div className="flex flex-col flex-1" style={{ gap: 4 }}>
+                {donutSlices.map(({ marca, valor, pct }, i) => (
+                  <div
+                    key={marca}
+                    className="flex items-center gap-2 text-sm rounded px-1 -mx-1"
+                    style={{
+                      paddingBottom: 4,
+                      borderBottom: i < donutSlices.length - 1 ? "0.5px solid #e5e7eb" : undefined,
+                    }}
+                  >
+                    <span
+                      className="shrink-0"
+                      style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: MARCA_CORES[marca] ?? "#888780" }}
+                    />
+                    <span className="flex-1 min-w-0 truncate">{marca}</span>
+                    <span className="text-muted-foreground shrink-0 tabular-nums" style={{ width: 44, textAlign: "right" }}>
+                      {(pct * 100).toFixed(1)}%
+                    </span>
+                    <span className="shrink-0 tabular-nums" style={{ fontWeight: 500, width: 88, textAlign: "right" }}>
+                      {formatBRL(valor)}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </CardContent>
         </Card>
