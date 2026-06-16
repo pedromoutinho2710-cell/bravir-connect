@@ -780,7 +780,9 @@ export default function MeuPainel() {
   }, []);
 
   const maxFatMensalVendedor = Math.max(...fatMensalVendedor.map((m) => m.valor), 1);
-  const metaPct = kpis.meta > 0 ? Math.min((kpis.faturamento / kpis.meta) * 100, 100) : 0;
+  // metaPct é o valor REAL (pode passar de 100%); metaPctBarra trava a barra em 100% visualmente.
+  const metaPct = kpis.meta > 0 ? (kpis.faturamento / kpis.meta) * 100 : 0;
+  const metaPctBarra = Math.min(metaPct, 100);
   const metaColor = metaPct >= 80 ? "bg-green-500" : metaPct >= 50 ? "bg-yellow-400" : "bg-red-500";
 
   const baixarTabela = async () => {
@@ -910,7 +912,30 @@ export default function MeuPainel() {
             </Button>
           </div>
         )}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Meta mensal</CardTitle>
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{kpis.meta > 0 ? formatBRL(kpis.meta) : "—"}</div>
+              {kpis.meta > 0 && (
+                <div className="mt-2">
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>{metaPct.toFixed(1)}% atingido</span>
+                    <span>{formatBRL(kpis.faturamento)}</span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted">
+                    <div
+                      className={`h-2 rounded-full transition-all ${metaColor}`}
+                      style={{ width: `${metaPctBarra}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
           <Card
             className="cursor-pointer hover:border-[#166534] hover:shadow-sm transition"
             onClick={() => navigate("/meus-pedidos")}
@@ -1014,30 +1039,6 @@ export default function MeuPainel() {
 
       {/* KPIs */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Meta mensal</CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{kpis.meta > 0 ? formatBRL(kpis.meta) : "—"}</div>
-            {kpis.meta > 0 && (
-              <div className="mt-2">
-                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>{metaPct.toFixed(1)}% atingido</span>
-                  <span>{formatBRL(kpis.faturamento)}</span>
-                </div>
-                <div className="h-2 w-full rounded-full bg-muted">
-                  <div
-                    className={`h-2 rounded-full transition-all ${metaColor}`}
-                    style={{ width: `${metaPct}%` }}
-                  />
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Número de pedidos</CardTitle>
