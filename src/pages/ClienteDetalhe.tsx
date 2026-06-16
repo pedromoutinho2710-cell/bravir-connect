@@ -579,7 +579,7 @@ export default function ClienteDetalhe() {
           <div className="flex flex-wrap gap-2 shrink-0">
             <Button
               size="sm"
-              onClick={() => navigate("/novo-pedido", { state: { fromCliente: { cliente_id: cliente.id, cnpj: cliente.cnpj, razao_social: cliente.razao_social, cidade: cliente.cidade, uf: cliente.uf, cep: cliente.cep, comprador: cliente.comprador, cluster: cliente.cluster, tabela_preco: cliente.tabela_preco } } })}
+              onClick={() => navigate(role === "gestora" ? "/gestora/novo-pedido" : "/novo-pedido", { state: { fromCliente: { cliente_id: cliente.id, cnpj: cliente.cnpj, razao_social: cliente.razao_social, cidade: cliente.cidade, uf: cliente.uf, cep: cliente.cep, comprador: cliente.comprador, cluster: cliente.cluster, tabela_preco: cliente.tabela_preco } } })}
             >
               <Plus className="h-4 w-4" />
               Novo Pedido
