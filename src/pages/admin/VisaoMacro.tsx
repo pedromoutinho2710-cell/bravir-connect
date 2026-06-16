@@ -99,7 +99,10 @@ function getMesIndex(row: SankhyaRow): number | null {
 function b2bPorMes(rows: SankhyaRow[], ano: number): number[] {
   const arr = new Array(12).fill(0);
   for (const r of rows) {
-    if ((r.tipo_operacao ?? "").toUpperCase().includes("DEVOLU")) continue;
+    {
+      const op = (r.tipo_operacao ?? "").toUpperCase();
+      if (op.includes("DEVOLU") || op.includes("SUFRAMA")) continue;
+    }
     if ((r.canal ?? "").toUpperCase() !== "BRAVIR") continue;
     if (getAno(r) !== ano) continue;
     const mes = getMesIndex(r);
@@ -114,7 +117,10 @@ function b2bPorMes(rows: SankhyaRow[], ano: number): number[] {
 function mpPorMes(rows: SankhyaRow[], ano: number): number[] {
   const arr = new Array(12).fill(0);
   for (const r of rows) {
-    if ((r.tipo_operacao ?? "").toUpperCase().includes("DEVOLU")) continue;
+    {
+      const op = (r.tipo_operacao ?? "").toUpperCase();
+      if (op.includes("DEVOLU") || op.includes("SUFRAMA")) continue;
+    }
     if ((r.canal ?? "").toUpperCase() !== "MP") continue;
     if (getAno(r) !== ano) continue;
     const mes = getMesIndex(r);
