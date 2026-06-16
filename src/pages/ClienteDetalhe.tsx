@@ -890,6 +890,8 @@ export default function ClienteDetalhe() {
             <AbaPrecos
               clienteId={cliente.id}
               clienteCodigoParceiro={cliente.codigo_parceiro ?? null}
+              clienteTabela={cliente.tabela_preco ?? null}
+              clienteCluster={cliente.cluster ?? null}
               descontoAdicional={cliente.desconto_adicional ?? null}
             />
           </TabsContent>
