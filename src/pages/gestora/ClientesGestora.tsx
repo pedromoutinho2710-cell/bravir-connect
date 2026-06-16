@@ -15,7 +15,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { formatCNPJ } from "@/lib/format";
 import { CLUSTERS, TABELAS_PRECO, UFS } from "@/lib/constants";
-import { Loader2, Search, Users, UserX, AlertTriangle, ShieldAlert, Pencil, UserPlus, ChevronLeft, ChevronRight, Sheet } from "lucide-react";
+import { Loader2, Search, Users, UserX, AlertTriangle, ShieldAlert, Pencil, UserPlus, ChevronLeft, ChevronRight, Sheet, ExternalLink } from "lucide-react";
 import { StatusClienteBadge } from "@/components/cliente/StatusClienteBadge";
 
 const PAGE_SIZE = 200;
@@ -534,7 +534,7 @@ export default function ClientesGestora() {
                   <TableHead>Tabela</TableHead>
                   <TableHead>Vendedor</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="w-20">Ações</TableHead>
+                  <TableHead className="w-28">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -574,15 +574,26 @@ export default function ClientesGestora() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        title="Editar cliente"
-                        onClick={() => abrirModal(c)}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          title="Abrir detalhes (preços, histórico, financeiro)"
+                          onClick={() => navigate(`/clientes/${c.id}`)}
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-7 w-7"
+                          title="Editar cliente"
+                          onClick={() => abrirModal(c)}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
