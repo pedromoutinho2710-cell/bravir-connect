@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
@@ -171,6 +172,15 @@ const MARCA_CORES: Record<string, string> = {
   "Alivik": "#1d9e75",
 };
 
+type RankProduto = {
+  produto_id: string;
+  codigo: string;
+  nome: string;
+  marca: string;
+  quantidade: number;
+  valor: number;
+};
+
 function nivelBadgeClass(nivel: string) {
   const n = nivel.toLowerCase();
   if (n.includes("diamante")) return "bg-purple-100 text-purple-800 hover:bg-purple-100";
@@ -213,6 +223,9 @@ export default function MeuPainel() {
   const [fatMensalVendedor, setFatMensalVendedor] = useState<{ mes: string; valor: number }[]>([]);
   const [topClientes, setTopClientes] = useState<{ cliente_id: string; nome: string; total: number }[]>([]);
   const [entradaMarca, setEntradaMarca] = useState<Record<string, number>>({});
+  const [topSkus, setTopSkus] = useState<RankProduto[]>([]);
+  const [topSkusValor, setTopSkusValor] = useState<RankProduto[]>([]);
+  const [tabProdutos, setTabProdutos] = useState<"quantidade" | "valor">("quantidade");
   const [produtosIndisponiveis, setProdutosIndisponiveis] = useState<{ id: string; nome: string }[]>([]);
   const [modalIndispOpen, setModalIndispOpen] = useState(false);
   const [historicoMeses, setHistoricoMeses] = useState<HistoricoMes[]>([]);
@@ -716,6 +729,49 @@ export default function MeuPainel() {
         });
       });
       setEntradaMarca(agg);
+    })();
+    return () => { cancelado = true; };
+  }, [user, periodo, customAtivo, customInicio, customFim]);
+
+  // Ranking de produtos do vendedor no período — top 10 por quantidade e por valor
+  useEffect(() => {
+    if (!user) return;
+    let cancelado = false;
+    const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
+    (async () => {
+      const { data, error } = await supabase
+        .from("pedidos")
+        .select("itens_pedido(quantidade, total_item, produto_id, produtos(codigo_jiva, nome, marca))")
+        .eq("vendedor_id", user.id)
+        .gte("data_pedido", inicio)
+        .lte("data_pedido", fim)
+        .not("status", "in", '("rascunho","cancelado")');
+      if (cancelado) return;
+      if (error || !data) { setTopSkus([]); setTopSkusValor([]); return; }
+      const agg: Record<string, RankProduto> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (data as any[]).forEach((p) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (p.itens_pedido ?? []).forEach((i: any) => {
+          const pid = i.produto_id as string | undefined;
+          if (!pid) return;
+          if (!agg[pid]) {
+            agg[pid] = {
+              produto_id: pid,
+              codigo: i.produtos?.codigo_jiva ?? "—",
+              nome: i.produtos?.nome ?? "—",
+              marca: i.produtos?.marca ?? "—",
+              quantidade: 0,
+              valor: 0,
+            };
+          }
+          agg[pid].quantidade += Number(i.quantidade ?? 0);
+          agg[pid].valor += Number(i.total_item ?? 0);
+        });
+      });
+      const lista = Object.values(agg);
+      setTopSkus([...lista].sort((a, b) => b.quantidade - a.quantidade).slice(0, 10));
+      setTopSkusValor([...lista].sort((a, b) => b.valor - a.valor).slice(0, 10));
     })();
     return () => { cancelado = true; };
   }, [user, periodo, customAtivo, customInicio, customFim]);
@@ -1336,6 +1392,85 @@ export default function MeuPainel() {
                 </div>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Ranking de produtos — top 10 do vendedor (quantidade/valor) */}
+      {(topSkus.length > 0 || topSkusValor.length > 0) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Ranking de produtos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Tabs value={tabProdutos} onValueChange={(v) => setTabProdutos(v as "quantidade" | "valor")}>
+              <TabsList className="mb-3">
+                <TabsTrigger value="quantidade">Por quantidade</TabsTrigger>
+                <TabsTrigger value="valor">Por valor</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="quantidade">
+                {topSkus.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
+                ) : (
+                  <div className="rounded-md border overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10">#</TableHead>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Marca</TableHead>
+                          <TableHead className="text-right">Qtd</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {topSkus.map((s, idx) => (
+                          <TableRow key={s.produto_id}>
+                            <TableCell className="font-bold">{idx + 1}</TableCell>
+                            <TableCell className="font-mono text-sm">{s.codigo}</TableCell>
+                            <TableCell className="text-sm">{s.nome}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-xs">{s.marca}</Badge></TableCell>
+                            <TableCell className="text-right text-sm font-medium">{s.quantidade}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="valor">
+                {topSkusValor.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nenhum dado no período</p>
+                ) : (
+                  <div className="rounded-md border overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-10">#</TableHead>
+                          <TableHead>Código</TableHead>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Marca</TableHead>
+                          <TableHead className="text-right">Valor</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {topSkusValor.map((s, idx) => (
+                          <TableRow key={s.produto_id}>
+                            <TableCell className="font-bold">{idx + 1}</TableCell>
+                            <TableCell className="font-mono text-sm">{s.codigo}</TableCell>
+                            <TableCell className="text-sm">{s.nome}</TableCell>
+                            <TableCell><Badge variant="outline" className="text-xs">{s.marca}</Badge></TableCell>
+                            <TableCell className="text-right text-sm font-medium">{formatBRL(s.valor)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       )}
