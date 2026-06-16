@@ -92,9 +92,12 @@ function getMesIndex(row: SankhyaRow): number | null {
 }
 
 // Soma B2B por mês (12 posições) para um ano específico.
+// Exclui produtos de marca própria de terceiros (sufixo "(T)" no grupo) —
+// esses entram no canal Marca Própria, mantendo os canais mutuamente exclusivos.
 function b2bPorMes(rows: SankhyaRow[], ano: number): number[] {
   const arr = new Array(12).fill(0);
   for (const r of rows) {
+    if ((r.grupo ?? "").toUpperCase().includes("(T)")) continue;
     if (getAno(r) !== ano) continue;
     const mes = getMesIndex(r);
     if (mes === null) continue;
