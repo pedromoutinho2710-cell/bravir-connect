@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
 import { CLUSTERS, TABELAS_PRECO } from "@/lib/constants";
-import { Loader2, Search, ArrowRightLeft, Trash2, SlidersHorizontal, X } from "lucide-react";
+import { Loader2, Search, ArrowRightLeft, Trash2, SlidersHorizontal, X, ExternalLink } from "lucide-react";
 
 const STATUS_LABEL: Record<string, string> = {
   pendente_cadastro: "Pendente cadastro",
@@ -531,7 +531,7 @@ export default function ClientesAdmin() {
                     <TableHead>Último Pedido</TableHead>
                     <TableHead>Mês Atual</TableHead>
                     <TableHead>Negativado</TableHead>
-                    <TableHead className="w-10"></TableHead>
+                    <TableHead className="w-20">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -621,13 +621,22 @@ export default function ClientesAdmin() {
                           )}
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
-                          <Button
-                            size="icon" variant="ghost" className="h-7 w-7"
-                            title="Excluir cliente"
-                            onClick={() => setExcluirCliente(c)}
-                          >
-                            <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              size="icon" variant="ghost" className="h-7 w-7"
+                              title="Abrir detalhes (preços, histórico, financeiro)"
+                              onClick={() => navigate(`/clientes/${c.id}`)}
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="icon" variant="ghost" className="h-7 w-7"
+                              title="Excluir cliente"
+                              onClick={() => setExcluirCliente(c)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     );
@@ -678,7 +687,7 @@ export default function ClientesAdmin() {
                     <TableHead>Tabela</TableHead>
                     <TableHead>UF</TableHead>
                     <TableHead>Último Pedido</TableHead>
-                    <TableHead className="w-24">Ações</TableHead>
+                    <TableHead className="w-32">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -717,6 +726,10 @@ export default function ClientesAdmin() {
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <div className="flex gap-1">
+                            <Button size="icon" variant="ghost" title="Abrir detalhes (preços, histórico, financeiro)"
+                              onClick={() => navigate(`/clientes/${c.id}`)}>
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
                             <Button size="icon" variant="ghost" title="Transferir vendedor"
                               onClick={() => { setTransferirCliente(c); setNovoVendedorId(c.vendedor_id ?? ""); }}>
                               <ArrowRightLeft className="h-4 w-4" />
