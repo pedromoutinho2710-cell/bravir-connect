@@ -29,9 +29,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { Loader2, Upload, Trash2, CheckCircle2, XCircle } from "lucide-react";
 import { formatDate } from "@/lib/format";
+import { AbaDescontosCluster } from "@/components/admin/AbaDescontosCluster";
 
 type Vigencia = {
   id: string;
@@ -268,18 +270,26 @@ export default function TabelasPreco() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Tabelas de Preço</h1>
-          <p className="text-sm text-muted-foreground">Gerencie vigências de preços e importe novos dados</p>
-        </div>
-        <Button onClick={() => setShowImportar(true)}>
-          <Upload className="h-4 w-4" />
-          Importar tabela Excel
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold">Tabelas de Preço</h1>
+        <p className="text-sm text-muted-foreground">Gerencie vigências de preços e descontos por cluster</p>
       </div>
 
-      <Card>
+      <Tabs defaultValue="vigencias">
+        <TabsList>
+          <TabsTrigger value="vigencias">Vigências</TabsTrigger>
+          <TabsTrigger value="descontos">Descontos por cluster</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="vigencias" className="mt-4 space-y-4">
+          <div className="flex justify-end">
+            <Button onClick={() => setShowImportar(true)}>
+              <Upload className="h-4 w-4" />
+              Importar tabela Excel
+            </Button>
+          </div>
+
+          <Card>
         <CardContent className="p-0">
           {carregando ? (
             <div className="flex h-32 items-center justify-center">
@@ -350,7 +360,13 @@ export default function TabelasPreco() {
             </Table>
           )}
         </CardContent>
-      </Card>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="descontos" className="mt-4">
+          <AbaDescontosCluster />
+        </TabsContent>
+      </Tabs>
 
       {/* Modal importar */}
       <Dialog open={showImportar} onOpenChange={(o) => { if (!o) fecharModal(); }}>
