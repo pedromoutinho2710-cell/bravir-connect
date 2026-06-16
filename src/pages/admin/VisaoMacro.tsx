@@ -22,6 +22,7 @@ type SankhyaRow = {
   tipo_operacao: string | null;
   numero_nota: string | null;
   grupo: string | null;
+  canal: string | null;
 };
 
 type MetasRow = {
@@ -60,7 +61,7 @@ async function fetchFaturamentosB2B(): Promise<SankhyaRow[]> {
   for (;;) {
     const { data, error } = await supabase
       .from("faturamentos_sankhya")
-      .select("data_faturamento, valor_liquido, tipo_operacao, numero_nota, grupo")
+      .select("data_faturamento, valor_liquido, tipo_operacao, numero_nota, grupo, canal")
       .gte("data_faturamento", "2025-01-01")
       .lte("data_faturamento", "2026-12-31")
       .not("tipo_operacao", "ilike", "%devolucao%")
@@ -92,12 +93,12 @@ function getMesIndex(row: SankhyaRow): number | null {
 }
 
 // Soma B2B por mês (12 posições) para um ano específico.
-// Exclui produtos de marca própria de terceiros (sufixo "(T)" no grupo) —
-// esses entram no canal Marca Própria, mantendo os canais mutuamente exclusivos.
+// B2B = registros cujo canal é "BRAVIR" (a coluna canal classifica o registro,
+// mantendo os canais mutuamente exclusivos com Marca Própria).
 function b2bPorMes(rows: SankhyaRow[], ano: number): number[] {
   const arr = new Array(12).fill(0);
   for (const r of rows) {
-    if ((r.grupo ?? "").toUpperCase().includes("(T)")) continue;
+    if ((r.canal ?? "").toUpperCase() !== "BRAVIR") continue;
     if (getAno(r) !== ano) continue;
     const mes = getMesIndex(r);
     if (mes === null) continue;
@@ -107,11 +108,11 @@ function b2bPorMes(rows: SankhyaRow[], ano: number): number[] {
 }
 
 // Soma Marca Própria por mês (12 posições) para um ano específico.
-// Marca própria de terceiros = produtos cujo grupo carrega o sufixo "(T)".
+// Marca Própria = registros cujo canal é "MP".
 function mpPorMes(rows: SankhyaRow[], ano: number): number[] {
   const arr = new Array(12).fill(0);
   for (const r of rows) {
-    if (!(r.grupo ?? "").toUpperCase().includes("(T)")) continue;
+    if ((r.canal ?? "").toUpperCase() !== "MP") continue;
     if (getAno(r) !== ano) continue;
     const mes = getMesIndex(r);
     if (mes === null) continue;
