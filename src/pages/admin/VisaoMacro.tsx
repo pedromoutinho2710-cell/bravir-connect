@@ -21,6 +21,7 @@ type SankhyaRow = {
   valor_liquido: number | null;
   tipo_operacao: string | null;
   numero_nota: string | null;
+  grupo: string | null;
 };
 
 type MetasRow = {
@@ -59,7 +60,7 @@ async function fetchFaturamentosB2B(): Promise<SankhyaRow[]> {
   for (;;) {
     const { data, error } = await supabase
       .from("faturamentos_sankhya")
-      .select("data_faturamento, valor_liquido, tipo_operacao, numero_nota")
+      .select("data_faturamento, valor_liquido, tipo_operacao, numero_nota, grupo")
       .gte("data_faturamento", "2025-01-01")
       .lte("data_faturamento", "2026-12-31")
       .not("tipo_operacao", "ilike", "%devolucao%")
@@ -94,6 +95,20 @@ function getMesIndex(row: SankhyaRow): number | null {
 function b2bPorMes(rows: SankhyaRow[], ano: number): number[] {
   const arr = new Array(12).fill(0);
   for (const r of rows) {
+    if (getAno(r) !== ano) continue;
+    const mes = getMesIndex(r);
+    if (mes === null) continue;
+    arr[mes] += r.valor_liquido ?? 0;
+  }
+  return arr;
+}
+
+// Soma Marca Própria por mês (12 posições) para um ano específico.
+// Marca própria de terceiros = produtos cujo grupo carrega o sufixo "(T)".
+function mpPorMes(rows: SankhyaRow[], ano: number): number[] {
+  const arr = new Array(12).fill(0);
+  for (const r of rows) {
+    if (!(r.grupo ?? "").toUpperCase().includes("(T)")) continue;
     if (getAno(r) !== ano) continue;
     const mes = getMesIndex(r);
     if (mes === null) continue;
@@ -198,11 +213,14 @@ export default function VisaoMacro() {
   const b2b2025 = useMemo(() => b2bPorMes(rows ?? [], 2025), [rows]);
   const b2b2026 = useMemo(() => b2bPorMes(rows ?? [], 2026), [rows]);
   const b2bAno = ano === 2026 ? b2b2026 : b2b2025;
+  const mp2025 = useMemo(() => mpPorMes(rows ?? [], 2025), [rows]);
+  const mp2026 = useMemo(() => mpPorMes(rows ?? [], 2026), [rows]);
+  const mpAno = ano === 2026 ? mp2026 : mp2025;
   const onlinePorMes = useMemo(() => onlinePorMesFn(vendasOnline ?? []), [vendasOnline]);
 
   // Realizado do mês selecionado por canal
   const realB2B = b2bAno[mes] ?? 0;
-  const realMP = 0; // placeholder — sem fonte de dados ainda
+  const realMP = mpAno[mes] ?? 0;
   const realOnline = blingConectado ? (onlinePorMes[mes] ?? 0) : 0;
 
   const canais = useMemo(
@@ -221,7 +239,7 @@ export default function VisaoMacro() {
         cor: COR_MP,
         realizado: realMP,
         meta: metaMP,
-        pendente: true,
+        pendente: false,
       },
       {
         key: "online",
@@ -259,7 +277,7 @@ export default function VisaoMacro() {
     const lista = idxs.map((i) => ({
       mes: MESES[i],
       b2b: b2bAno[i] ?? 0,
-      mp: 0,
+      mp: mpAno[i] ?? 0,
       online: blingConectado ? (onlinePorMes[i] ?? 0) : 0,
     }));
     const max = Math.max(
@@ -267,14 +285,14 @@ export default function VisaoMacro() {
       ...lista.flatMap((l) => [l.b2b, l.mp, l.online])
     );
     return { lista, max };
-  }, [mes, b2bAno, onlinePorMes, blingConectado]);
+  }, [mes, b2bAno, mpAno, onlinePorMes, blingConectado]);
 
   // Tabela comparativa (todos os meses)
   const tabela = useMemo(() => {
     const linhas = MESES.map((nome, i) => {
       const b25 = b2b2025[i] ?? 0;
       const b26 = b2b2026[i] ?? 0;
-      const mp26 = 0;
+      const mp26 = mp2026[i] ?? 0;
       const on26 = ano === 2026 && blingConectado ? (onlinePorMes[i] ?? 0) : 0;
       const total26 = b26 + mp26 + on26;
       const varB2B = b25 > 0 ? ((b26 - b25) / b25) * 100 : null;
@@ -292,7 +310,7 @@ export default function VisaoMacro() {
     );
     const varTotal = tot.b25 > 0 ? ((tot.b26 - tot.b25) / tot.b25) * 100 : null;
     return { linhas, tot, varTotal };
-  }, [b2b2025, b2b2026, onlinePorMes, ano, blingConectado]);
+  }, [b2b2025, b2b2026, mp2026, onlinePorMes, ano, blingConectado]);
 
   const renderVar = (v: number | null) => {
     if (v === null) return <span className="text-muted-foreground">—</span>;
