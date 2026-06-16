@@ -103,7 +103,7 @@ function b2bPorMes(rows: SankhyaRow[], ano: number): number[] {
     if (getAno(r) !== ano) continue;
     const mes = getMesIndex(r);
     if (mes === null) continue;
-    arr[mes] += r.valor_bruto ?? 0;
+    arr[mes] += r.valor_bruto ?? r.valor_liquido ?? 0;
   }
   return arr;
 }
@@ -117,7 +117,7 @@ function mpPorMes(rows: SankhyaRow[], ano: number): number[] {
     if (getAno(r) !== ano) continue;
     const mes = getMesIndex(r);
     if (mes === null) continue;
-    arr[mes] += r.valor_bruto ?? 0;
+    arr[mes] += r.valor_bruto ?? r.valor_liquido ?? 0;
   }
   return arr;
 }
