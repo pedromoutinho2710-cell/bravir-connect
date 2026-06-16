@@ -26,6 +26,7 @@ import { CLUSTERS, TABELAS_PRECO } from "@/lib/constants";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
 import { BadgeNegativado } from "@/components/BadgeNegativado";
 import { TabelaPrecos } from "@/components/cliente/TabelaPrecos";
+import { AbaPrecos } from "@/components/cliente/AbaPrecos";
 import { StatusClienteBadge } from "@/components/cliente/StatusClienteBadge";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -209,6 +210,7 @@ export default function ClienteDetalhe() {
   const canEditLimitado = role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id;
   const canEdit = canEditFull || canEditLimitado;
   const canObs = canEditFull || (role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id);
+  const canPrecos = role === "admin" || role === "gestora";
 
   const enviarAnalise = async () => {
     if (!cliente) return;
@@ -619,6 +621,7 @@ export default function ClienteDetalhe() {
           <TabsTrigger value="metas">Metas</TabsTrigger>
           <TabsTrigger value="obs">Observações</TabsTrigger>
           <TabsTrigger value="tabela">Tabela de Preços</TabsTrigger>
+          {canPrecos && <TabsTrigger value="precos">Preços</TabsTrigger>}
           <TabsTrigger value="faturamento">Histórico de Faturamento</TabsTrigger>
         </TabsList>
 
@@ -880,6 +883,17 @@ export default function ClienteDetalhe() {
             />
           )}
         </TabsContent>
+
+        {/* ABA — Preços (admin e gestora) */}
+        {canPrecos && (
+          <TabsContent value="precos" className="mt-4">
+            <AbaPrecos
+              clienteId={cliente.id}
+              clienteCodigoParceiro={cliente.codigo_parceiro ?? null}
+              descontoAdicional={cliente.desconto_adicional ?? null}
+            />
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* Modal: editar cliente */}
