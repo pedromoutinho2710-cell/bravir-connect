@@ -19,6 +19,7 @@ import { formatBRL } from "@/lib/format";
 type SankhyaRow = {
   data_faturamento: string | null;
   valor_liquido: number | null;
+  valor_bruto: number | null;
   tipo_operacao: string | null;
   numero_nota: string | null;
   grupo: string | null;
@@ -61,7 +62,7 @@ async function fetchFaturamentosB2B(): Promise<SankhyaRow[]> {
   for (;;) {
     const { data, error } = await supabase
       .from("faturamentos_sankhya")
-      .select("data_faturamento, valor_liquido, tipo_operacao, numero_nota, grupo, canal")
+      .select("data_faturamento, valor_liquido, valor_bruto, tipo_operacao, numero_nota, grupo, canal")
       .gte("data_faturamento", "2025-01-01")
       .lte("data_faturamento", "2026-12-31")
       .not("tipo_operacao", "ilike", "%devolucao%")
@@ -102,7 +103,7 @@ function b2bPorMes(rows: SankhyaRow[], ano: number): number[] {
     if (getAno(r) !== ano) continue;
     const mes = getMesIndex(r);
     if (mes === null) continue;
-    arr[mes] += r.valor_liquido ?? 0;
+    arr[mes] += r.valor_bruto ?? 0;
   }
   return arr;
 }
@@ -116,7 +117,7 @@ function mpPorMes(rows: SankhyaRow[], ano: number): number[] {
     if (getAno(r) !== ano) continue;
     const mes = getMesIndex(r);
     if (mes === null) continue;
-    arr[mes] += r.valor_liquido ?? 0;
+    arr[mes] += r.valor_bruto ?? 0;
   }
   return arr;
 }
