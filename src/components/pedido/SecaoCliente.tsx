@@ -253,10 +253,11 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
     if (letras.length >= 3) {
       if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
       searchTimerRef.current = setTimeout(async () => {
+        const termo = text.trim();
         const { data } = await supabase
           .from("clientes")
           .select("id, razao_social, nome_parceiro, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, cluster, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado, email")
-          .ilike("razao_social", `%${text.trim()}%`)
+          .or(`razao_social.ilike.%${termo}%,nome_parceiro.ilike.%${termo}%`)
           .limit(10);
         setSugestoes((data ?? []) as Sugestao[]);
         setShowSugestoes((data?.length ?? 0) > 0);
@@ -325,7 +326,10 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
                       onMouseDown={(e) => { e.preventDefault(); selecionarSugestao(s); }}
                       className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted transition-colors border-b last:border-0"
                     >
-                      <div className="font-medium">{s.nome_parceiro || s.razao_social}</div>
+                      <div className="text-base font-semibold">{s.nome_parceiro || s.razao_social}</div>
+                      {s.nome_parceiro && (
+                        <div className="text-xs text-muted-foreground">{s.razao_social}</div>
+                      )}
                       <div className="text-xs text-muted-foreground">{formatCNPJ(s.cnpj)}</div>
                     </button>
                   ))}
