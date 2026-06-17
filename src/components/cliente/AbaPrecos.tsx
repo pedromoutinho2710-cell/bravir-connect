@@ -249,6 +249,7 @@ export function AbaPrecos({
     }
 
     setSalvando(true);
+    console.log('[AbaPrecos] salvando', { especialId: l.especialId, preco, desc });
     let novoId = l.especialId;
     let error;
     if (l.especialId) {
@@ -256,6 +257,7 @@ export function AbaPrecos({
         .from("precos_cliente_produto")
         .update({ preco_unitario: preco, desconto_perfil: desc, origem: "acordo" })
         .eq("id", l.especialId));
+      console.log('[AbaPrecos] resultado update', { error });
     } else {
       const res = await supabase
         .from("precos_cliente_produto")
