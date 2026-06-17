@@ -54,11 +54,12 @@ interface Solicitacao {
 
 const STATUS_META: Record<string, { label: string; cls: string }> = {
   aberto: { label: "Aberto", cls: "bg-blue-100 text-blue-800 border-blue-300" },
-  em_analise: { label: "Em análise", cls: "bg-amber-100 text-amber-800 border-amber-300" },
+  // Legado: solicitações antigas em "em_analise" aparecem como "Aberto".
+  em_analise: { label: "Aberto", cls: "bg-blue-100 text-blue-800 border-blue-300" },
   "em-andamento": { label: "Em andamento", cls: "bg-amber-100 text-amber-800 border-amber-300" },
   aprovado: { label: "Aprovado", cls: "bg-green-100 text-green-800 border-green-300" },
   reprovado: { label: "Reprovado", cls: "bg-red-100 text-red-800 border-red-300" },
-  devolvido: { label: "Devolvido", cls: "bg-purple-100 text-purple-800 border-purple-300" },
+  devolvido: { label: "Devolvido", cls: "bg-orange-100 text-orange-800 border-orange-300" },
   concluido: { label: "Concluído", cls: "bg-green-100 text-green-800 border-green-300" },
   recusado: { label: "Recusado", cls: "bg-red-100 text-red-800 border-red-300" },
 };
@@ -263,6 +264,18 @@ export default function MinhasSolicitacoes() {
                     </div>
                   )}
 
+                  {/* Motivo da devolução */}
+                  {s.status === "devolvido" && (
+                    <div className="rounded-md border border-orange-300 bg-orange-50 p-3 text-sm text-orange-900">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-orange-700">
+                        Motivo da devolução
+                      </p>
+                      <p className="whitespace-pre-wrap">
+                        {s.motivo_devolucao || "Sua solicitação foi devolvida para ajustes."}
+                      </p>
+                    </div>
+                  )}
+
                   {/* Ações por status */}
                   {s.status === "aprovado" && (
                     <div className="flex flex-wrap gap-2 pt-1">
@@ -300,6 +313,19 @@ export default function MinhasSolicitacoes() {
                       >
                         <PencilLine className="mr-2 h-4 w-4" />
                         Corrigir sugestão
+                      </Button>
+                    </div>
+                  )}
+
+                  {s.status === "devolvido" && (
+                    <div className="pt-1">
+                      <Button
+                        size="sm"
+                        className="bg-orange-600 text-white hover:bg-orange-700"
+                        onClick={() => setCorrigir(s)}
+                      >
+                        <PencilLine className="mr-2 h-4 w-4" />
+                        Corrigir
                       </Button>
                     </div>
                   )}
@@ -665,7 +691,7 @@ function ChatCorrigir({
     setImagensPendentes((prev) => [...prev, ...novas]);
   }
 
-  async function salvarDevolucao(registro: Registro, conversa: ChatMsg[]) {
+  async function salvarCorrecao(registro: Registro, conversa: ChatMsg[]) {
     const chatHistorico = conversa
       .filter((m) => !m.kind)
       .map((m) => ({ role: m.role, content: m.content }));
@@ -673,19 +699,20 @@ function ChatCorrigir({
     const novaDescricao =
       registro.descricao ?? registro.titulo ?? solicitacao.descricao ?? "(sem descrição)";
 
-    // Atualiza a solicitação existente — não cria uma nova.
+    // Reenvia a solicitação corrigida — volta para "aberto" e limpa o motivo da devolução.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- colunas novas ainda não estão no types.ts gerado
     const { error } = await (supabase as any)
       .from("solicitacoes_gestor")
       .update({
-        status: "devolvido",
+        status: "aberto",
+        motivo_devolucao: null,
         chat_historico: chatHistorico,
         descricao: novaDescricao,
       })
       .eq("id", solicitacao.id);
 
     if (error) {
-      console.error("Erro ao devolver solicitação:", error);
+      console.error("Erro ao reenviar solicitação:", error);
       return false;
     }
     return true;
@@ -739,14 +766,14 @@ function ChatCorrigir({
       setMessages(comResposta);
 
       if (registro) {
-        const ok = await salvarDevolucao(registro, comResposta);
+        const ok = await salvarCorrecao(registro, comResposta);
         if (ok) {
           setMessages((prev) => [
             ...prev,
             {
               id: nextId(),
               role: "assistant",
-              content: "✓ Correção enviada! Pedro vai reavaliar sua solicitação em breve.",
+              content: "✓ Correção reenviada! Pedro vai reavaliar sua solicitação em breve.",
               kind: "confirmation",
             },
           ]);
