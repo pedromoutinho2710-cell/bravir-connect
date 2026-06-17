@@ -258,6 +258,8 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
           uf: cliente.uf || null,
           cep: onlyDigits(cliente.cep) || null,
           comprador: cliente.comprador || null,
+          telefone: cliente.telefone || null,
+          email: cliente.email || null,
           codigo_cliente: cliente.codigo_cliente || null,
           aceita_saldo: cliente.aceita_saldo,
         },
@@ -280,6 +282,26 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
     const cliente_id = await garantirCliente();
     if (!cliente_id) return null;
 
+    // Completa a ficha do cliente já existente com dados do comprador que
+    // estavam vazios no cadastro — sem sobrescrever valores já preenchidos.
+    // (Clientes novos já são criados com esses dados em garantirCliente.)
+    if (cliente.cliente_id) {
+      const { data: clienteAtual } = await supabase
+        .from("clientes")
+        .select("comprador, telefone, email")
+        .eq("id", cliente_id)
+        .maybeSingle();
+      if (clienteAtual) {
+        const patch: Record<string, string> = {};
+        if (!clienteAtual.comprador?.trim() && cliente.comprador.trim()) patch.comprador = cliente.comprador.trim();
+        if (!clienteAtual.telefone?.trim() && cliente.telefone.trim()) patch.telefone = cliente.telefone.trim();
+        if (!clienteAtual.email?.trim() && cliente.email.trim()) patch.email = cliente.email.trim();
+        if (Object.keys(patch).length > 0) {
+          await supabase.from("clientes").update(patch).eq("id", cliente_id);
+        }
+      }
+    }
+
     const obsCompletas = cliente.observacoes || null;
 
     let id = pedidoId;
@@ -294,6 +316,9 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         agendamento: cliente.agendamento,
         observacoes: obsCompletas,
         ordem_compra: cliente.ordem_compra || null,
+        comprador: cliente.comprador || null,
+        telefone: cliente.telefone || null,
+        email: cliente.email || null,
         vigencia_id: vigenciaId || null,
         status,
       };
@@ -321,6 +346,9 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
           agendamento: cliente.agendamento,
           observacoes: obsCompletas,
           ordem_compra: cliente.ordem_compra || null,
+          comprador: cliente.comprador || null,
+          telefone: cliente.telefone || null,
+          email: cliente.email || null,
           vigencia_id: vigenciaId || null,
           status,
           ...(status === "pendente_sankhya"
