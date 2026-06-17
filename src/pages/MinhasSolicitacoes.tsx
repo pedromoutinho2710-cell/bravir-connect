@@ -9,6 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -19,7 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Bot, CheckCircle2, ExternalLink, Loader2, Paperclip, PencilLine, PlusCircle, Send, Sparkles } from "lucide-react";
+import { Bot, CheckCircle2, ExternalLink, Loader2, Paperclip, PencilLine, PlusCircle, Send, Sparkles, Trash2 } from "lucide-react";
 
 const BRAND = "#0F6E56";
 
@@ -145,6 +149,8 @@ export default function MinhasSolicitacoes() {
   const [corrigir, setCorrigir] = useState<Solicitacao | null>(null);
   const [novaAberta, setNovaAberta] = useState(false);
   const [modoNova, setModoNova] = useState<"ia" | "manual">("ia");
+  const [excluirAlvo, setExcluirAlvo] = useState<Solicitacao | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   const { data: solicitacoes = [], isLoading } = useQuery({
     queryKey: ["minhas_solicitacoes", user?.id],
@@ -173,6 +179,26 @@ export default function MinhasSolicitacoes() {
     }
     toast.success("Marcado como resolvido. Obrigado!");
     qc.invalidateQueries({ queryKey: ["minhas_solicitacoes", user?.id] });
+  }
+
+  async function excluirSolicitacao() {
+    if (!excluirAlvo) return;
+    setExcluindo(true);
+    const { error } = await supabase
+      .from("solicitacoes_gestor")
+      .update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null })
+      .eq("id", excluirAlvo.id);
+    setExcluindo(false);
+    if (error) {
+      toast.error("Erro ao excluir: " + error.message);
+      return;
+    }
+    // Remove da lista local
+    qc.setQueryData<Solicitacao[]>(["minhas_solicitacoes", user?.id], (prev) =>
+      (prev ?? []).filter((item) => item.id !== excluirAlvo.id),
+    );
+    toast.success("Solicitação excluída");
+    setExcluirAlvo(null);
   }
 
   function testarMelhoria(s: Solicitacao) {
@@ -277,12 +303,48 @@ export default function MinhasSolicitacoes() {
                       </Button>
                     </div>
                   )}
+
+                  <div className="flex justify-end border-t border-border pt-2">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:bg-destructive/10"
+                      onClick={() => setExcluirAlvo(s)}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      Excluir
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             );
           })}
         </div>
       )}
+
+      {/* Confirmação de exclusão */}
+      <AlertDialog open={!!excluirAlvo} onOpenChange={(o) => { if (!o) setExcluirAlvo(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir solicitação?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {excluirAlvo
+                ? `"${excluirAlvo.titulo || excluirAlvo.descricao.slice(0, 80)}" será movida para a lixeira. Você pode restaurá-la lá.`
+                : ""}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={excluindo}
+              onClick={(e) => { e.preventDefault(); excluirSolicitacao(); }}
+            >
+              {excluindo ? <Loader2 className="h-4 w-4 animate-spin" /> : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modal de correção com chat */}
       <Dialog open={!!corrigir} onOpenChange={(o) => !o && setCorrigir(null)}>
