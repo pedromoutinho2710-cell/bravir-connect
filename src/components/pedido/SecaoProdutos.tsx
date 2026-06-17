@@ -96,7 +96,7 @@ export function SecaoProdutos({
   const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
   const [precos, setPrecos] = useState<Record<string, Record<string, number>>>({});
-  const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, { preco: number; origem: string }>>({});
+  const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, { preco: number; desconto_perfil: number | null; origem: string }>>({});
 
   // Recarrega preços quando vigência muda
   useEffect(() => {
@@ -120,12 +120,12 @@ export function SecaoProdutos({
     console.log("[DEBUG] precosEspeciais:", precosEspeciais);
     supabase
       .from("precos_cliente_produto")
-      .select("codigo_produto, preco_unitario, origem")
+      .select("codigo_produto, preco_unitario, desconto_perfil, origem")
       .eq("codigo_parceiro", codigoParceiro)
       .then(({ data, error }) => {
         console.log("[DEBUG] data:", data, "error:", error);
-        const map: Record<string, { preco: number; origem: string }> = {};
-        data?.forEach((p) => { map[p.codigo_produto] = { preco: Number(p.preco_unitario), origem: p.origem }; });
+        const map: Record<string, { preco: number; desconto_perfil: number | null; origem: string }> = {};
+        data?.forEach((p) => { map[p.codigo_produto] = { preco: Number(p.preco_unitario), desconto_perfil: p.desconto_perfil != null ? Number(p.desconto_perfil) : null, origem: p.origem }; });
         console.log("[DEBUG] mapa carregado:", map);
         setPrecosEspeciais(map);
       });
@@ -260,8 +260,7 @@ export function SecaoProdutos({
       const produto = produtos.find((p) => p.id === i.produto_id);
       const precoEspecial = produto?.codigo_jiva ? precosEspeciais[produto.codigo_jiva] : undefined;
       const naVigenciaEspecial = !preservarDescontos
-        && precoEspecial !== undefined
-        && vigenciaId === "311fd93d-f3d1-4160-bd17-fc08472606c0";
+        && precoEspecial !== undefined;
 
       if (naVigenciaEspecial && precoEspecial) {
         // 'acordo' sempre prevalece; 'historico' funciona como piso de preço
@@ -274,16 +273,22 @@ export function SecaoProdutos({
 
         if (aplicarEspecial) {
           if (precoEspecial.origem === "acordo") {
-            // 'acordo': o preço acordado é o líquido-base (preco_final = precoEfetivo),
-            // independente do bruto. Comercial e trade são aplicados POR CIMA do acordo,
-            // evitando o desconto de perfil negativo quando o acordo é maior que o bruto.
-            const precos_acordo = calcularPrecos(precoEfetivo, 0, i.desconto_comercial, i.desconto_trade, i.quantidade);
+            // 'acordo': o preço acordado é o líquido-base, independente do bruto.
+            // Se o registro do cliente tem desconto_perfil (percentual 0–100), ele é
+            // aplicado sobre o preço acordado no lugar do desconto do cluster; caso
+            // contrário não há desconto de perfil. Comercial e trade são aplicados
+            // POR CIMA, evitando desconto de perfil negativo quando o acordo > bruto.
+            const dPerfilCliente = precoEspecial.desconto_perfil != null
+              ? precoEspecial.desconto_perfil / 100
+              : 0;
+            const precos_acordo = calcularPrecos(precoEfetivo, dPerfilCliente, i.desconto_comercial, i.desconto_trade, i.quantidade);
             return {
               ...i,
               // P. Bruto passa a ser o próprio preço acordado e o desconto de perfil
-              // fica 0%, evitando exibir bruto da tabela com desconto negativo (ágio).
+              // vem do registro do cliente (ou 0%), evitando exibir bruto da tabela
+              // com desconto negativo (ágio).
               preco_bruto: precoEfetivo,
-              desconto_perfil: 0,
+              desconto_perfil: dPerfilCliente,
               preco_apos_perfil: precos_acordo.preco_apos_perfil,
               preco_apos_comercial: precos_acordo.preco_apos_comercial,
               preco_final: precos_acordo.preco_final,
