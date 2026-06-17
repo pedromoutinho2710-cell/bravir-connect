@@ -3,13 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { formatBRL } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Trash2, Search } from "lucide-react";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Loader2, Search, Pencil } from "lucide-react";
 import { toast } from "sonner";
 
 type Props = {
@@ -17,7 +12,6 @@ type Props = {
   clienteCodigoParceiro: string | null;
   clienteTabela: string | null;
   clienteCluster: string | null;
-  descontoAdicional: number | null;
 };
 
 // Uma linha = um produto da tabela de preço do cliente. O preço do cliente
@@ -51,6 +45,12 @@ const ordemMarca = (m: string | null) => {
   return i === -1 ? ORDEM_MARCAS.length : i;
 };
 
+const fmtPct = (frac: number) =>
+  `${(frac * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+
+const fmtPctNum = (pct: number) =>
+  `${pct.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+
 // Preço final = (preço do cliente ou preço c/ cluster) com o desconto do
 // cliente aplicado: base × (1 - desconto_perfil / 100).
 const precoFinalDe = (l: LinhaProduto) => {
@@ -60,31 +60,19 @@ const precoFinalDe = (l: LinhaProduto) => {
 };
 
 export function AbaPrecos({
-  clienteId,
   clienteCodigoParceiro,
   clienteTabela,
   clienteCluster,
-  descontoAdicional,
 }: Props) {
-  // BLOCO A — desconto adicional
-  const [descontoLocal, setDescontoLocal] = useState<string>(
-    descontoAdicional != null ? String(descontoAdicional) : "",
-  );
-  const [salvandoDesconto, setSalvandoDesconto] = useState(false);
-
-  // BLOCO B — todos os produtos da tabela do cliente
   const [loading, setLoading] = useState(true);
   const [linhas, setLinhas] = useState<LinhaProduto[]>([]);
   const [busca, setBusca] = useState("");
 
-  // edição direta inline — rascunhos por produtoId enquanto o usuário digita.
-  const [precoInput, setPrecoInput] = useState<Record<string, string>>({});
-  const [descInput, setDescInput] = useState<Record<string, string>>({});
-  const [salvando, setSalvando] = useState<Record<string, boolean>>({});
-
-  // exclusão (guarda a linha cujo preço do cliente será removido)
-  const [excluirLinha, setExcluirLinha] = useState<LinhaProduto | null>(null);
-  const [excluindo, setExcluindo] = useState(false);
+  // edição por linha — guarda o produtoId em edição e os rascunhos de preço/desconto.
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editPreco, setEditPreco] = useState("");
+  const [editDesc, setEditDesc] = useState("");
+  const [salvando, setSalvando] = useState(false);
 
   const carregar = async () => {
     if (!clienteTabela) {
@@ -202,8 +190,7 @@ export function AbaPrecos({
     });
 
     setLinhas(montadas);
-    setPrecoInput({});
-    setDescInput({});
+    setEditId(null);
     setLoading(false);
   };
 
@@ -223,64 +210,51 @@ export function AbaPrecos({
     );
   }, [linhas, busca]);
 
-  const salvarDesconto = async () => {
-    const valor = Number(descontoLocal);
-    if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
-      toast.error("Informe um valor entre 0 e 100");
-      return;
-    }
-    setSalvandoDesconto(true);
-    const { error } = await supabase
-      .from("clientes")
-      .update({ desconto_adicional: Math.round(valor) })
-      .eq("id", clienteId);
-    setSalvandoDesconto(false);
-    if (error) {
-      toast.error("Erro ao salvar: " + error.message);
-      return;
-    }
-    toast.success("Desconto adicional salvo");
+  const iniciarEdicao = (l: LinhaProduto) => {
+    setEditId(l.produtoId);
+    // pré-preenche com o valor do cliente se houver, senão com o valor de tabela/cluster.
+    setEditPreco(l.precoEspecial != null ? String(l.precoEspecial) : String(l.precoBruto));
+    setEditDesc(
+      l.descontoPerfil != null
+        ? String(l.descontoPerfil)
+        : String(Number((l.descontoCluster * 100).toFixed(2))),
+    );
   };
 
-  const limparRascunho = (
-    setter: React.Dispatch<React.SetStateAction<Record<string, string>>>,
-    id: string,
-  ) => {
-    setter((prev) => {
-      const next = { ...prev };
-      delete next[id];
-      return next;
-    });
+  const cancelarEdicao = () => setEditId(null);
+
+  // Preço final em tempo real durante a edição: preço × (1 - desconto/100).
+  const finalEmEdicao = () => {
+    const preco = Number(editPreco);
+    if (!Number.isFinite(preco)) return 0;
+    const desc = Number(editDesc);
+    const d = Number.isFinite(desc) ? desc : 0;
+    return preco * (1 - d / 100);
   };
 
-  // Salva o preço do cliente direto da tabela (onBlur / Enter). Atualiza se já
-  // existe registro; cria (origem "acordo") caso contrário. Sem mudança ou
-  // valor vazio: apenas descarta o rascunho.
-  const salvarPreco = async (l: LinhaProduto, raw: string) => {
+  // Salva o preço/desconto do cliente. Atualiza o registro se já existe; caso
+  // contrário cria com origem "acordo". Chave: codigo_parceiro (já resolvido
+  // como codigo_parceiro ?? codigo_cliente no call site) + codigo_produto.
+  const salvar = async (l: LinhaProduto) => {
     if (!clienteCodigoParceiro) return;
-    const trimmed = raw.trim();
-    if (trimmed === "") {
-      limparRascunho(setPrecoInput, l.produtoId);
-      return;
-    }
-    const valor = Number(trimmed);
-    if (!Number.isFinite(valor) || valor < 0) {
+    const preco = Number(editPreco);
+    if (!Number.isFinite(preco) || preco < 0) {
       toast.error("Informe um preço válido");
       return;
     }
-    if (l.precoEspecial != null && valor === l.precoEspecial) {
-      limparRascunho(setPrecoInput, l.produtoId);
+    const desc = Number(editDesc);
+    if (!Number.isFinite(desc) || desc < 0 || desc > 100) {
+      toast.error("Informe um desconto entre 0 e 100");
       return;
     }
 
-    const key = `${l.produtoId}:preco`;
-    setSalvando((s) => ({ ...s, [key]: true }));
+    setSalvando(true);
     let novoId = l.especialId;
     let error;
     if (l.especialId) {
       ({ error } = await supabase
         .from("precos_cliente_produto")
-        .update({ preco_unitario: valor })
+        .update({ preco_unitario: preco, desconto_perfil: desc })
         .eq("id", l.especialId));
     } else {
       const res = await supabase
@@ -288,7 +262,8 @@ export function AbaPrecos({
         .insert({
           codigo_parceiro: clienteCodigoParceiro,
           codigo_produto: l.codigo,
-          preco_unitario: valor,
+          preco_unitario: preco,
+          desconto_perfil: desc,
           origem: "acordo",
         })
         .select("id")
@@ -296,11 +271,7 @@ export function AbaPrecos({
       error = res.error;
       novoId = res.data?.id ?? null;
     }
-    setSalvando((s) => {
-      const next = { ...s };
-      delete next[key];
-      return next;
-    });
+    setSalvando(false);
     if (error) {
       toast.error("Erro ao salvar: " + error.message);
       return;
@@ -308,147 +279,31 @@ export function AbaPrecos({
     setLinhas((prev) =>
       prev.map((x) =>
         x.produtoId === l.produtoId
-          ? { ...x, especialId: novoId, precoEspecial: valor, origem: x.origem ?? "acordo" }
+          ? {
+              ...x,
+              especialId: novoId,
+              precoEspecial: preco,
+              descontoPerfil: desc,
+              origem: x.origem ?? "acordo",
+            }
           : x,
       ),
     );
-    limparRascunho(setPrecoInput, l.produtoId);
+    setEditId(null);
     toast.success("Preço do cliente salvo");
-  };
-
-  // Salva o desconto do cliente (0–100) direto da tabela. Vazio remove o
-  // desconto (null). Cria o registro com origem "acordo" se ainda não existir.
-  const salvarDescontoPerfil = async (l: LinhaProduto, raw: string) => {
-    if (!clienteCodigoParceiro) return;
-    const trimmed = raw.trim();
-    let valor: number | null;
-    if (trimmed === "") {
-      valor = null;
-    } else {
-      valor = Number(trimmed);
-      if (!Number.isFinite(valor) || valor < 0 || valor > 100) {
-        toast.error("Informe um desconto entre 0 e 100");
-        return;
-      }
-    }
-    if (valor === (l.descontoPerfil ?? null)) {
-      limparRascunho(setDescInput, l.produtoId);
-      return;
-    }
-    // Nada a gravar: limpar um desconto inexistente sem registro.
-    if (valor === null && !l.especialId) {
-      limparRascunho(setDescInput, l.produtoId);
-      return;
-    }
-
-    const key = `${l.produtoId}:desc`;
-    setSalvando((s) => ({ ...s, [key]: true }));
-    let novoId = l.especialId;
-    let error;
-    if (l.especialId) {
-      ({ error } = await supabase
-        .from("precos_cliente_produto")
-        .update({ desconto_perfil: valor })
-        .eq("id", l.especialId));
-    } else {
-      const res = await supabase
-        .from("precos_cliente_produto")
-        .insert({
-          codigo_parceiro: clienteCodigoParceiro,
-          codigo_produto: l.codigo,
-          desconto_perfil: valor,
-          origem: "acordo",
-        })
-        .select("id")
-        .single();
-      error = res.error;
-      novoId = res.data?.id ?? null;
-    }
-    setSalvando((s) => {
-      const next = { ...s };
-      delete next[key];
-      return next;
-    });
-    if (error) {
-      toast.error("Erro ao salvar: " + error.message);
-      return;
-    }
-    setLinhas((prev) =>
-      prev.map((x) =>
-        x.produtoId === l.produtoId
-          ? { ...x, especialId: novoId, descontoPerfil: valor, origem: x.origem ?? "acordo" }
-          : x,
-      ),
-    );
-    limparRascunho(setDescInput, l.produtoId);
-    toast.success("Desconto do cliente salvo");
-  };
-
-  const excluir = async () => {
-    if (!excluirLinha?.especialId) return;
-    setExcluindo(true);
-    const { error } = await supabase
-      .from("precos_cliente_produto")
-      .delete()
-      .eq("id", excluirLinha.especialId);
-    setExcluindo(false);
-    if (error) {
-      toast.error("Erro ao excluir: " + error.message);
-      return;
-    }
-    toast.success("Preço do cliente excluído");
-    setLinhas((prev) =>
-      prev.map((x) =>
-        x.produtoId === excluirLinha.produtoId
-          ? { ...x, especialId: null, precoEspecial: null, descontoPerfil: null, origem: null }
-          : x,
-      ),
-    );
-    limparRascunho(setPrecoInput, excluirLinha.produtoId);
-    limparRascunho(setDescInput, excluirLinha.produtoId);
-    setExcluirLinha(null);
   };
 
   return (
     <div className="space-y-6">
-      {/* BLOCO A — Desconto adicional */}
-      <Card>
-        <CardContent className="pt-6 space-y-3">
-          <div>
-            <h3 className="text-sm font-semibold">Desconto adicional</h3>
-            <p className="text-xs text-muted-foreground">
-              Percentual extra (0 a 100%) aplicado para este cliente.
-            </p>
-          </div>
-          <div className="flex items-end gap-3">
-            <div className="space-y-1.5">
-              <Label>Desconto (%)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                value={descontoLocal}
-                onChange={(e) => setDescontoLocal(e.target.value)}
-                className="w-32"
-              />
-            </div>
-            <Button onClick={salvarDesconto} disabled={salvandoDesconto}>
-              {salvandoDesconto && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Salvar
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* BLOCO B — Tabela de preços do cliente (todos os produtos) */}
+      {/* Tabela de preços do cliente (todos os produtos) */}
       <Card>
         <CardContent className="pt-6 space-y-4">
           <div>
             <h3 className="text-sm font-semibold">Preços por produto</h3>
             <p className="text-xs text-muted-foreground">
               Todos os produtos da tabela {clienteTabela ? `"${clienteTabela}"` : ""} com o
-              desconto do cluster aplicado. Edite o preço e o desconto do cliente direto na
-              tabela — as alterações são salvas automaticamente.
+              desconto do cluster aplicado. Clique no lápis para editar o preço e o desconto do
+              cliente em uma linha.
             </p>
           </div>
 
@@ -495,100 +350,158 @@ export function AbaPrecos({
                         <th className="px-3 py-2 font-medium">Marca</th>
                         <th className="px-3 py-2 font-medium text-right">Preço bruto</th>
                         <th className="px-3 py-2 font-medium text-right">Desc. cluster</th>
-                        <th className="px-3 py-2 font-medium text-right">Preço c/ cluster</th>
-                        <th className="px-3 py-2 font-medium text-right">Preço cliente</th>
-                        <th className="px-3 py-2 font-medium text-right">Desc. cliente (%)</th>
                         <th className="px-3 py-2 font-medium text-right">Preço final</th>
                         <th className="px-3 py-2 font-medium text-right">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {linhasFiltradas.map((l) => {
-                        const salvandoPreco = salvando[`${l.produtoId}:preco`];
-                        const salvandoDesc = salvando[`${l.produtoId}:desc`];
-                        const precoVal =
-                          precoInput[l.produtoId] ??
-                          (l.precoEspecial != null ? String(l.precoEspecial) : "");
-                        const descVal =
-                          descInput[l.produtoId] ??
-                          (l.descontoPerfil != null ? String(l.descontoPerfil) : "");
+                        const editando = editId === l.produtoId;
+                        const personalizado = l.especialId != null;
+                        const temPrecoCustom = l.precoEspecial != null;
+                        const temDescCustom = l.descontoPerfil != null;
                         return (
-                          <tr key={l.produtoId} className="border-t">
-                            <td className="px-3 py-2 font-mono text-xs">{l.codigo}</td>
-                            <td className="px-3 py-2">{l.nome}</td>
-                            <td className="px-3 py-2 text-muted-foreground">{l.marca ?? "—"}</td>
-                            <td className="px-3 py-2 text-right">{formatBRL(l.precoBruto)}</td>
-                            <td className="px-3 py-2 text-right">
-                              {l.descontoCluster > 0
-                                ? `${(l.descontoCluster * 100).toLocaleString("pt-BR", {
-                                    maximumFractionDigits: 2,
-                                  })}%`
-                                : "—"}
+                          <tr
+                            key={l.produtoId}
+                            className={editando ? "border-t bg-[#F0FBF7]" : "border-t"}
+                          >
+                            <td className="px-3 py-2 font-mono text-xs align-top">{l.codigo}</td>
+                            <td className="px-3 py-2 align-top">
+                              <div>{l.nome}</div>
+                              {editando ? (
+                                <span className="mt-1 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700">
+                                  editando
+                                </span>
+                              ) : (
+                                personalizado && (
+                                  <span className="mt-1 inline-block rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-emerald-700">
+                                    personalizado
+                                  </span>
+                                )
+                              )}
                             </td>
-                            <td className="px-3 py-2 text-right">{formatBRL(l.precoComCluster)}</td>
-                            <td className="px-3 py-2 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                {salvandoPreco && (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                                )}
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  step="0.01"
-                                  value={precoVal}
-                                  disabled={!clienteCodigoParceiro || salvandoPreco}
-                                  onChange={(e) =>
-                                    setPrecoInput((p) => ({ ...p, [l.produtoId]: e.target.value }))
-                                  }
-                                  onBlur={(e) => salvarPreco(l, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") e.currentTarget.blur();
-                                  }}
-                                  className="h-8 w-28 ml-auto text-right"
-                                  placeholder="—"
-                                />
-                              </div>
+                            <td className="px-3 py-2 text-muted-foreground align-top">
+                              {l.marca ?? "—"}
                             </td>
-                            <td className="px-3 py-2 text-right">
-                              <div className="flex items-center justify-end gap-1.5">
-                                {salvandoDesc && (
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                                )}
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  max={100}
-                                  step="0.01"
-                                  value={descVal}
-                                  disabled={!clienteCodigoParceiro || salvandoDesc}
-                                  onChange={(e) =>
-                                    setDescInput((p) => ({ ...p, [l.produtoId]: e.target.value }))
-                                  }
-                                  onBlur={(e) => salvarDescontoPerfil(l, e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter") e.currentTarget.blur();
-                                  }}
-                                  className="h-8 w-20 ml-auto text-right"
-                                  placeholder="—"
-                                />
-                              </div>
+
+                            {/* Preço bruto */}
+                            <td className="px-3 py-2 text-right align-top">
+                              {editando ? (
+                                <div className="flex flex-col items-end gap-1">
+                                  <span className="text-xs text-muted-foreground">
+                                    tabela: {formatBRL(l.precoBruto)}
+                                  </span>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    step="0.01"
+                                    value={editPreco}
+                                    disabled={salvando}
+                                    onChange={(e) => setEditPreco(e.target.value)}
+                                    className="h-8 w-28 text-right border-emerald-500 text-emerald-700 focus-visible:ring-emerald-500"
+                                  />
+                                </div>
+                              ) : temPrecoCustom ? (
+                                <div className="flex flex-col items-end">
+                                  <span className="text-xs text-muted-foreground line-through">
+                                    {formatBRL(l.precoBruto)}
+                                  </span>
+                                  <span className="font-medium text-emerald-700">
+                                    {formatBRL(l.precoEspecial as number)}
+                                  </span>
+                                </div>
+                              ) : (
+                                formatBRL(l.precoBruto)
+                              )}
                             </td>
-                            <td className="px-3 py-2 text-right font-semibold">
-                              {formatBRL(precoFinalDe(l))}
+
+                            {/* Desc. cluster */}
+                            <td className="px-3 py-2 text-right align-top">
+                              {editando ? (
+                                <div className="flex flex-col items-end gap-1">
+                                  <span className="text-xs text-muted-foreground">
+                                    cluster: {fmtPct(l.descontoCluster)}
+                                  </span>
+                                  <Input
+                                    type="number"
+                                    min={0}
+                                    max={100}
+                                    step="0.01"
+                                    value={editDesc}
+                                    disabled={salvando}
+                                    onChange={(e) => setEditDesc(e.target.value)}
+                                    className="h-8 w-20 text-right border-emerald-500 text-emerald-700 focus-visible:ring-emerald-500"
+                                  />
+                                </div>
+                              ) : temDescCustom ? (
+                                <div className="flex flex-col items-end">
+                                  <span className="text-xs text-muted-foreground line-through">
+                                    {fmtPct(l.descontoCluster)}
+                                  </span>
+                                  <span className="font-medium text-emerald-700">
+                                    {fmtPctNum(l.descontoPerfil as number)}
+                                  </span>
+                                </div>
+                              ) : l.descontoCluster > 0 ? (
+                                fmtPct(l.descontoCluster)
+                              ) : (
+                                "—"
+                              )}
                             </td>
-                            <td className="px-3 py-2">
-                              <div className="flex justify-end gap-1">
-                                {l.especialId && (
+
+                            {/* Preço final */}
+                            <td className="px-3 py-2 text-right align-top">
+                              {editando ? (
+                                <span className="text-base font-semibold text-emerald-700">
+                                  {formatBRL(finalEmEdicao())}
+                                </span>
+                              ) : personalizado ? (
+                                <span className="text-base font-semibold text-emerald-700">
+                                  {formatBRL(precoFinalDe(l))}
+                                </span>
+                              ) : (
+                                <span className="font-semibold">{formatBRL(precoFinalDe(l))}</span>
+                              )}
+                            </td>
+
+                            {/* Ações */}
+                            <td className="px-3 py-2 align-top">
+                              {editando ? (
+                                <div className="flex flex-col items-end gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    onClick={() => salvar(l)}
+                                    disabled={salvando}
+                                    className="w-24 bg-emerald-600 hover:bg-emerald-700"
+                                  >
+                                    {salvando && (
+                                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                    )}
+                                    Salvar
+                                  </Button>
                                   <Button
                                     size="sm"
                                     variant="ghost"
-                                    onClick={() => setExcluirLinha(l)}
-                                    title="Remover preço/desconto do cliente"
+                                    onClick={cancelarEdicao}
+                                    disabled={salvando}
+                                    className="w-24"
                                   >
-                                    <Trash2 className="h-4 w-4 text-red-600" />
+                                    Cancelar
                                   </Button>
-                                )}
-                              </div>
+                                </div>
+                              ) : (
+                                <div className="flex justify-end">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => iniciarEdicao(l)}
+                                    disabled={!clienteCodigoParceiro || editId != null}
+                                    title="Editar preço e desconto do cliente"
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
@@ -601,30 +514,6 @@ export function AbaPrecos({
           )}
         </CardContent>
       </Card>
-
-      {/* AlertDialog: excluir preço/desconto do cliente */}
-      <AlertDialog open={!!excluirLinha} onOpenChange={(o) => !o && setExcluirLinha(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Remover preço/desconto do cliente?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação é irreversível. O preço e o desconto do cliente serão removidos para este
-              produto — ele volta a usar o preço de tabela com o desconto do cluster.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={excluir}
-              disabled={excluindo}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {excluindo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

@@ -892,7 +892,6 @@ export default function ClienteDetalhe() {
               clienteCodigoParceiro={cliente.codigo_parceiro ?? cliente.codigo_cliente ?? null}
               clienteTabela={cliente.tabela_preco ?? null}
               clienteCluster={cliente.cluster ?? null}
-              descontoAdicional={cliente.desconto_adicional ?? null}
             />
           </TabsContent>
         )}
