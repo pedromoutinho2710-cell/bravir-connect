@@ -99,12 +99,37 @@ export function AbaPrecos({
       return;
     }
 
-    // 2) Preços brutos da tabela do cliente na vigência ativa.
-    const { data: precos, error: errPrecos } = await supabase
-      .from("precos")
-      .select("produto_id, preco_bruto")
-      .eq("vigencia_id", vigenciaId)
-      .eq("tabela", clienteTabela);
+    // 2-5) Preços brutos (precisa da vigência), produtos, descontos do cluster e
+    // preços/descontos do cliente são independentes entre si — busca em paralelo.
+    const [precosRes, prodsRes, descontosRes, especiaisRes] = await Promise.all([
+      // 2) Preços brutos da tabela do cliente na vigência ativa.
+      supabase
+        .from("precos")
+        .select("produto_id, preco_bruto")
+        .eq("vigencia_id", vigenciaId)
+        .eq("tabela", clienteTabela),
+      // 3) Produtos disponíveis (catálogo ativo).
+      supabase
+        .from("produtos")
+        .select("id, codigo_jiva, nome, marca")
+        .eq("disponivel", true),
+      // 4) Desconto do cluster por produto. percentual_desconto é fração (0,25 = 25%).
+      clienteCluster
+        ? supabase
+            .from("descontos")
+            .select("produto_id, percentual_desconto")
+            .eq("perfil_cliente", clienteCluster)
+        : Promise.resolve({ data: [] }),
+      // 5) Preços/descontos do cliente, chaveados por codigo_jiva.
+      clienteCodigoParceiro
+        ? supabase
+            .from("precos_cliente_produto")
+            .select("id, codigo_produto, preco_unitario, desconto_perfil, origem")
+            .eq("codigo_parceiro", clienteCodigoParceiro)
+        : Promise.resolve({ data: [] }),
+    ]);
+
+    const { data: precos, error: errPrecos } = precosRes;
     if (errPrecos) {
       toast.error("Erro ao carregar preços: " + errPrecos.message);
       setLinhas([]);
@@ -116,46 +141,27 @@ export function AbaPrecos({
       if (p.produto_id) precoMap[p.produto_id] = Number(p.preco_bruto);
     });
 
-    // 3) Produtos disponíveis (catálogo ativo).
-    const { data: prods } = await supabase
-      .from("produtos")
-      .select("id, codigo_jiva, nome, marca")
-      .eq("disponivel", true);
-    const produtos = (prods ?? []) as ProdutoBusca[];
+    const produtos = (prodsRes.data ?? []) as ProdutoBusca[];
 
-    // 4) Desconto do cluster por produto. percentual_desconto é fração (0,25 = 25%).
     const descontoMap: Record<string, number> = {};
-    if (clienteCluster) {
-      const { data: descontos } = await supabase
-        .from("descontos")
-        .select("produto_id, percentual_desconto")
-        .eq("perfil_cliente", clienteCluster);
-      (descontos ?? []).forEach((d) => {
-        if (d.produto_id) descontoMap[d.produto_id] = Number(d.percentual_desconto);
-      });
-    }
+    (descontosRes.data ?? []).forEach((d) => {
+      if (d.produto_id) descontoMap[d.produto_id] = Number(d.percentual_desconto);
+    });
 
-    // 5) Preços/descontos do cliente, chaveados por codigo_jiva.
     const especialMap: Record<
       string,
       { id: string; preco: number | null; desconto: number | null; origem: string }
     > = {};
-    if (clienteCodigoParceiro) {
-      const { data: especiais } = await supabase
-        .from("precos_cliente_produto")
-        .select("id, codigo_produto, preco_unitario, desconto_perfil, origem")
-        .eq("codigo_parceiro", clienteCodigoParceiro);
-      (especiais ?? []).forEach((e) => {
-        if (e.codigo_produto != null) {
-          especialMap[e.codigo_produto] = {
-            id: e.id,
-            preco: e.preco_unitario != null ? Number(e.preco_unitario) : null,
-            desconto: e.desconto_perfil != null ? Number(e.desconto_perfil) : null,
-            origem: e.origem,
-          };
-        }
-      });
-    }
+    (especiaisRes.data ?? []).forEach((e) => {
+      if (e.codigo_produto != null) {
+        especialMap[e.codigo_produto] = {
+          id: e.id,
+          preco: e.preco_unitario != null ? Number(e.preco_unitario) : null,
+          desconto: e.desconto_perfil != null ? Number(e.desconto_perfil) : null,
+          origem: e.origem,
+        };
+      }
+    });
 
     // 6) Monta uma linha por produto que tem preço na tabela do cliente.
     const montadas: LinhaProduto[] = produtos
