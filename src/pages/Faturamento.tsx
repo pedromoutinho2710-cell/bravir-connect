@@ -1014,6 +1014,27 @@ export default function Faturamento() {
     setSubmetendoNf(false);
     if (updErr) { toast.error("Erro ao atualizar status: " + updErr.message); return; }
 
+    // Bolsão: gera 1% do total quando o pedido é totalmente faturado.
+    // Guard de idempotência evita duplicar caso o faturamento seja reprocessado.
+    if (todosCompletos && faturarDialog.cliente_id) {
+      const { data: bolsaoExistente } = await supabase
+        .from("bolsao")
+        .select("id")
+        .eq("pedido_id", faturarDialog.id)
+        .eq("tipo", "gerado")
+        .limit(1);
+      if (!bolsaoExistente || bolsaoExistente.length === 0) {
+        const { error: bolsaoErr } = await supabase.from("bolsao").insert({
+          cliente_id: faturarDialog.cliente_id,
+          pedido_id: faturarDialog.id,
+          valor: faturarDialog.total * 0.01,
+          tipo: "gerado",
+          descricao: `Bolsão gerado - Pedido #${faturarDialog.numero_pedido}`,
+        });
+        if (bolsaoErr) console.error("Erro ao gerar bolsão:", bolsaoErr.message);
+      }
+    }
+
     // Notificar vendedor
     const nfNumero = nfData.numero.trim();
     await supabase.from("notificacoes").insert({
