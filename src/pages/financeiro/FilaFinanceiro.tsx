@@ -26,6 +26,7 @@ import {
   Undo2,
   Trash2,
   RotateCcw,
+  Eye,
 } from "lucide-react";
 
 type PedidoVista = {
@@ -60,6 +61,10 @@ export default function FilaFinanceiro() {
   const [motivo, setMotivo] = useState("");
   const [apagar, setApagar] = useState<PedidoVista | null>(null);
   const [acaoLoading, setAcaoLoading] = useState(false);
+  const [detalhePedido, setDetalhePedido] = useState<PedidoVista | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [itensDetalhe, setItensDetalhe] = useState<any[]>([]);
+  const [loadingItens, setLoadingItens] = useState(false);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -243,6 +248,24 @@ export default function FilaFinanceiro() {
     carregar();
   };
 
+  const abrirDetalhe = async (p: PedidoVista) => {
+    setDetalhePedido(p);
+    setLoadingItens(true);
+    const { data, error } = await supabase
+      .from("itens_pedido")
+      .select("id, quantidade, qtd_faturada, preco_unitario_bruto, preco_final, total_item, produtos(nome, codigo_jiva, cx_embarque, marca)")
+      .eq("pedido_id", p.id);
+    if (error) {
+      toast.error("Erro ao carregar itens: " + error.message);
+      setItensDetalhe([]);
+      setLoadingItens(false);
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    setItensDetalhe((data ?? []).map((i: any) => i));
+    setLoadingItens(false);
+  };
+
   const aba = ABAS.find((a) => a.key === abaAtiva) ?? ABAS[0];
   const lista = pedidos
     .filter((p) => p.status === aba.status)
@@ -337,6 +360,10 @@ export default function FilaFinanceiro() {
                           <div className="text-xs text-muted-foreground">Valor total</div>
                           <div className="text-lg font-bold text-emerald-700">{formatBRL(p.total)}</div>
                         </div>
+                        <Button variant="outline" onClick={() => abrirDetalhe(p)}>
+                          <Eye className="h-4 w-4 mr-1.5" />
+                          Ver detalhes
+                        </Button>
                         {p.status === "nao_liberado_envio" && (
                           <div className="flex items-center gap-2 flex-wrap">
                             <Button
@@ -469,6 +496,80 @@ export default function FilaFinanceiro() {
             <Button variant="destructive" onClick={confirmarApagar} disabled={acaoLoading}>
               {acaoLoading ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1.5" />}
               Apagar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de detalhes do pedido */}
+      <Dialog open={!!detalhePedido} onOpenChange={(o) => !o && setDetalhePedido(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Pedido #{detalhePedido?.numero_pedido} — {detalhePedido?.razao_social}
+            </DialogTitle>
+          </DialogHeader>
+          {detalhePedido && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                <div>
+                  <span className="text-muted-foreground">Data:</span>{" "}
+                  {formatDate(detalhePedido.data_pedido)}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Vendedor:</span>{" "}
+                  {detalhePedido.vendedor_id ? (profiles[detalhePedido.vendedor_id] ?? "—") : "—"}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Valor total:</span>{" "}
+                  <span className="font-semibold text-emerald-700">{formatBRL(detalhePedido.total)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Status:</span>{" "}
+                  {STATUS_LABEL[detalhePedido.status] ?? detalhePedido.status}
+                </div>
+              </div>
+
+              {loadingItens ? (
+                <div className="flex items-center justify-center py-10 text-muted-foreground">
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                  Carregando itens...
+                </div>
+              ) : itensDetalhe.length === 0 ? (
+                <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
+                  Nenhum item neste pedido.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b text-left text-xs text-muted-foreground">
+                        <th className="py-2 pr-2 font-medium">Produto</th>
+                        <th className="py-2 px-2 font-medium">Código</th>
+                        <th className="py-2 px-2 font-medium text-right">Qtd</th>
+                        <th className="py-2 px-2 font-medium text-right">Preço Final</th>
+                        <th className="py-2 pl-2 font-medium text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {itensDetalhe.map((i) => (
+                        <tr key={i.id} className="border-b last:border-0">
+                          <td className="py-2 pr-2">{i.produtos?.nome ?? "—"}</td>
+                          <td className="py-2 px-2 font-mono text-xs">{i.produtos?.codigo_jiva ?? "—"}</td>
+                          <td className="py-2 px-2 text-right">{i.quantidade}</td>
+                          <td className="py-2 px-2 text-right">{formatBRL(Number(i.preco_final ?? 0))}</td>
+                          <td className="py-2 pl-2 text-right font-medium">{formatBRL(Number(i.total_item ?? 0))}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetalhePedido(null)}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
