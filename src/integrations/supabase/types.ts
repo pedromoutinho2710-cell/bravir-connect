@@ -481,6 +481,8 @@ export type Database = {
           comprador: string | null
           created_at: string | null
           data_proximo_contato: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           desconto_adicional: number | null
           email: string | null
           etapa_pipeline: string | null
@@ -522,6 +524,8 @@ export type Database = {
           comprador?: string | null
           created_at?: string | null
           data_proximo_contato?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           desconto_adicional?: number | null
           email?: string | null
           etapa_pipeline?: string | null
@@ -563,6 +567,8 @@ export type Database = {
           comprador?: string | null
           created_at?: string | null
           data_proximo_contato?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           desconto_adicional?: number | null
           email?: string | null
           etapa_pipeline?: string | null
@@ -1290,6 +1296,8 @@ export type Database = {
           created_at: string | null
           criado_por_id: string | null
           data_pedido: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           faturado_em: string | null
           flag_prioridade: string | null
           id: string
@@ -1317,6 +1325,8 @@ export type Database = {
           created_at?: string | null
           criado_por_id?: string | null
           data_pedido?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           faturado_em?: string | null
           flag_prioridade?: string | null
           id?: string
@@ -1344,6 +1354,8 @@ export type Database = {
           created_at?: string | null
           criado_por_id?: string | null
           data_pedido?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           faturado_em?: string | null
           flag_prioridade?: string | null
           id?: string
@@ -1770,6 +1782,8 @@ export type Database = {
           created_at: string | null
           criado_por: string | null
           criado_por_nome: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           descricao: string
           id: string
           link_teste: string | null
@@ -1787,6 +1801,8 @@ export type Database = {
           created_at?: string | null
           criado_por?: string | null
           criado_por_nome?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           descricao: string
           id?: string
           link_teste?: string | null
@@ -1804,6 +1820,8 @@ export type Database = {
           created_at?: string | null
           criado_por?: string | null
           criado_por_nome?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           descricao?: string
           id?: string
           link_teste?: string | null
