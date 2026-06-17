@@ -9,7 +9,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { Bot, CheckCircle2, ExternalLink, Loader2, Paperclip, PencilLine, PlusCircle, Send } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Bot, CheckCircle2, ExternalLink, Loader2, Paperclip, PencilLine, PlusCircle, Send, Sparkles } from "lucide-react";
 
 const BRAND = "#0F6E56";
 
@@ -134,6 +144,7 @@ export default function MinhasSolicitacoes() {
   const qc = useQueryClient();
   const [corrigir, setCorrigir] = useState<Solicitacao | null>(null);
   const [novaAberta, setNovaAberta] = useState(false);
+  const [modoNova, setModoNova] = useState<"ia" | "manual">("ia");
 
   const { data: solicitacoes = [], isLoading } = useQuery({
     queryKey: ["minhas_solicitacoes", user?.id],
@@ -291,21 +302,238 @@ export default function MinhasSolicitacoes() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de nova solicitação com chat */}
-      <Dialog open={novaAberta} onOpenChange={setNovaAberta}>
+      {/* Modal de nova solicitação: escolha de modalidade + conteúdo */}
+      <Dialog
+        open={novaAberta}
+        onOpenChange={(o) => {
+          setNovaAberta(o);
+          if (!o) setModoNova("ia");
+        }}
+      >
         <DialogContent className="p-0 gap-0 overflow-hidden w-screen h-[100dvh] max-w-none rounded-none sm:w-[480px] sm:h-[600px] sm:max-w-[480px] sm:rounded-2xl">
-          <DialogTitle className="sr-only">Assistente Bravir</DialogTitle>
+          <DialogTitle className="sr-only">Nova solicitação</DialogTitle>
           <DialogDescription className="sr-only">
-            Chat com o Assistente Bravir para registrar uma nova solicitação, bug ou melhoria.
+            Escolha registrar via Assistente Bravir (IA) ou preencher um formulário manual.
           </DialogDescription>
-          <ChatNovaSolicitacao
-            onSaved={() => {
-              setNovaAberta(false);
-              qc.invalidateQueries({ queryKey: ["minhas_solicitacoes", user?.id] });
-            }}
-          />
+          <div className="absolute inset-0 flex flex-col">
+            {/* Cards de escolha de modalidade */}
+            <div className="grid grid-cols-2 gap-2 border-b border-border p-3">
+              <ModoCard
+                ativo={modoNova === "ia"}
+                onClick={() => setModoNova("ia")}
+                icon={<Sparkles className="h-4 w-4" />}
+                titulo="Via Assistente (IA)"
+                descricao="Converse com o assistente"
+              />
+              <ModoCard
+                ativo={modoNova === "manual"}
+                onClick={() => setModoNova("manual")}
+                icon={<PencilLine className="h-4 w-4" />}
+                titulo="Manual"
+                descricao="Preencha um formulário simples"
+              />
+            </div>
+
+            {/* Conteúdo correspondente */}
+            <div className="relative min-h-0 flex-1">
+              {modoNova === "ia" ? (
+                <ChatNovaSolicitacao
+                  onSaved={() => {
+                    setNovaAberta(false);
+                    setModoNova("ia");
+                    qc.invalidateQueries({ queryKey: ["minhas_solicitacoes", user?.id] });
+                  }}
+                />
+              ) : (
+                <FormularioManual
+                  onSaved={() => {
+                    setNovaAberta(false);
+                    setModoNova("ia");
+                    qc.invalidateQueries({ queryKey: ["minhas_solicitacoes", user?.id] });
+                  }}
+                />
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/* ───────────────── Card de escolha de modalidade ───────────────── */
+
+function ModoCard({
+  ativo,
+  onClick,
+  icon,
+  titulo,
+  descricao,
+}: {
+  ativo: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  titulo: string;
+  descricao: string;
+}) {
+  return (
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={
+        "cursor-pointer p-3 transition-all " +
+        (ativo ? "border-2" : "border hover:border-foreground/30 hover:shadow-sm")
+      }
+      style={ativo ? { borderColor: BRAND, boxShadow: `0 0 0 2px ${BRAND}33` } : undefined}
+    >
+      <div className="flex items-start gap-2.5">
+        <div
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-white"
+          style={{ backgroundColor: ativo ? BRAND : "#9ca3af" }}
+        >
+          {icon}
+        </div>
+        <div className="leading-tight">
+          <p className="text-sm font-semibold">{titulo}</p>
+          <p className="text-xs text-muted-foreground">{descricao}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ───────────────── Formulário manual de nova solicitação ───────────────── */
+
+// Mesmos códigos usados pela tabela solicitacoes_gestor e telas de exibição.
+const TIPO_OPCOES = [
+  { value: "altera", label: "Melhoria" },
+  { value: "bug", label: "Bug" },
+  { value: "duvida", label: "Dúvida" },
+  { value: "outro", label: "Outro" },
+];
+
+const PRIORIDADE_OPCOES = [
+  { value: "baixa", label: "Baixa" },
+  { value: "normal", label: "Normal" },
+  { value: "alta", label: "Alta" },
+  { value: "urgente", label: "Urgente" },
+];
+
+function FormularioManual({ onSaved }: { onSaved: () => void }) {
+  const { user, fullName } = useAuth();
+  const [tipo, setTipo] = useState("altera");
+  const [titulo, setTitulo] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [prioridade, setPrioridade] = useState("normal");
+  const [enviando, setEnviando] = useState(false);
+
+  async function handleSubmit() {
+    if (!titulo.trim() || !descricao.trim() || enviando) return;
+    setEnviando(true);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- colunas novas ainda não estão no types.ts gerado
+    const { error } = await (supabase as any).from("solicitacoes_gestor").insert({
+      tipo,
+      titulo: titulo.trim(),
+      descricao: descricao.trim(),
+      prioridade,
+      status: "aberto",
+      criado_por: user!.id,
+      criado_por_nome: fullName || user!.email || "Colaborador",
+    });
+
+    setEnviando(false);
+
+    if (error) {
+      console.error("Erro ao enviar solicitação manual:", error);
+      toast.error("Não consegui enviar agora. Tente novamente em instantes.");
+      return;
+    }
+
+    toast.success("Solicitação enviada! Pedro vai analisar em breve.");
+    onSaved();
+  }
+
+  return (
+    <div className="absolute inset-0 overflow-y-auto bg-background p-4">
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="manual-tipo">Tipo</Label>
+          <Select value={tipo} onValueChange={setTipo}>
+            <SelectTrigger id="manual-tipo">
+              <SelectValue placeholder="Selecione o tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              {TIPO_OPCOES.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="manual-titulo">Título</Label>
+          <Input
+            id="manual-titulo"
+            value={titulo}
+            onChange={(e) => setTitulo(e.target.value)}
+            placeholder="Resuma sua solicitação em uma frase"
+            maxLength={140}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="manual-descricao">Descrição</Label>
+          <Textarea
+            id="manual-descricao"
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+            placeholder="Descreva com detalhes o que precisa, o problema ou a sugestão"
+            rows={6}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="manual-prioridade">Prioridade</Label>
+          <Select value={prioridade} onValueChange={setPrioridade}>
+            <SelectTrigger id="manual-prioridade">
+              <SelectValue placeholder="Selecione a prioridade" />
+            </SelectTrigger>
+            <SelectContent>
+              {PRIORIDADE_OPCOES.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Button
+          onClick={handleSubmit}
+          disabled={enviando || !titulo.trim() || !descricao.trim()}
+          className="w-full text-white"
+          style={{ backgroundColor: BRAND }}
+        >
+          {enviando ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Enviando...
+            </>
+          ) : (
+            "Enviar solicitação"
+          )}
+        </Button>
+      </div>
     </div>
   );
 }
