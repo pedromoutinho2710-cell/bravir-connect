@@ -74,6 +74,51 @@ export type Database = {
         }
         Relationships: []
       }
+      bolsao: {
+        Row: {
+          cliente_id: string
+          created_at: string | null
+          descricao: string | null
+          id: string
+          pedido_id: string | null
+          tipo: string
+          valor: number
+        }
+        Insert: {
+          cliente_id: string
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          pedido_id?: string | null
+          tipo: string
+          valor: number
+        }
+        Update: {
+          cliente_id?: string
+          created_at?: string | null
+          descricao?: string | null
+          id?: string
+          pedido_id?: string | null
+          tipo?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bolsao_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bolsao_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cadastros_pendentes: {
         Row: {
           bairro: string | null
