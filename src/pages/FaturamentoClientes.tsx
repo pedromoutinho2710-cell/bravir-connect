@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
+import { useAuth } from "@/hooks/useAuth";
 import { CLUSTERS, TABELAS_PRECO, UFS } from "@/lib/constants";
 import { Loader2, Search, Users, Pencil, Trash2, SlidersHorizontal, X, UserPlus } from "lucide-react";
 
@@ -89,6 +90,7 @@ function computeAtividade(data: string | null): "ativo" | "em_risco" | "inativo"
 
 export default function FaturamentoClientes() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [vendedoresMap, setVendedoresMap] = useState<Record<string, string>>({});
@@ -322,7 +324,7 @@ export default function FaturamentoClientes() {
   const excluir = async () => {
     if (!excluirCliente) return;
     setExcluindo(true);
-    const { error } = await supabase.from("clientes").delete().eq("id", excluirCliente.id);
+    const { error } = await supabase.from("clientes").update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null }).eq("id", excluirCliente.id);
     setExcluindo(false);
     if (error) { toast.error("Erro ao excluir: " + error.message); return; }
     toast.success(`${excluirCliente.nome_parceiro || excluirCliente.razao_social} excluído`);

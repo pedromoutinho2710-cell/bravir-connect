@@ -1178,14 +1178,14 @@ export default function Faturamento() {
       .select("id")
       .eq("pedido_origem_id", pedidoId);
 
+    const softDelete = { deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null };
+
     if (filhos && filhos.length > 0) {
       const filhoIds = filhos.map((f) => f.id);
-      await supabase.from("itens_pedido").delete().in("pedido_id", filhoIds);
-      await supabase.from("pedidos").delete().in("id", filhoIds);
+      await supabase.from("pedidos").update(softDelete).in("id", filhoIds);
     }
 
-    await supabase.from("itens_pedido").delete().eq("pedido_id", pedidoId);
-    const { error } = await supabase.from("pedidos").delete().eq("id", pedidoId);
+    const { error } = await supabase.from("pedidos").update(softDelete).eq("id", pedidoId);
 
     setExcluindo(false);
     if (error) { toast.error("Erro ao excluir: " + error.message); return; }

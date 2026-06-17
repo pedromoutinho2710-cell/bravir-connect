@@ -12,6 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
+import { useAuth } from "@/hooks/useAuth";
 import { CLUSTERS, TABELAS_PRECO, MARCAS } from "@/lib/constants";
 import { Loader2, Search, ArrowRightLeft, Trash2, SlidersHorizontal, X, ExternalLink, ShoppingCart, FileText, CalendarClock } from "lucide-react";
 import { TabelaPrecos } from "@/components/cliente/TabelaPrecos";
@@ -110,6 +111,7 @@ type Metrica = {
 
 export default function ClientesAdmin() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
@@ -499,7 +501,7 @@ export default function ClientesAdmin() {
   const excluir = async () => {
     if (!excluirCliente) return;
     setExcluindo(true);
-    const { error } = await supabase.from("clientes").delete().eq("id", excluirCliente.id);
+    const { error } = await supabase.from("clientes").update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null }).eq("id", excluirCliente.id);
     setExcluindo(false);
     if (error) { toast.error("Erro ao excluir: " + error.message); return; }
     toast.success(`${excluirCliente.nome_parceiro || excluirCliente.razao_social} excluído`);

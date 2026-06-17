@@ -288,7 +288,7 @@ export default function MeusPedidos() {
   const excluirPedidoDevolvido = async () => {
     if (!excluirDevolvido) return;
     setExcluindoDevolvido(true);
-    const { error } = await supabase.from("pedidos").delete().eq("id", excluirDevolvido);
+    const { error } = await supabase.from("pedidos").update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null }).eq("id", excluirDevolvido);
     setExcluindoDevolvido(false);
     if (error) { toast.error("Erro ao excluir pedido"); return; }
     toast.success("Pedido excluído");
@@ -300,8 +300,7 @@ export default function MeusPedidos() {
   const excluirPedido = async () => {
     if (!excluirAlvo) return;
     setExcluindo(true);
-    await supabase.from("itens_pedido").delete().eq("pedido_id", excluirAlvo.id);
-    const { error } = await supabase.from("pedidos").delete().eq("id", excluirAlvo.id);
+    const { error } = await supabase.from("pedidos").update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null }).eq("id", excluirAlvo.id);
     setExcluindo(false);
     if (error) { toast.error("Erro ao excluir pedido"); return; }
     toast.success(`Pedido #${excluirAlvo.numero} excluído`);

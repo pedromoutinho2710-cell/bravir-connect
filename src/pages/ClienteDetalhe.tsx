@@ -457,7 +457,7 @@ export default function ClienteDetalhe() {
   const excluir = async () => {
     if (!cliente) return;
     setExcluindo(true);
-    const { error } = await supabase.from("clientes").delete().eq("id", cliente.id);
+    const { error } = await supabase.from("clientes").update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null }).eq("id", cliente.id);
     setExcluindo(false);
     if (error) { toast.error("Erro ao excluir: " + error.message); return; }
     toast.success(`${cliente.nome_parceiro || cliente.razao_social} excluído`);
