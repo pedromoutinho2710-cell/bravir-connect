@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { formatBRL, formatDate } from "@/lib/format";
+import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -62,6 +62,8 @@ export default function FilaFinanceiro() {
   const [apagar, setApagar] = useState<PedidoVista | null>(null);
   const [acaoLoading, setAcaoLoading] = useState(false);
   const [detalhePedido, setDetalhePedido] = useState<PedidoVista | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [pedidoDetalhe, setPedidoDetalhe] = useState<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [itensDetalhe, setItensDetalhe] = useState<any[]>([]);
   const [loadingItens, setLoadingItens] = useState(false);
@@ -250,10 +252,23 @@ export default function FilaFinanceiro() {
 
   const abrirDetalhe = async (p: PedidoVista) => {
     setDetalhePedido(p);
+    setPedidoDetalhe(null);
     setLoadingItens(true);
+
+    const { data: pedidoCompleto } = await supabase
+      .from("pedidos")
+      .select(`
+        id, numero_pedido, data_pedido, status, total, cond_pagamento, observacoes,
+        tipo, agendamento, ordem_compra, pagamento_vista,
+        clientes(razao_social, nome_parceiro, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, codigo_parceiro, codigo_cliente, cluster, tabela_preco)
+      `)
+      .eq("id", p.id)
+      .single();
+    setPedidoDetalhe(pedidoCompleto ?? null);
+
     const { data, error } = await supabase
       .from("itens_pedido")
-      .select("id, quantidade, qtd_faturada, preco_unitario_bruto, preco_final, total_item, produtos(nome, codigo_jiva, cx_embarque, marca)")
+      .select("id, quantidade, qtd_faturada, preco_unitario_bruto, desconto_perfil, desconto_comercial, desconto_trade, preco_final, total_item, produtos(nome, codigo_jiva, cx_embarque, marca, peso_unitario)")
       .eq("pedido_id", p.id);
     if (error) {
       toast.error("Erro ao carregar itens: " + error.message);
@@ -502,73 +517,169 @@ export default function FilaFinanceiro() {
       </Dialog>
 
       {/* Dialog de detalhes do pedido */}
-      <Dialog open={!!detalhePedido} onOpenChange={(o) => !o && setDetalhePedido(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={!!detalhePedido} onOpenChange={(o) => { if (!o) { setDetalhePedido(null); setPedidoDetalhe(null); } }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Pedido #{detalhePedido?.numero_pedido} — {detalhePedido?.razao_social}
             </DialogTitle>
           </DialogHeader>
-          {detalhePedido && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Data:</span>{" "}
-                  {formatDate(detalhePedido.data_pedido)}
+          {detalhePedido && (() => {
+            const cl = pedidoDetalhe?.clientes ?? null;
+            const endereco = cl
+              ? [cl.rua, cl.numero, cl.bairro].filter(Boolean).join(", ")
+              : "";
+            const pesoTotal = itensDetalhe.reduce(
+              (s, i) => s + Number(i.produtos?.peso_unitario ?? 0) * Number(i.quantidade ?? 0),
+              0,
+            );
+            const valorTotal = itensDetalhe.reduce((s, i) => s + Number(i.total_item ?? 0), 0);
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Data:</span>{" "}
+                    {formatDate(detalhePedido.data_pedido)}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Vendedor:</span>{" "}
+                    {detalhePedido.vendedor_id ? (profiles[detalhePedido.vendedor_id] ?? "—") : "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Status:</span>{" "}
+                    {STATUS_LABEL[detalhePedido.status] ?? detalhePedido.status}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">CNPJ:</span>{" "}
+                    {cl?.cnpj ? formatCNPJ(cl.cnpj) : "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Cidade / UF:</span>{" "}
+                    {[cl?.cidade, cl?.uf].filter(Boolean).join(" / ") || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">CEP:</span>{" "}
+                    {cl?.cep || "—"}
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Endereço:</span>{" "}
+                    {endereco || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Telefone:</span>{" "}
+                    {cl?.telefone || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Email:</span>{" "}
+                    {cl?.email || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Comprador:</span>{" "}
+                    {cl?.comprador || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Código Parceiro:</span>{" "}
+                    {cl?.codigo_parceiro || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Código Cliente (Sankhya):</span>{" "}
+                    {cl?.codigo_cliente || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Cluster:</span>{" "}
+                    {cl?.cluster || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tabela de Preço:</span>{" "}
+                    {cl?.tabela_preco || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Cond. Pagamento:</span>{" "}
+                    {pedidoDetalhe?.cond_pagamento || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Agendamento:</span>{" "}
+                    {pedidoDetalhe?.agendamento ? "Sim" : "Não"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Ordem de Compra:</span>{" "}
+                    {pedidoDetalhe?.ordem_compra || "—"}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Tipo:</span>{" "}
+                    {pedidoDetalhe?.tipo || "Pedido"}
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-muted-foreground">Observações:</span>{" "}
+                    {pedidoDetalhe?.observacoes || "—"}
+                  </div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Vendedor:</span>{" "}
-                  {detalhePedido.vendedor_id ? (profiles[detalhePedido.vendedor_id] ?? "—") : "—"}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Valor total:</span>{" "}
-                  <span className="font-semibold text-emerald-700">{formatBRL(detalhePedido.total)}</span>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Status:</span>{" "}
-                  {STATUS_LABEL[detalhePedido.status] ?? detalhePedido.status}
-                </div>
-              </div>
 
-              {loadingItens ? (
-                <div className="flex items-center justify-center py-10 text-muted-foreground">
-                  <Loader2 className="h-5 w-5 animate-spin mr-2" />
-                  Carregando itens...
-                </div>
-              ) : itensDetalhe.length === 0 ? (
-                <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
-                  Nenhum item neste pedido.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b text-left text-xs text-muted-foreground">
-                        <th className="py-2 pr-2 font-medium">Produto</th>
-                        <th className="py-2 px-2 font-medium">Código</th>
-                        <th className="py-2 px-2 font-medium text-right">Qtd</th>
-                        <th className="py-2 px-2 font-medium text-right">Preço Final</th>
-                        <th className="py-2 pl-2 font-medium text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {itensDetalhe.map((i) => (
-                        <tr key={i.id} className="border-b last:border-0">
-                          <td className="py-2 pr-2">{i.produtos?.nome ?? "—"}</td>
-                          <td className="py-2 px-2 font-mono text-xs">{i.produtos?.codigo_jiva ?? "—"}</td>
-                          <td className="py-2 px-2 text-right">{i.quantidade}</td>
-                          <td className="py-2 px-2 text-right">{formatBRL(Number(i.preco_final ?? 0))}</td>
-                          <td className="py-2 pl-2 text-right font-medium">{formatBRL(Number(i.total_item ?? 0))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          )}
+                {loadingItens ? (
+                  <div className="flex items-center justify-center py-10 text-muted-foreground">
+                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    Carregando itens...
+                  </div>
+                ) : itensDetalhe.length === 0 ? (
+                  <div className="rounded-md border border-dashed py-8 text-center text-sm text-muted-foreground">
+                    Nenhum item neste pedido.
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b text-left text-xs text-muted-foreground">
+                            <th className="py-2 pr-2 font-medium">Produto</th>
+                            <th className="py-2 px-2 font-medium">Código</th>
+                            <th className="py-2 px-2 font-medium text-right">Cx Embarque</th>
+                            <th className="py-2 px-2 font-medium text-right">Qtd</th>
+                            <th className="py-2 px-2 font-medium text-right">Qtd Faturada</th>
+                            <th className="py-2 px-2 font-medium text-right">Preço Bruto</th>
+                            <th className="py-2 px-2 font-medium text-right">Desc. Perfil %</th>
+                            <th className="py-2 px-2 font-medium text-right">Desc. Comercial %</th>
+                            <th className="py-2 px-2 font-medium text-right">Desc. Trade %</th>
+                            <th className="py-2 px-2 font-medium text-right">Preço Final</th>
+                            <th className="py-2 pl-2 font-medium text-right">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {itensDetalhe.map((i) => (
+                            <tr key={i.id} className="border-b last:border-0">
+                              <td className="py-2 pr-2">{i.produtos?.nome ?? "—"}</td>
+                              <td className="py-2 px-2 font-mono text-xs">{i.produtos?.codigo_jiva ?? "—"}</td>
+                              <td className="py-2 px-2 text-right">{i.produtos?.cx_embarque ?? "—"}</td>
+                              <td className="py-2 px-2 text-right">{i.quantidade}</td>
+                              <td className="py-2 px-2 text-right">{i.qtd_faturada ?? "—"}</td>
+                              <td className="py-2 px-2 text-right">{formatBRL(Number(i.preco_unitario_bruto ?? 0))}</td>
+                              <td className="py-2 px-2 text-right">{Number(i.desconto_perfil ?? 0)}%</td>
+                              <td className="py-2 px-2 text-right">{Number(i.desconto_comercial ?? 0)}%</td>
+                              <td className="py-2 px-2 text-right">{Number(i.desconto_trade ?? 0)}%</td>
+                              <td className="py-2 px-2 text-right">{formatBRL(Number(i.preco_final ?? 0))}</td>
+                              <td className="py-2 pl-2 text-right font-medium">{formatBRL(Number(i.total_item ?? 0))}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex justify-end gap-8 border-t pt-3 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">Peso total:</span>{" "}
+                        <span className="font-semibold">{pesoTotal.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} kg</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">Valor total:</span>{" "}
+                        <span className="font-semibold text-emerald-700">{formatBRL(valorTotal)}</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDetalhePedido(null)}>
+            <Button variant="outline" onClick={() => { setDetalhePedido(null); setPedidoDetalhe(null); }}>
               Fechar
             </Button>
           </DialogFooter>
