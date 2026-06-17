@@ -102,6 +102,16 @@ export function SecaoProdutos({
   const [busca, setBusca] = useState("");
   const [precos, setPrecos] = useState<Record<string, Record<string, number>>>({});
   const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, { preco: number; desconto_perfil: number | null; origem: string }>>({});
+  // Valor "em digitação" do campo de quantidade (string), por produto.
+  // Permite que o campo fique vazio enquanto o usuário edita; a conversão/validação ocorre no onBlur.
+  const [qtdDraft, setQtdDraft] = useState<Record<string, string>>({});
+
+  const limparQtdDraft = (produto_id: string) =>
+    setQtdDraft((d) => {
+      const next = { ...d };
+      delete next[produto_id];
+      return next;
+    });
 
   // Recarrega preços quando vigência muda
   useEffect(() => {
@@ -478,8 +488,13 @@ export function SecaoProdutos({
                         <Input
                           key={i.produto_id + "-qtd-livre"}
                           type="number" min={1}
-                          value={i.quantidade}
-                          onChange={(e) => atualizarQtd(i.produto_id, Math.max(1, Number(e.target.value) || 1))}
+                          value={qtdDraft[i.produto_id] ?? String(i.quantidade)}
+                          onChange={(e) => setQtdDraft((d) => ({ ...d, [i.produto_id]: e.target.value }))}
+                          onBlur={(e) => {
+                            const qtd = Math.max(1, Number(e.target.value) || 1);
+                            atualizarQtd(i.produto_id, qtd);
+                            limparQtdDraft(i.produto_id);
+                          }}
                           className={cn("w-20 ml-auto h-7 text-xs")}
                         />
                       ) : (
@@ -487,10 +502,12 @@ export function SecaoProdutos({
                           <Input
                             key={i.produto_id + "-qtd-cx"}
                             type="number" min={1} step={1}
-                            value={Math.round(i.quantidade / i.cx_embarque)}
-                            onChange={(e) => {
+                            value={qtdDraft[i.produto_id] ?? String(Math.round(i.quantidade / i.cx_embarque))}
+                            onChange={(e) => setQtdDraft((d) => ({ ...d, [i.produto_id]: e.target.value }))}
+                            onBlur={(e) => {
                               const caixas = Math.max(1, Math.floor(Number(e.target.value) || 1));
                               atualizarQtd(i.produto_id, caixas * i.cx_embarque);
+                              limparQtdDraft(i.produto_id);
                             }}
                             className={cn("w-20 ml-auto h-7 text-xs")}
                           />
