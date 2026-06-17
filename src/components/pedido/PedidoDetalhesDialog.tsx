@@ -79,6 +79,7 @@ type PedidoDetalhe = {
   telefone: string | null;
   codigo_parceiro: string | null;
   negativado: boolean;
+  desconto_adicional: number | null;
   responsavel_id: string | null;
   responsavel_nome: string | null;
   pedido_origem_id: string | null;
@@ -141,7 +142,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
           pedido_origem_id,
           cliente_id,
           vendedor_id,
-          clientes(razao_social, nome_parceiro, cnpj, cidade, uf, comprador, telefone, codigo_parceiro, negativado),
+          clientes(razao_social, nome_parceiro, cnpj, cidade, uf, comprador, telefone, codigo_parceiro, negativado, desconto_adicional),
           itens_pedido(
             produto_id,
             quantidade,
@@ -260,6 +261,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
         telefone: cl?.telefone ?? null,
         codigo_parceiro: cl?.codigo_parceiro ?? null,
         negativado: cl?.negativado ?? false,
+        desconto_adicional: cl?.desconto_adicional ?? null,
         responsavel_id: d.responsavel_id ?? null,
         responsavel_nome: responsavelNome,
         pedido_origem_id: d.pedido_origem_id ?? null,
@@ -313,6 +315,12 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
 
   const totalGeral = pedido?.itens.reduce((s, i) => s + i.total, 0) ?? 0;
   const etapa = pedido ? tempoNaEtapa(pedido.status_atualizado_em) : null;
+
+  // Descontos aplicados (comercial/trade são por item, mas representam a
+  // negociação do pedido — exibimos o maior valor aplicado)
+  const descontoComercial = pedido ? Math.max(0, ...pedido.itens.map((i) => i.desconto_comercial)) : 0;
+  const descontoTrade = pedido ? Math.max(0, ...pedido.itens.map((i) => i.desconto_trade)) : 0;
+  const descontoAdicional = pedido?.desconto_adicional ?? 0;
 
   const baixarPDF = async () => {
     if (!pedido) return;
@@ -467,6 +475,11 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
               <div><span className="text-muted-foreground">Data: </span>{formatDate(pedido.data_pedido)}</div>
               <div><span className="text-muted-foreground">Pagamento: </span>{pedido.cond_pagamento || "—"}</div>
               <div><span className="text-muted-foreground">Agendamento: </span>{pedido.agendamento ? "Sim" : "Não"}</div>
+              <div><span className="text-muted-foreground">Desconto comercial: </span>{descontoComercial}%</div>
+              <div><span className="text-muted-foreground">Desconto trade: </span>{descontoTrade}%</div>
+              {descontoAdicional > 0 && (
+                <div><span className="text-muted-foreground">Desconto adicional: </span>{descontoAdicional}%</div>
+              )}
               {pedido.observacoes && (
                 <div className="col-span-2"><span className="text-muted-foreground">Obs: </span>{pedido.observacoes}</div>
               )}
