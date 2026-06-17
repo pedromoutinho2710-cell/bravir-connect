@@ -1,7 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, CheckCircle2, Loader2, Send } from "lucide-react";
+import { Bot, CheckCircle2, Loader2, Send, Sparkles, PencilLine } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const BRAND = "#0F6E56";
 
@@ -72,7 +85,241 @@ function splitRegistro(raw: string): { display: string; registro: Registro | nul
   return { display: raw.trim(), registro: null };
 }
 
+/* ───────────────────────── Página: escolha de modalidade ───────────────────────── */
+
+type Modo = "ia" | "manual";
+
 export default function NovaSolicitacao() {
+  const { user } = useAuth();
+  const [modo, setModo] = useState<Modo>("ia");
+
+  if (!user) return null;
+
+  return (
+    <div className="mx-auto flex h-[calc(100vh-4rem)] w-full max-w-3xl flex-col gap-4 p-4">
+      {/* Cards de escolha */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <ModoCard
+          ativo={modo === "ia"}
+          onClick={() => setModo("ia")}
+          icon={<Sparkles className="h-5 w-5" />}
+          titulo="Via Assistente (IA)"
+          descricao="Converse com o assistente e ele organiza tudo para você."
+        />
+        <ModoCard
+          ativo={modo === "manual"}
+          onClick={() => setModo("manual")}
+          icon={<PencilLine className="h-5 w-5" />}
+          titulo="Manual"
+          descricao="Preencha um formulário simples com os campos da solicitação."
+        />
+      </div>
+
+      {/* Formulário correspondente */}
+      <div className="min-h-0 flex-1">
+        {modo === "ia" ? <ChatIA /> : <FormularioManual />}
+      </div>
+    </div>
+  );
+}
+
+function ModoCard({
+  ativo,
+  onClick,
+  icon,
+  titulo,
+  descricao,
+}: {
+  ativo: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  titulo: string;
+  descricao: string;
+}) {
+  return (
+    <Card
+      role="button"
+      tabIndex={0}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={
+        "cursor-pointer p-4 transition-all " +
+        (ativo
+          ? "border-2 ring-2 ring-offset-1"
+          : "border hover:border-foreground/30 hover:shadow-sm")
+      }
+      style={ativo ? { borderColor: BRAND, boxShadow: `0 0 0 2px ${BRAND}33` } : undefined}
+    >
+      <div className="flex items-start gap-3">
+        <div
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-white"
+          style={{ backgroundColor: ativo ? BRAND : "#9ca3af" }}
+        >
+          {icon}
+        </div>
+        <div className="leading-tight">
+          <p className="text-sm font-semibold">{titulo}</p>
+          <p className="text-xs text-muted-foreground">{descricao}</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+/* ───────────────────────── Opção B: Formulário manual ───────────────────────── */
+
+// Os valores armazenados seguem os códigos já usados pela tabela solicitacoes_gestor
+// e pelas telas de exibição (MinhasSolicitacoes / admin Solicitacoes).
+const TIPO_OPCOES = [
+  { value: "altera", label: "Melhoria" },
+  { value: "bug", label: "Bug" },
+  { value: "duvida", label: "Dúvida" },
+  { value: "outro", label: "Outro" },
+];
+
+const PRIORIDADE_OPCOES = [
+  { value: "baixa", label: "Baixa" },
+  { value: "normal", label: "Normal" },
+  { value: "alta", label: "Alta" },
+  { value: "urgente", label: "Urgente" },
+];
+
+function FormularioManual() {
+  const { user, fullName } = useAuth();
+  const [tipo, setTipo] = useState("altera");
+  const [titulo, setTitulo] = useState("");
+  const [descricao, setDescricao] = useState("");
+  const [prioridade, setPrioridade] = useState("normal");
+  const [enviando, setEnviando] = useState(false);
+  const [enviado, setEnviado] = useState(false);
+
+  function resetForm() {
+    setTipo("altera");
+    setTitulo("");
+    setDescricao("");
+    setPrioridade("normal");
+  }
+
+  async function handleSubmit() {
+    if (!titulo.trim() || !descricao.trim() || enviando) return;
+    setEnviando(true);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- colunas novas ainda não estão no types.ts gerado
+    const { error } = await (supabase as any).from("solicitacoes_gestor").insert({
+      tipo,
+      titulo: titulo.trim(),
+      descricao: descricao.trim(),
+      prioridade,
+      status: "aberto",
+      criado_por: user!.id,
+      criado_por_nome: fullName || user!.email || "Colaborador",
+    });
+
+    setEnviando(false);
+
+    if (error) {
+      console.error("Erro ao enviar solicitação manual:", error);
+      toast.error("Não consegui enviar agora. Tente novamente em instantes.");
+      return;
+    }
+
+    toast.success("Solicitação enviada! Pedro vai analisar em breve.");
+    resetForm();
+    setEnviado(true);
+  }
+
+  return (
+    <div className="flex h-full flex-col overflow-y-auto rounded-xl border border-border bg-background p-5">
+      {enviado && (
+        <div className="mb-4 flex items-start gap-2 rounded-lg border border-green-300 bg-green-50 px-3 py-2 text-sm text-green-800">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+          <span>Solicitação enviada com sucesso! Você pode enviar outra abaixo.</span>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="manual-tipo">Tipo</Label>
+          <Select value={tipo} onValueChange={setTipo}>
+            <SelectTrigger id="manual-tipo">
+              <SelectValue placeholder="Selecione o tipo" />
+            </SelectTrigger>
+            <SelectContent>
+              {TIPO_OPCOES.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="manual-titulo">Título</Label>
+          <Input
+            id="manual-titulo"
+            value={titulo}
+            onChange={(e) => setTitulo(e.target.value)}
+            placeholder="Resuma sua solicitação em uma frase"
+            maxLength={140}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="manual-descricao">Descrição</Label>
+          <Textarea
+            id="manual-descricao"
+            value={descricao}
+            onChange={(e) => setDescricao(e.target.value)}
+            placeholder="Descreva com detalhes o que precisa, o problema ou a sugestão"
+            rows={6}
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="manual-prioridade">Prioridade</Label>
+          <Select value={prioridade} onValueChange={setPrioridade}>
+            <SelectTrigger id="manual-prioridade">
+              <SelectValue placeholder="Selecione a prioridade" />
+            </SelectTrigger>
+            <SelectContent>
+              {PRIORIDADE_OPCOES.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <Button
+          onClick={handleSubmit}
+          disabled={enviando || !titulo.trim() || !descricao.trim()}
+          className="w-full text-white"
+          style={{ backgroundColor: BRAND }}
+        >
+          {enviando ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Enviando...
+            </>
+          ) : (
+            "Enviar solicitação"
+          )}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── Opção A: Chat com o assistente (IA) ───────────────────────── */
+
+function ChatIA() {
   const { user, fullName } = useAuth();
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
@@ -96,8 +343,6 @@ export default function NovaSolicitacao() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
   }, [messages, loading]);
-
-  if (!user) return null;
 
   async function salvarRegistro(registro: Registro, conversa: ChatMsg[]) {
     const chatHistorico = conversa
@@ -194,7 +439,7 @@ export default function NovaSolicitacao() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-background">
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-border bg-background">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: BRAND }}>
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
