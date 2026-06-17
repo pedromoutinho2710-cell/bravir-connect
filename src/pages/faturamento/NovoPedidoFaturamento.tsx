@@ -1,7 +1,6 @@
 import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -27,7 +26,6 @@ type ItemPedido = {
 };
 
 export default function NovoPedidoFaturamento() {
-  const { user } = useAuth();
   const navigate = useNavigate();
 
   // ── Modo cliente ────────────────────────────────────────────────
@@ -221,7 +219,8 @@ export default function NovoPedidoFaturamento() {
       status: "pendente_sankhya",
       cliente_id: clienteId ?? null,
       vendedor_id: vendedorId,
-      responsavel_id: user?.id ?? null,
+      // responsavel_id deixado em branco de propósito: pedido novo deve cair na aba "Em aberto",
+      // não em "Assumidos" (que exige responsavel_id preenchido).
       cond_pagamento: condPagamento,
       observacoes: obsCompleta,
       data_pedido: new Date().toISOString().split("T")[0],
