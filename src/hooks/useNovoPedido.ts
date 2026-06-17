@@ -482,6 +482,38 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         }
       } catch { /* best-effort */ }
 
+      // Pedido de bonificação: debita o valor do bolsão do cliente.
+      if (cliente.tipo === "Bonificação") {
+        try {
+          const { data: pedBon } = await supabase
+            .from("pedidos")
+            .select("numero_pedido, cliente_id")
+            .eq("id", id)
+            .single();
+          if (pedBon?.cliente_id) {
+            // Idempotência: só debita se ainda não existe registro 'usado' para este pedido.
+            const { data: jaUsado } = await supabase
+              .from("bolsao")
+              .select("id")
+              .eq("pedido_id", id)
+              .eq("tipo", "usado")
+              .limit(1);
+            if (!jaUsado || jaUsado.length === 0) {
+              const { error: bolsaoErr } = await supabase.from("bolsao").insert({
+                cliente_id: pedBon.cliente_id,
+                pedido_id: id,
+                valor: totalGeral,
+                tipo: "usado",
+                descricao: `Bonificação - Pedido #${pedBon.numero_pedido}`,
+              });
+              if (bolsaoErr) console.warn("Falha ao debitar bolsão:", bolsaoErr);
+            }
+          }
+        } catch (err) {
+          console.warn("Falha ao debitar bolsão:", err);
+        }
+      }
+
       pedidoEnviadoRef.current = true;
       if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
       localStorage.removeItem(rascunhoKey);
