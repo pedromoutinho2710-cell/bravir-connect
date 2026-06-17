@@ -254,7 +254,7 @@ export function AbaPrecos({
     if (l.especialId) {
       ({ error } = await supabase
         .from("precos_cliente_produto")
-        .update({ preco_unitario: preco, desconto_perfil: desc })
+        .update({ preco_unitario: preco, desconto_perfil: desc, origem: "acordo" })
         .eq("id", l.especialId));
     } else {
       const res = await supabase
@@ -284,7 +284,7 @@ export function AbaPrecos({
               especialId: novoId,
               precoEspecial: preco,
               descontoPerfil: desc,
-              origem: x.origem ?? "acordo",
+              origem: "acordo",
             }
           : x,
       ),
