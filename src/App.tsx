@@ -46,6 +46,7 @@ import NovaSolicitacao from "./pages/NovaSolicitacao";
 import MinhasSolicitacoes from "@/pages/MinhasSolicitacoes";
 import ClientesAdmin from "./pages/admin/ClientesAdmin";
 import ClientesAdminLista from "./pages/admin/ClientesAdminLista";
+import Lixeira from "./pages/Lixeira";
 import ImportarClientes from "./pages/admin/ImportarClientes";
 import ClienteDetalhe from "./pages/ClienteDetalhe";
 import BolsaoPage from "./pages/BolsaoPage";
@@ -153,6 +154,11 @@ const App = () => (
             {/* Minhas Solicitações — colaborador acompanha as próprias solicitações */}
             <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento", "trade", "financeiro"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/minhas-solicitacoes" element={<MinhasSolicitacoes />} />
+            </Route>
+
+            {/* Lixeira — soft-delete global */}
+            <Route element={<ProtectedRoute allow={["admin", "gestora", "vendedor", "faturamento", "logistica", "trade"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/lixeira" element={<Lixeira />} />
             </Route>
 
             {/* Rotas de vendedor — acessíveis por vendedor e admin */}

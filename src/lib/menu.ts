@@ -22,6 +22,7 @@ import {
   CheckSquare,
   BarChart2,
   Wallet,
+  Trash2,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -50,6 +51,7 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Configurações", url: "/admin/configuracoes", icon: Settings },
       { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
       { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
+      { title: "Lixeira", url: "/lixeira", icon: Trash2 },
     ],
   },
   {
@@ -68,6 +70,7 @@ export const BASE_FATURAMENTO_ITEMS: Item[] = [
   { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
   { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
   { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
+  { title: "Lixeira", url: "/lixeira", icon: Trash2 },
 ];
 
 // Nota: o admin usa ADMIN_SECTIONS (que também inclui "Minhas Solicitações"),
@@ -82,11 +85,13 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Minhas Tarefas", url: "/minhas-tarefas", icon: CheckSquare },
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
+    { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
   logistica: [
     { title: "Dashboard", url: "/logistica", icon: LayoutDashboard },
     { title: "Fila de Pedidos", url: "/logistica/fila", icon: ListChecks },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
+    { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
   gestora: [
     { title: "Dashboard", url: "/gestora/dashboard", icon: LayoutDashboard },
@@ -99,6 +104,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Gestão de Metas", url: "/admin/gestao-metas", icon: Target },
     { title: "Leads Evento", url: "/gestora/leads-evento", icon: UserCheck },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
+    { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
   gestora_faturamento: [
     { title: "Dashboard", url: "/dashboard-faturamento", icon: LayoutDashboard },
@@ -121,5 +127,6 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Importar Faturamento", url: "/trade/importar-faturamento", icon: Upload },
     { title: "Importar Metas", url: "/trade/importar-metas", icon: Target },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
+    { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
 };
