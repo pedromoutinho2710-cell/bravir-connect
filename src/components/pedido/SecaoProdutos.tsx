@@ -77,7 +77,11 @@ type Props = {
   bloqueado?: boolean;
   codigoParceiro?: string;
   preservarDescontos?: boolean;
+  tipoPedido?: string;
 };
+
+// Marcas que não podem ser usadas em pedidos de bonificação
+const MARCAS_BLOQUEADAS_BONIFICACAO = ["Laby", "Bendita Cânfora"];
 
 export function SecaoProdutos({
   produtos,
@@ -92,6 +96,7 @@ export function SecaoProdutos({
   bloqueado = false,
   codigoParceiro = "",
   preservarDescontos = false,
+  tipoPedido,
 }: Props) {
   const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
@@ -164,6 +169,10 @@ export function SecaoProdutos({
     }
     if (itens.some((i) => i.produto_id === p.id)) {
       toast.warning("Produto já adicionado");
+      return;
+    }
+    if (tipoPedido === "Bonificação" && MARCAS_BLOQUEADAS_BONIFICACAO.includes(p.marca)) {
+      toast.error(`Produtos ${p.marca} não podem ser usados em bonificação`);
       return;
     }
     onChange([...itens, calcItem(p, p.cx_embarque)]);

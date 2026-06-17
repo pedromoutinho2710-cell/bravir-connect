@@ -240,6 +240,7 @@ export default function NovoPedido() {
         bloqueado={!camposObrigatoriosOk}
         codigoParceiro={cliente.codigo_cliente ?? ""}
         preservarDescontos={corrigindo}
+        tipoPedido={cliente.tipo}
       />
 
       <ResumoFinanceiro itens={itens} uf={cliente.uf} tabela_preco={cliente.tabela_preco} />
