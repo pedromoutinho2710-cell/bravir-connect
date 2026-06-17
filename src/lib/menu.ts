@@ -116,10 +116,12 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
     { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
+    { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
   financeiro: [
     { title: "Fila Financeiro", url: "/financeiro/fila", icon: Wallet },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
+    { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
   trade: [
     { title: "Clientes aguardando", url: "/trade", icon: Store },

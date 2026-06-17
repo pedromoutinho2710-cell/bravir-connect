@@ -157,7 +157,7 @@ const App = () => (
             </Route>
 
             {/* Lixeira — soft-delete global */}
-            <Route element={<ProtectedRoute allow={["admin", "gestora", "vendedor", "faturamento", "logistica", "trade"]}><AppLayout /></ProtectedRoute>}>
+            <Route element={<ProtectedRoute allow={["admin", "gestora", "vendedor", "faturamento", "logistica", "trade", "gestora_faturamento", "financeiro"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/lixeira" element={<Lixeira />} />
             </Route>
 
