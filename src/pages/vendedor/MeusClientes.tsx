@@ -147,7 +147,8 @@ export default function MeusClientes() {
         supabase
           .from("clientes")
           .select("id, razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf, status")
-          .eq("vendedor_id", effectiveUserId ?? ""),
+          .eq("vendedor_id", effectiveUserId ?? "")
+          .is("deleted_at", null),
       ]);
 
       if (pedidosRes.error) {

@@ -497,6 +497,7 @@ export default function Faturamento() {
           )
         `)
         .neq("status", "rascunho")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
       const { data, error } = await query;

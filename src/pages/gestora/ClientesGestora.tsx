@@ -185,7 +185,8 @@ export default function ClientesGestora() {
       const [clRes, pedRes] = await Promise.all([
         supabase
           .from("clientes")
-          .select("id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente, canal, desconto_adicional, suframa"),
+          .select("id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente, canal, desconto_adicional, suframa")
+          .is("deleted_at", null),
         supabase
           .from("pedidos")
           .select("cliente_id, data_pedido, itens_pedido(total_item, produtos(marca))")

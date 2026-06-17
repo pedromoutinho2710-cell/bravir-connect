@@ -123,6 +123,7 @@ export default function MeusPedidos() {
         `)
         .eq("vendedor_id", effectiveUserId ?? "")
         .or("pedido_origem_id.is.null,status.eq.devolvido")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
 
       if (filtroDataInicio) query = query.gte("data_pedido", filtroDataInicio);

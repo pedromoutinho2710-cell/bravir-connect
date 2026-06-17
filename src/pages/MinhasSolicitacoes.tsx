@@ -154,6 +154,7 @@ export default function MinhasSolicitacoes() {
         .from("solicitacoes_gestor")
         .select("*")
         .eq("criado_por", user!.id)
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as unknown as Solicitacao[];
