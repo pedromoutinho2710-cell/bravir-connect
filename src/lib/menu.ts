@@ -47,6 +47,7 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Importar Clientes", url: "/admin/importar-clientes", icon: Upload },
       { title: "Tabelas de Preço", url: "/admin/tabelas-preco", icon: Tag },
       { title: "Configurações", url: "/admin/configuracoes", icon: Settings },
+      { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
       { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
     ],
   },
@@ -68,8 +69,8 @@ export const BASE_FATURAMENTO_ITEMS: Item[] = [
   { title: "Minhas Solicitações", url: "/minhas-solicitacoes", icon: ClipboardList },
 ];
 
-// Nota: pedro.bravir@gmail.com (admin) usa ADMIN_SECTIONS, não FLAT_MENU_STATIC,
-// portanto não vê "Minhas Solicitações" — este item é só para os demais roles.
+// Nota: o admin usa ADMIN_SECTIONS (que também inclui "Minhas Solicitações"),
+// não FLAT_MENU_STATIC. "Minhas Solicitações" está disponível para todos os roles.
 export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
   vendedor: [
     { title: "Meu Painel", url: "/meu-painel", icon: LayoutDashboard },
