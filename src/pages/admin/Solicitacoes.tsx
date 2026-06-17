@@ -10,7 +10,13 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -65,7 +71,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   "em-andamento": { label: "Em andamento", cls: "bg-amber-100 text-amber-800 border-amber-300" },
   aprovado: { label: "Aprovado", cls: "bg-green-100 text-green-800 border-green-300" },
   reprovado: { label: "Reprovado", cls: "bg-red-100 text-red-800 border-red-300" },
-  devolvido: { label: "Devolvido pelo colaborador", cls: "bg-purple-100 text-purple-800 border-purple-300" },
+  devolvido: { label: "Devolvido", cls: "bg-orange-100 text-orange-800 border-orange-300" },
   concluido: { label: "Concluído", cls: "bg-green-100 text-green-800 border-green-300" },
   recusado: { label: "Recusado", cls: "bg-red-100 text-red-800 border-red-300" },
 };
@@ -136,14 +142,13 @@ export default function Solicitacoes() {
         if (error) throw error;
         return count ?? 0;
       };
-      const [aberto, emAnalise, aprovado, devolvido, reprovado] = await Promise.all([
+      const [aberto, concluido, reprovado, devolvido] = await Promise.all([
         contar("aberto"),
-        contar("em_analise"),
-        contar("aprovado"),
-        contar("devolvido"),
+        contar("concluido"),
         contar("reprovado"),
+        contar("devolvido"),
       ]);
-      return { aberto, emAnalise, aprovado, devolvido, reprovado };
+      return { aberto, concluido, reprovado, devolvido };
     },
   });
 
@@ -310,10 +315,9 @@ export default function Solicitacoes() {
 
   const kpiCards = [
     { label: "Em aberto", value: kpis?.aberto ?? 0, color: "text-blue-700" },
-    { label: "Em análise", value: kpis?.emAnalise ?? 0, color: "text-amber-700" },
-    { label: "Aprovados", value: kpis?.aprovado ?? 0, color: "text-green-700" },
-    { label: "Devolvidos", value: kpis?.devolvido ?? 0, color: "text-purple-700" },
+    { label: "Concluídos", value: kpis?.concluido ?? 0, color: "text-green-700" },
     { label: "Reprovados", value: kpis?.reprovado ?? 0, color: "text-red-700" },
+    { label: "Devolvidos", value: kpis?.devolvido ?? 0, color: "text-orange-700" },
   ];
 
   return (
@@ -325,7 +329,7 @@ export default function Solicitacoes() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpiCards.map(({ label, value, color }) => (
           <Card key={label}>
             <CardContent className="pt-4 pb-3 px-4">
@@ -361,10 +365,9 @@ export default function Solicitacoes() {
               <SelectContent>
                 <SelectItem value="todos">Todos</SelectItem>
                 <SelectItem value="aberto">Aberto</SelectItem>
-                <SelectItem value="em_analise">Em análise</SelectItem>
-                <SelectItem value="aprovado">Aprovado</SelectItem>
+                <SelectItem value="concluido">Concluído</SelectItem>
                 <SelectItem value="reprovado">Reprovado</SelectItem>
-                <SelectItem value="devolvido">Devolvido pelo colaborador</SelectItem>
+                <SelectItem value="devolvido">Devolvido</SelectItem>
               </SelectContent>
             </Select>
             <Button
@@ -516,9 +519,13 @@ function DetalhePainel({
 
   const chat = Array.isArray(s.chat_historico) ? s.chat_historico : [];
 
-  // Sub-formulário inline para reprovar (motivo). Aprovação é direta.
+  // Sub-formulário inline para reprovar (motivo). Conclusão é direta.
   const [acao, setAcao] = useState<"none" | "reprovar">("none");
   const [motivoReprovacao, setMotivoReprovacao] = useState("");
+
+  // Dialog para devolver (motivo da devolução).
+  const [devolverOpen, setDevolverOpen] = useState(false);
+  const [motivoDevolucao, setMotivoDevolucao] = useState("");
 
   return (
     <div className="space-y-4">
@@ -557,10 +564,10 @@ function DetalhePainel({
               </div>
             )}
             {s.status === "devolvido" && (
-              <div className="rounded-md border border-purple-200 bg-purple-50 p-2">
-                <dt className="text-xs uppercase tracking-wide text-purple-700">Motivo da devolução</dt>
-                <dd className="whitespace-pre-wrap text-purple-900">
-                  {s.motivo_devolucao || "O colaborador devolveu a solicitação com ajustes."}
+              <div className="rounded-md border border-orange-200 bg-orange-50 p-2">
+                <dt className="text-xs uppercase tracking-wide text-orange-700">Motivo da devolução</dt>
+                <dd className="whitespace-pre-wrap text-orange-900">
+                  {s.motivo_devolucao || "Solicitação devolvida para ajustes."}
                 </dd>
               </div>
             )}
@@ -580,25 +587,14 @@ function DetalhePainel({
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
-                variant="outline"
-                className="border-amber-300 text-amber-800 hover:bg-amber-50"
-                disabled={s.status === "em_analise"}
-                onClick={() => {
-                  setAcao("none");
-                  onStatus("em_analise");
-                }}
-              >
-                Em análise
-              </Button>
-              <Button
-                size="sm"
                 className="bg-green-600 hover:bg-green-700"
+                disabled={s.status === "concluido"}
                 onClick={() => {
                   setAcao("none");
-                  onStatus("aprovado");
+                  onStatus("concluido");
                 }}
               >
-                Aprovar
+                Concluído
               </Button>
               <Button
                 size="sm"
@@ -606,7 +602,19 @@ function DetalhePainel({
                 className="border-red-300 text-red-700 hover:bg-red-50"
                 onClick={() => setAcao((a) => (a === "reprovar" ? "none" : "reprovar"))}
               >
-                Reprovar
+                Reprovado
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-orange-300 text-orange-700 hover:bg-orange-50"
+                onClick={() => {
+                  setAcao("none");
+                  setMotivoDevolucao("");
+                  setDevolverOpen(true);
+                }}
+              >
+                Devolvido
               </Button>
             </div>
 
@@ -635,6 +643,39 @@ function DetalhePainel({
               </div>
             )}
           </div>
+
+          {/* Dialog — devolver com motivo */}
+          <Dialog open={devolverOpen} onOpenChange={setDevolverOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Devolver solicitação</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Motivo da devolução</label>
+                <Textarea
+                  value={motivoDevolucao}
+                  onChange={(e) => setMotivoDevolucao(e.target.value)}
+                  placeholder="Explique o que o colaborador precisa ajustar..."
+                  rows={4}
+                />
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDevolverOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  className="bg-orange-600 hover:bg-orange-700"
+                  disabled={!motivoDevolucao.trim()}
+                  onClick={() => {
+                    onStatus("devolvido", { motivo_devolucao: motivoDevolucao.trim() });
+                    setDevolverOpen(false);
+                  }}
+                >
+                  Confirmar devolução
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </CardContent>
       </Card>
 
