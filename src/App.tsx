@@ -48,6 +48,7 @@ import ClientesAdmin from "./pages/admin/ClientesAdmin";
 import ClientesAdminLista from "./pages/admin/ClientesAdminLista";
 import ImportarClientes from "./pages/admin/ImportarClientes";
 import ClienteDetalhe from "./pages/ClienteDetalhe";
+import BolsaoPage from "./pages/BolsaoPage";
 import TabelasPreco from "./pages/admin/TabelasPreco";
 import Configuracoes from "./pages/admin/Configuracoes";
 import Campanhas from "./pages/admin/Campanhas";
@@ -190,6 +191,11 @@ const App = () => (
             {/* Edição de pedido — acessível por faturamento e admin */}
             <Route element={<ProtectedRoute allow={["faturamento", "admin", "gestora_faturamento"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/faturamento/pedidos/:id/editar" element={<EditarPedidoFaturamento />} />
+            </Route>
+
+            {/* Bolsão — vendedor (própria carteira), gestora e admin (todos) */}
+            <Route element={<ProtectedRoute allow={["admin", "gestora", "vendedor"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/bolsao" element={<BolsaoPage />} />
             </Route>
 
             {/* Detalhe de cliente — acessível por vendedor, admin, faturamento, trade, gestora, logistica */}

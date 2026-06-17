@@ -40,6 +40,7 @@ export const ADMIN_SECTIONS: Section[] = [
     label: "Administração",
     items: [
       { title: "Clientes (Lista)", url: "/admin/clientes-lista", icon: Users },
+      { title: "Bolsão", url: "/bolsao", icon: Wallet },
       { title: "Equipe", url: "/admin/equipe", icon: UserCog },
       { title: "Metas", url: "/admin/metas", icon: Target },
       { title: "Gestão de Metas", url: "/admin/gestao-metas", icon: Target },
@@ -77,6 +78,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Novo Pedido", url: "/novo-pedido", icon: PlusCircle },
     { title: "Meus Pedidos", url: "/meus-pedidos", icon: ClipboardList },
     { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
+    { title: "Bolsão", url: "/bolsao", icon: Wallet },
     { title: "Minhas Tarefas", url: "/minhas-tarefas", icon: CheckSquare },
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
@@ -91,6 +93,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
     { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
     { title: "Clientes", url: "/gestora/clientes", icon: Users },
+    { title: "Bolsão", url: "/bolsao", icon: Wallet },
     { title: "Cadastrar Cliente", url: "/gestora/cadastrar-cliente", icon: UserPlus },
     { title: "Gestão do Time", url: "/gestora/time", icon: UserCog },
     { title: "Gestão de Metas", url: "/admin/gestao-metas", icon: Target },
