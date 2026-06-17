@@ -45,6 +45,7 @@ import Solicitacoes from "./pages/admin/Solicitacoes";
 import NovaSolicitacao from "./pages/NovaSolicitacao";
 import MinhasSolicitacoes from "@/pages/MinhasSolicitacoes";
 import ClientesAdmin from "./pages/admin/ClientesAdmin";
+import ClientesAdminLista from "./pages/admin/ClientesAdminLista";
 import ImportarClientes from "./pages/admin/ImportarClientes";
 import ClienteDetalhe from "./pages/ClienteDetalhe";
 import TabelasPreco from "./pages/admin/TabelasPreco";
@@ -121,6 +122,7 @@ const App = () => (
               <Route path="/admin/formularios" element={<Formularios />} />
               <Route path="/admin/pedidos" element={<PedidosAdmin />} />
               <Route path="/admin/clientes" element={<ClientesAdmin />} />
+              <Route path="/admin/clientes-lista" element={<ClientesAdminLista />} />
               <Route path="/admin/importar-clientes" element={<ImportarClientes />} />
               <Route path="/admin/tabelas-preco" element={<TabelasPreco />} />
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
