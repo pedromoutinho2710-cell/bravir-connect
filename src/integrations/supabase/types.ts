@@ -1291,6 +1291,7 @@ export type Database = {
         Row: {
           agendamento: boolean | null
           cliente_id: string | null
+          comprador: string | null
           comprovante_url: string | null
           cond_pagamento: string | null
           created_at: string | null
@@ -1298,6 +1299,7 @@ export type Database = {
           data_pedido: string | null
           deleted_at: string | null
           deleted_by: string | null
+          email: string | null
           faturado_em: string | null
           flag_prioridade: string | null
           id: string
@@ -1312,6 +1314,7 @@ export type Database = {
           status: string | null
           status_atualizado_em: string | null
           tabela_preco: string | null
+          telefone: string | null
           tipo: string | null
           total: number | null
           vendedor_id: string | null
@@ -1320,6 +1323,7 @@ export type Database = {
         Insert: {
           agendamento?: boolean | null
           cliente_id?: string | null
+          comprador?: string | null
           comprovante_url?: string | null
           cond_pagamento?: string | null
           created_at?: string | null
@@ -1327,6 +1331,7 @@ export type Database = {
           data_pedido?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          email?: string | null
           faturado_em?: string | null
           flag_prioridade?: string | null
           id?: string
@@ -1341,6 +1346,7 @@ export type Database = {
           status?: string | null
           status_atualizado_em?: string | null
           tabela_preco?: string | null
+          telefone?: string | null
           tipo?: string | null
           total?: number | null
           vendedor_id?: string | null
@@ -1349,6 +1355,7 @@ export type Database = {
         Update: {
           agendamento?: boolean | null
           cliente_id?: string | null
+          comprador?: string | null
           comprovante_url?: string | null
           cond_pagamento?: string | null
           created_at?: string | null
@@ -1356,6 +1363,7 @@ export type Database = {
           data_pedido?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          email?: string | null
           faturado_em?: string | null
           flag_prioridade?: string | null
           id?: string
@@ -1370,6 +1378,7 @@ export type Database = {
           status?: string | null
           status_atualizado_em?: string | null
           tabela_preco?: string | null
+          telefone?: string | null
           tipo?: string | null
           total?: number | null
           vendedor_id?: string | null
