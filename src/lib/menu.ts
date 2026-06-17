@@ -39,6 +39,7 @@ export const ADMIN_SECTIONS: Section[] = [
   {
     label: "Administração",
     items: [
+      { title: "Clientes", url: "/admin/clientes", icon: Users },
       { title: "Equipe", url: "/admin/equipe", icon: UserCog },
       { title: "Metas", url: "/admin/metas", icon: Target },
       { title: "Gestão de Metas", url: "/admin/gestao-metas", icon: Target },

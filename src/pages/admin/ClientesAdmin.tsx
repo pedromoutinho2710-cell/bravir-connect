@@ -12,8 +12,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
-import { CLUSTERS, TABELAS_PRECO } from "@/lib/constants";
-import { Loader2, Search, ArrowRightLeft, Trash2, SlidersHorizontal, X, ExternalLink } from "lucide-react";
+import { CLUSTERS, TABELAS_PRECO, MARCAS } from "@/lib/constants";
+import { Loader2, Search, ArrowRightLeft, Trash2, SlidersHorizontal, X, ExternalLink, ShoppingCart, FileText, CalendarClock } from "lucide-react";
+import { TabelaPrecos } from "@/components/cliente/TabelaPrecos";
 
 const STATUS_LABEL: Record<string, string> = {
   pendente_cadastro: "Pendente cadastro",
@@ -49,6 +50,29 @@ function computeAtividade(data: string | null): "ativo" | "em_risco" | "inativo"
   return dias <= 30 ? "ativo" : dias <= 90 ? "em_risco" : "inativo";
 }
 
+function calcCicloMedio(dates: Date[]): number | null {
+  if (dates.length < 2) return null;
+  const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
+  let totalDiff = 0;
+  for (let i = 1; i < sorted.length; i++) {
+    totalDiff += (sorted[i].getTime() - sorted[i - 1].getTime()) / (1000 * 60 * 60 * 24);
+  }
+  return totalDiff / (sorted.length - 1);
+}
+
+function abcBadge(abc: "A" | "B" | "C") {
+  const cls = {
+    A: "bg-green-100 text-green-800 border-green-400",
+    B: "bg-yellow-100 text-yellow-800 border-yellow-400",
+    C: "bg-orange-100 text-orange-800 border-orange-400",
+  }[abc];
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-bold ${cls}`}>
+      {abc}
+    </span>
+  );
+}
+
 type Cliente = {
   id: string;
   razao_social: string;
@@ -60,13 +84,29 @@ type Cliente = {
   negativado: boolean | null;
   cidade: string | null;
   uf: string | null;
+  cep: string | null;
+  comprador: string | null;
   codigo_parceiro: string | null;
   nome_parceiro: string | null;
   canal: string | null;
   suframa: boolean | null;
+  desconto_adicional: number | null;
 };
 
 type LastOrder = { data_pedido: string; total: number };
+
+type Agregado = { ltv: number; num_pedidos: number; marcas: string[]; dates: Date[] };
+
+type Metrica = {
+  rank: number;
+  abc: "A" | "B" | "C";
+  ltv: number;
+  num_pedidos: number;
+  ticket_medio: number;
+  ciclo_medio: number | null;
+  proxima_compra: Date | null;
+  marcas: string[];
+};
 
 export default function ClientesAdmin() {
   const navigate = useNavigate();
@@ -75,6 +115,11 @@ export default function ClientesAdmin() {
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [profileList, setProfileList] = useState<{ id: string; nome: string }[]>([]);
   const [lastOrders, setLastOrders] = useState<Record<string, LastOrder>>({});
+  const [aggMap, setAggMap] = useState<Record<string, Agregado>>({});
+
+  // Tabela de preços do cliente
+  const [tabelaCliente, setTabelaCliente] = useState<Cliente | null>(null);
+  const [tabelaClienteOpen, setTabelaClienteOpen] = useState(false);
 
   // Pipeline filters
   const [busca, setBusca] = useState("");
@@ -112,13 +157,13 @@ export default function ClientesAdmin() {
     const [clRes, prRes, roleRes, loRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, cnpj, status, cluster, tabela_preco, vendedor_id, negativado, cidade, uf, codigo_parceiro, nome_parceiro, canal, suframa")
+        .select("id, razao_social, cnpj, status, cluster, tabela_preco, vendedor_id, negativado, cidade, uf, cep, comprador, codigo_parceiro, nome_parceiro, canal, suframa, desconto_adicional")
         .order("razao_social"),
       supabase.from("profiles").select("id, full_name, email"),
       supabase.from("user_roles").select("user_id").in("role", ["vendedor", "admin"]),
       supabase
         .from("pedidos")
-        .select("cliente_id, data_pedido, itens_pedido(total_item)")
+        .select("cliente_id, data_pedido, itens_pedido(total_item, produtos(marca))")
         .neq("status", "rascunho")
         .order("data_pedido", { ascending: false }),
     ]);
@@ -143,15 +188,32 @@ export default function ClientesAdmin() {
 
     if (loRes.data) {
       const map: Record<string, LastOrder> = {};
+      const agg: Record<string, { ltv: number; num_pedidos: number; marcas: Set<string>; dates: Date[] }> = {};
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (loRes.data as any[]).forEach((p) => {
+        if (!p.cliente_id) return;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
+        // Pedidos vêm ordenados por data desc — o primeiro de cada cliente é o último pedido
         if (!map[p.cliente_id]) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
           map[p.cliente_id] = { data_pedido: p.data_pedido, total };
         }
+        if (!agg[p.cliente_id]) agg[p.cliente_id] = { ltv: 0, num_pedidos: 0, marcas: new Set(), dates: [] };
+        const e = agg[p.cliente_id];
+        e.num_pedidos += 1;
+        if (p.data_pedido) e.dates.push(new Date(p.data_pedido));
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (p.itens_pedido ?? []).forEach((item: any) => {
+          e.ltv += Number(item.total_item);
+          if (item.produtos?.marca) e.marcas.add(item.produtos.marca);
+        });
       });
       setLastOrders(map);
+      const aggOut: Record<string, Agregado> = {};
+      Object.entries(agg).forEach(([k, v]) => {
+        aggOut[k] = { ltv: v.ltv, num_pedidos: v.num_pedidos, marcas: Array.from(v.marcas), dates: v.dates };
+      });
+      setAggMap(aggOut);
     }
 
     // Dados adicionais do mês atual
@@ -279,6 +341,67 @@ export default function ClientesAdmin() {
     carregar().finally(() => setLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Curva ABC + métricas (LTV, ticket, ciclo, próxima compra) — ranking global por LTV
+  const metricas = useMemo(() => {
+    const list = clientes.map((c) => {
+      const a = aggMap[c.id];
+      const ltv = a?.ltv ?? 0;
+      const num = a?.num_pedidos ?? 0;
+      return {
+        id: c.id,
+        ltv,
+        num_pedidos: num,
+        ticket_medio: num > 0 ? ltv / num : 0,
+        marcas: a?.marcas ?? [],
+        dates: a?.dates ?? [],
+      };
+    });
+    list.sort((x, y) => y.ltv - x.ltv);
+    const total = list.length;
+    const cutA = Math.ceil(total * 0.2);
+    const cutB = Math.ceil(total * 0.5);
+    const map: Record<string, Metrica> = {};
+    list.forEach((c, idx) => {
+      const abc: "A" | "B" | "C" = idx < cutA ? "A" : idx < cutB ? "B" : "C";
+      const ciclo_medio = calcCicloMedio(c.dates);
+      const sortedDates = [...c.dates].sort((a, b) => b.getTime() - a.getTime());
+      const ultima = sortedDates[0] ?? null;
+      let proxima_compra: Date | null = null;
+      if (ultima && ciclo_medio) {
+        proxima_compra = new Date(ultima.getTime() + ciclo_medio * 24 * 60 * 60 * 1000);
+      }
+      map[c.id] = {
+        rank: idx + 1,
+        abc,
+        ltv: c.ltv,
+        num_pedidos: c.num_pedidos,
+        ticket_medio: c.ticket_medio,
+        ciclo_medio,
+        proxima_compra,
+        marcas: c.marcas,
+      };
+    });
+    return map;
+  }, [clientes, aggMap]);
+
+  const novoPedidoParaCliente = (c: Cliente) => {
+    navigate("/novo-pedido", {
+      state: {
+        fromCliente: {
+          cliente_id: c.id,
+          cnpj: c.cnpj,
+          razao_social: c.razao_social,
+          cidade: c.cidade,
+          uf: c.uf,
+          cep: c.cep,
+          comprador: c.comprador,
+          cluster: c.cluster,
+          tabela_preco: c.tabela_preco,
+        },
+      },
+    });
+  };
 
   const ufsUnicas = useMemo(() =>
     Array.from(new Set(clientes.map((c) => c.uf).filter(Boolean))).sort() as string[],
@@ -521,6 +644,8 @@ export default function ClientesAdmin() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">#</TableHead>
+                    <TableHead className="w-10">ABC</TableHead>
                     <TableHead>Razão Social</TableHead>
                     <TableHead>CNPJ</TableHead>
                     <TableHead>Cidade / UF</TableHead>
@@ -528,18 +653,28 @@ export default function ClientesAdmin() {
                     <TableHead>Cluster</TableHead>
                     <TableHead>Tabela</TableHead>
                     <TableHead>Vendedor</TableHead>
+                    <TableHead className="text-right">LTV</TableHead>
+                    <TableHead className="text-right">Pedidos</TableHead>
+                    <TableHead className="text-right">Ticket médio</TableHead>
+                    <TableHead>Ciclo médio</TableHead>
+                    <TableHead>Próxima compra</TableHead>
                     <TableHead>Último Pedido</TableHead>
                     <TableHead>Mês Atual</TableHead>
+                    <TableHead>Marcas</TableHead>
                     <TableHead>Negativado</TableHead>
-                    <TableHead className="w-20">Ações</TableHead>
+                    <TableHead className="w-32">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtrados.map((c) => {
                     const lo = lastOrders[c.id];
                     const atv = computeAtividade(lo?.data_pedido ?? null);
+                    const m = metricas[c.id];
+                    const vencida = m?.proxima_compra && m.proxima_compra.getTime() < Date.now();
                     return (
                       <TableRow key={c.id} className="cursor-pointer hover:bg-muted/50" onClick={() => navigate(`/clientes/${c.id}`)}>
+                        <TableCell className="font-mono text-muted-foreground text-sm">{m?.rank ?? "—"}</TableCell>
+                        <TableCell>{m ? abcBadge(m.abc) : <span className="text-muted-foreground text-sm">—</span>}</TableCell>
                         <TableCell className="font-medium">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span>{c.nome_parceiro || c.razao_social}</span>
@@ -560,6 +695,22 @@ export default function ClientesAdmin() {
                         </TableCell>
                         <TableCell className="text-sm">{c.tabela_preco ?? "—"}</TableCell>
                         <TableCell className="text-sm">{c.vendedor_id ? (profiles[c.vendedor_id] ?? "—") : "—"}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatBRL(m?.ltv ?? 0)}</TableCell>
+                        <TableCell className="text-right text-sm">{m?.num_pedidos ?? 0}</TableCell>
+                        <TableCell className="text-right text-sm">{formatBRL(m?.ticket_medio ?? 0)}</TableCell>
+                        <TableCell className="text-sm">
+                          {m?.ciclo_medio != null ? `${Math.round(m.ciclo_medio)} dias` : "—"}
+                        </TableCell>
+                        <TableCell>
+                          {m?.proxima_compra ? (
+                            <span className={`flex items-center gap-1 text-sm ${vencida ? "text-red-600 font-medium" : "text-foreground"}`}>
+                              {vencida && <CalendarClock className="h-3 w-3" />}
+                              {m.proxima_compra.toLocaleDateString("pt-BR")}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-sm">
                           {lo ? (
                             <div>
@@ -614,6 +765,22 @@ export default function ClientesAdmin() {
                           })()}
                         </TableCell>
                         <TableCell>
+                          <div className="flex flex-wrap gap-1">
+                            {MARCAS.map((marca) => {
+                              const tem = (m?.marcas ?? []).includes(marca);
+                              return (
+                                <Badge
+                                  key={marca}
+                                  variant="outline"
+                                  className={`text-xs ${tem ? "border-green-400 bg-green-50 text-green-700" : "border-red-300 bg-red-50 text-red-600"}`}
+                                >
+                                  {marca}
+                                </Badge>
+                              );
+                            })}
+                          </div>
+                        </TableCell>
+                        <TableCell>
                           {c.negativado ? (
                             <Badge variant="destructive" className="text-xs">Sim</Badge>
                           ) : (
@@ -622,6 +789,20 @@ export default function ClientesAdmin() {
                         </TableCell>
                         <TableCell onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center gap-1">
+                            <Button
+                              size="icon" variant="ghost" className="h-7 w-7 text-primary hover:bg-primary/10"
+                              title="Novo pedido para este cliente"
+                              onClick={() => novoPedidoParaCliente(c)}
+                            >
+                              <ShoppingCart className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              size="icon" variant="ghost" className="h-7 w-7"
+                              title="Ver tabela de preços"
+                              onClick={() => { setTabelaCliente(c); setTabelaClienteOpen(true); }}
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                            </Button>
                             <Button
                               size="icon" variant="ghost" className="h-7 w-7"
                               title="Abrir detalhes (preços, histórico, financeiro)"
@@ -794,6 +975,28 @@ export default function ClientesAdmin() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Dialog — Tabela de preços do cliente */}
+      <Dialog open={tabelaClienteOpen} onOpenChange={setTabelaClienteOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Tabela de Preços — {tabelaCliente?.nome_parceiro || tabelaCliente?.razao_social}</DialogTitle>
+          </DialogHeader>
+          {tabelaCliente && (
+            <TabelaPrecos
+              clienteId={tabelaCliente.id}
+              clienteRazaoSocial={tabelaCliente.nome_parceiro || tabelaCliente.razao_social}
+              clienteCnpj={tabelaCliente.cnpj ?? ""}
+              clienteCidade={tabelaCliente.cidade}
+              clienteUf={tabelaCliente.uf}
+              clienteTabela={tabelaCliente.tabela_preco}
+              clienteCluster={tabelaCliente.cluster}
+              clienteDescontoAdicional={tabelaCliente.desconto_adicional}
+              suframa={tabelaCliente.suframa}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
