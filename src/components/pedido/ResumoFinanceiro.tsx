@@ -11,6 +11,8 @@ type Props = {
   isPDF?: boolean;
   suframa?: boolean;
   tabela_preco?: string;
+  clienteId?: string;
+  tipoPedido?: string;
 };
 
 function icmsPct(uf: string): number {
@@ -30,8 +32,10 @@ function resolveIcms(uf: string, suframa?: boolean, tabela_preco?: string): numb
   return icmsPct(uf);
 }
 
-export function ResumoFinanceiro({ itens, uf, isPDF = false, suframa, tabela_preco }: Props) {
+export function ResumoFinanceiro({ itens, uf, isPDF = false, suframa, tabela_preco, clienteId, tipoPedido }: Props) {
   const [bolsaoPct, setBolsaoPct] = useState(1.0);
+  // Saldo de bolsão do cliente (gerado - usado), usado em pedidos de bonificação
+  const [saldoBolsaoCliente, setSaldoBolsaoCliente] = useState<number | null>(null);
 
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,6 +49,25 @@ export function ResumoFinanceiro({ itens, uf, isPDF = false, suframa, tabela_pre
         if (data?.value) setBolsaoPct(Number(data.value));
       });
   }, []);
+
+  useEffect(() => {
+    if (tipoPedido !== "Bonificação" || !clienteId) {
+      setSaldoBolsaoCliente(null);
+      return;
+    }
+    supabase
+      .from("bolsao")
+      .select("tipo, valor")
+      .eq("cliente_id", clienteId)
+      .then(({ data }) => {
+        if (!data) { setSaldoBolsaoCliente(null); return; }
+        const saldo = data.reduce(
+          (s, r) => s + (r.tipo === "usado" ? -Number(r.valor) : Number(r.valor)),
+          0,
+        );
+        setSaldoBolsaoCliente(saldo);
+      });
+  }, [tipoPedido, clienteId]);
 
   const qtdTotal = itens.reduce((s, i) => s + i.quantidade, 0);
   const pesoTotal = itens.reduce((s, i) => s + i.quantidade * i.peso_unitario, 0);
@@ -66,6 +89,18 @@ export function ResumoFinanceiro({ itens, uf, isPDF = false, suframa, tabela_pre
         <CardTitle>Resumo financeiro</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        {tipoPedido === "Bonificação" && saldoBolsaoCliente !== null && saldoBolsaoCliente > 0 && (
+          <div className="rounded-md border border-green-300 bg-green-50 p-3 text-sm">
+            <div className="font-semibold text-green-800">
+              Saldo de bolsão disponível: {formatBRL(saldoBolsaoCliente)}
+            </div>
+            {totalLiquido > saldoBolsaoCliente && (
+              <div className="mt-1 font-medium text-red-600">
+                Saldo insuficiente — faltam {formatBRL(totalLiquido - saldoBolsaoCliente)}
+              </div>
+            )}
+          </div>
+        )}
         <Tabs defaultValue="sem">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="sem">Sem impostos</TabsTrigger>
