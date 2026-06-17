@@ -8,10 +8,12 @@ interface AuthContextValue {
   session: Session | null;
   role: AppRole | null;
   fullName: string | null;
+  avatarUrl: string | null;
   loading: boolean;
   roleLoaded: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -35,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<AppRole | null>(null);
   const [fullName, setFullName] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [roleLoaded, setRoleLoaded] = useState(false);
 
@@ -66,12 +69,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const fetchFullName = async (currentUser: User) => {
       const { data } = await supabase
         .from("profiles")
-        .select("full_name")
+        .select("full_name, avatar_url")
         .eq("id", currentUser.id)
         .maybeSingle();
 
       if (data) {
         setFullName(data.full_name);
+        setAvatarUrl(data.avatar_url ?? null);
       }
     };
 
@@ -82,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (event === "SIGNED_OUT") {
         setRole(null);
         setFullName(null);
+        setAvatarUrl(null);
         setRoleLoaded(true);
         return;
       }
@@ -125,8 +130,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const refreshProfile = async () => {
+    if (!user) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("full_name, avatar_url")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (data) {
+      setFullName(data.full_name);
+      setAvatarUrl(data.avatar_url ?? null);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, session, role, fullName, loading, roleLoaded, signIn, signOut }}>
+    <AuthContext.Provider
+      value={{ user, session, role, fullName, avatarUrl, loading, roleLoaded, signIn, signOut, refreshProfile }}
+    >
       {children}
     </AuthContext.Provider>
   );

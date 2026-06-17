@@ -7,14 +7,12 @@ import { Button } from "@/components/ui/button";
 import { AppSidebar } from "./AppSidebar";
 import { MobileNav } from "./MobileNav";
 import { NotificationsBadge } from "./NotificationsBadge";
-import { useAuth } from "@/hooks/useAuth";
+import { UserMenu } from "./UserMenu";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 
 export default function AppLayout() {
-  const { fullName, user } = useAuth();
   const { active, userName, userRole, clearImpersonation } = useImpersonation();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const displayName = fullName || user?.email?.split("@")[0] || "";
 
   return (
     <SidebarProvider>
@@ -75,11 +73,9 @@ export default function AppLayout() {
                 </Button>
               </div>
             ) : (
-              displayName && (
-                <span className="text-sm text-muted-foreground hidden sm:block truncate max-w-[160px]">
-                  {displayName}
-                </span>
-              )
+              <div className="ml-auto">
+                <UserMenu variant="compact" />
+              </div>
             )}
 
             <NotificationsBadge />

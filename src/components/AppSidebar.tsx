@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { LogOut, FileText, Calculator, LayoutTemplate, Eye, ClipboardList, Package } from "lucide-react";
+import { FileText, Calculator, LayoutTemplate, Eye, ClipboardList, Package } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -16,8 +16,8 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { ROLE_LABEL, type AppRole } from "@/lib/roles";
-import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { UserMenu } from "@/components/UserMenu";
 import {
   ADMIN_SECTIONS,
   BASE_FATURAMENTO_ITEMS,
@@ -50,7 +50,7 @@ function NavItem({ item, pathname }: { item: Item; pathname: string }) {
 }
 
 export function AppSidebar() {
-  const { role: realRole, user, signOut } = useAuth();
+  const { role: realRole, user } = useAuth();
   const { active, userId, userRole, setImpersonation, clearImpersonation } = useImpersonation();
   const { pathname } = useLocation();
   const [semPerfilCount, setSemPerfilCount] = useState(0);
@@ -315,19 +315,8 @@ export function AppSidebar() {
         )}
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-3">
-        <div className="mb-2 px-2 text-xs text-sidebar-foreground/70 truncate">
-          {user?.email}
-        </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={signOut}
-          className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-        >
-          <LogOut className="mr-2 h-4 w-4" />
-          Sair
-        </Button>
+      <SidebarFooter className="border-t border-sidebar-border p-2">
+        <UserMenu variant="full" />
       </SidebarFooter>
     </Sidebar>
   );
