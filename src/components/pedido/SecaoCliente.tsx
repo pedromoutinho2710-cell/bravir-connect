@@ -22,6 +22,8 @@ export type DadosCliente = {
   uf: string;
   cep: string;
   comprador: string;
+  telefone: string;
+  email: string;
   cluster: string;
   tabela_preco: string;
   tipo: string;
@@ -73,7 +75,6 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
   const [alertaMesmoDia, setAlertaMesmoDia] = useState(false);
   const [negativado, setNegativado] = useState(false);
   const [enderecoDisplay, setEnderecoDisplay] = useState<string | null>(null);
-  const [telefoneDisplay, setTelefoneDisplay] = useState<string | null>(null);
 
   // Search field state
   const [searchText, setSearchText] = useState(() => value.razao_social || "");
@@ -119,7 +120,6 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
     setShowSugestoes(false);
     const partes = [cl.rua, cl.numero ? `nº ${cl.numero}` : null, cl.bairro].filter(Boolean);
     setEnderecoDisplay(partes.length > 0 ? partes.join(", ") : null);
-    setTelefoneDisplay(cl.telefone ?? null);
     onChange({
       ...valueRef.current,
       cliente_id: cl.id,
@@ -129,6 +129,8 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
       uf: cl.uf ?? "",
       cep: cl.cep ? formatCEP(cl.cep) : "",
       comprador: cl.comprador ?? "",
+      telefone: cl.telefone ?? "",
+      email: cl.email ?? "",
       cluster: cl.cluster ?? valueRef.current.cluster,
       tabela_preco: cl.tabela_preco ?? valueRef.current.tabela_preco,
       codigo_cliente: cl.codigo_parceiro ?? cl.codigo_cliente ?? "",
@@ -355,15 +357,10 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
           </div>
         )}
 
-        {/* Endereço e telefone do cliente encontrado */}
-        {cnpjStatus === "encontrado" && (enderecoDisplay || telefoneDisplay) && (
+        {/* Endereço do cliente encontrado */}
+        {cnpjStatus === "encontrado" && enderecoDisplay && (
           <div className="rounded-md border bg-muted/30 px-4 py-2.5 text-sm space-y-0.5">
-            {enderecoDisplay && (
-              <div><span className="text-muted-foreground">Endereço: </span>{enderecoDisplay}</div>
-            )}
-            {telefoneDisplay && (
-              <div><span className="text-muted-foreground">Telefone: </span>{telefoneDisplay}</div>
-            )}
+            <div><span className="text-muted-foreground">Endereço: </span>{enderecoDisplay}</div>
           </div>
         )}
 
@@ -467,7 +464,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
           </div>
         </div>
 
-        {/* CEP + Comprador */}
+        {/* CEP */}
         <div className="grid gap-5 md:grid-cols-2">
           <div className="space-y-1.5">
             <Label className="text-base font-semibold">CEP</Label>
@@ -479,17 +476,43 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
               className="h-11 text-base"
             />
           </div>
-          <div className="space-y-1.5">
-            <Label className="text-base font-semibold">Comprador *</Label>
-            <Input
-              value={value.comprador}
-              onChange={(e) => set("comprador", e.target.value)}
-              className={`h-11 text-base ${
-                cnpjStatus === "encontrado" && !value.comprador.trim()
-                  ? "border-red-400 focus-visible:ring-red-400"
-                  : ""
-              }`}
-            />
+        </div>
+
+        {/* Informações do comprador */}
+        <div className="space-y-3 rounded-md border border-blue-200 bg-white/50 p-4">
+          <div className="text-base font-semibold">Informações do comprador</div>
+          <div className="grid gap-5 md:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label className="text-base font-semibold">Nome do comprador *</Label>
+              <Input
+                value={value.comprador}
+                onChange={(e) => set("comprador", e.target.value)}
+                placeholder="Nome do comprador"
+                className={`h-11 text-base ${
+                  cnpjStatus === "encontrado" && !value.comprador.trim()
+                    ? "border-red-400 focus-visible:ring-red-400"
+                    : ""
+                }`}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-base font-semibold">Telefone</Label>
+              <Input
+                value={value.telefone}
+                onChange={(e) => set("telefone", e.target.value)}
+                placeholder="(00) 00000-0000"
+                className="h-11 text-base"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-base font-semibold">Email</Label>
+              <Input
+                value={value.email}
+                onChange={(e) => set("email", e.target.value)}
+                placeholder="comprador@empresa.com"
+                className="h-11 text-base"
+              />
+            </div>
           </div>
         </div>
 

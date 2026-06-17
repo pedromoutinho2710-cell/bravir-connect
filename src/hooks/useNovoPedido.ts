@@ -49,6 +49,8 @@ export const initialClienteNovoPedido: DadosCliente = {
   uf: "",
   cep: "",
   comprador: "",
+  telefone: "",
+  email: "",
   cluster: "",
   tabela_preco: "",
   tipo: "Pedido",
