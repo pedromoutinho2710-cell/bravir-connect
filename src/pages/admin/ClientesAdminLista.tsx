@@ -38,6 +38,7 @@ type ClienteAgregado = {
   aceita_saldo: boolean;
   observacoes_trade: string | null;
   codigo_cliente: string | null;
+  codigo_parceiro: string | null;
   canal: string | null;
   desconto_adicional: number | null;
   suframa: boolean | null;
@@ -185,7 +186,7 @@ export default function ClientesAdminLista() {
       const [clRes, pedRes] = await Promise.all([
         supabase
           .from("clientes")
-          .select("id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente, canal, desconto_adicional, suframa")
+          .select("id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente, codigo_parceiro, canal, desconto_adicional, suframa")
           .is("deleted_at", null),
         supabase
           .from("pedidos")
@@ -263,6 +264,7 @@ export default function ClientesAdminLista() {
           aceita_saldo: c.aceita_saldo ?? false,
           observacoes_trade: c.observacoes_trade,
           codigo_cliente: c.codigo_cliente,
+          codigo_parceiro: c.codigo_parceiro,
           canal: c.canal,
           desconto_adicional: c.desconto_adicional,
           suframa: c.suframa,
@@ -416,6 +418,7 @@ export default function ClientesAdminLista() {
       const ws = wb.addWorksheet("Clientes");
 
       const colunas = [
+        { header: "Código Sankhya", key: "codigo_sankhya" },
         { header: "#", key: "rank" },
         { header: "ABC", key: "abc" },
         { header: "Razão Social", key: "razao_social" },
@@ -438,6 +441,7 @@ export default function ClientesAdminLista() {
 
       clientesFiltrados.forEach((c) => {
         ws.addRow({
+          codigo_sankhya: c.codigo_parceiro ?? c.codigo_cliente ?? "",
           rank: c.rank,
           abc: c.abc,
           razao_social: c.razao_social ?? "",
