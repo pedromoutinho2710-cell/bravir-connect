@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatBRL, formatDate, formatCNPJ, formatCEP } from "@/lib/format";
@@ -29,6 +29,7 @@ import { TabelaPrecos } from "@/components/cliente/TabelaPrecos";
 import { AbaPrecos } from "@/components/cliente/AbaPrecos";
 import { StatusClienteBadge } from "@/components/cliente/StatusClienteBadge";
 import { AbaHistoricoFaturamento } from "@/components/cliente/AbaHistoricoFaturamento";
+import { AbaBolsao } from "@/components/cliente/AbaBolsao";
 
 const STATUS_LABEL: Record<string, string> = {
   rascunho: "Rascunho",
@@ -149,6 +150,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 export default function ClienteDetalhe() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { role, user } = useAuth();
 
   const [cliente, setCliente] = useState<ClienteInfo | null>(null);
@@ -199,6 +201,8 @@ export default function ClienteDetalhe() {
   const canEdit = canEditFull || canEditLimitado;
   const canObs = canEditFull || (role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id);
   const canPrecos = role === "admin" || role === "gestora";
+  const canBolsao = role === "admin" || role === "gestora" || role === "vendedor";
+  const initialTab = (location.state as { tab?: string } | null)?.tab === "bolsao" && canBolsao ? "bolsao" : "dados";
 
   const enviarAnalise = async () => {
     if (!cliente) return;
@@ -570,7 +574,7 @@ export default function ClienteDetalhe() {
       </div>
 
       {/* Abas */}
-      <Tabs defaultValue="dados">
+      <Tabs defaultValue={initialTab}>
         <TabsList className="w-full sm:w-auto">
           <TabsTrigger value="dados">Dados cadastrais</TabsTrigger>
           <TabsTrigger value="pedidos">Histórico de pedidos</TabsTrigger>
@@ -579,6 +583,7 @@ export default function ClienteDetalhe() {
           <TabsTrigger value="obs">Observações</TabsTrigger>
           <TabsTrigger value="tabela">Tabela de Preços</TabsTrigger>
           {canPrecos && <TabsTrigger value="precos">Preços</TabsTrigger>}
+          {canBolsao && <TabsTrigger value="bolsao">Bolsão</TabsTrigger>}
           <TabsTrigger value="faturamento">Histórico de Faturamento</TabsTrigger>
         </TabsList>
 
@@ -765,6 +770,13 @@ export default function ClienteDetalhe() {
             codigoParceiro={cliente.codigo_parceiro ?? null}
           />
         </TabsContent>
+
+        {/* ABA — Bolsão (vendedor, gestora e admin) */}
+        {canBolsao && (
+          <TabsContent value="bolsao" className="mt-4">
+            <AbaBolsao clienteId={cliente.id} />
+          </TabsContent>
+        )}
 
         {/* ABA — Tabela de Preços */}
         <TabsContent value="tabela" className="mt-4">
