@@ -192,6 +192,21 @@ export default function CadastrarCliente() {
   const [form, setForm] = useState<Form>(EMPTY);
   const [loading, setLoading] = useState(false);
   const [buscarCEPLoading, setBuscarCEPLoading] = useState(false);
+  const [cnpjDuplicado, setCnpjDuplicado] = useState<string | null>(null);
+
+  const verificarCNPJ = async (valor: string) => {
+    const digits = onlyDigits(valor);
+    if (digits.length !== 14) {
+      setCnpjDuplicado(null);
+      return;
+    }
+    const { data } = await supabase
+      .from("clientes")
+      .select("razao_social, nome_fantasia")
+      .eq("cnpj", digits)
+      .maybeSingle();
+    setCnpjDuplicado(data ? (data.razao_social || data.nome_fantasia || "cliente existente") : null);
+  };
 
   useEffect(() => {
     if (!corrigirId) return;
@@ -373,10 +388,19 @@ export default function CadastrarCliente() {
                 <Label>CNPJ</Label>
                 <Input
                   value={form.cnpj}
-                  onChange={(e) => set("cnpj", formatCNPJ(e.target.value))}
+                  onChange={(e) => {
+                    set("cnpj", formatCNPJ(e.target.value));
+                    if (cnpjDuplicado) setCnpjDuplicado(null);
+                  }}
+                  onBlur={(e) => verificarCNPJ(e.target.value)}
                   placeholder="00.000.000/0000-00"
                   maxLength={18}
                 />
+                {cnpjDuplicado && (
+                  <p className="text-sm text-destructive">
+                    CNPJ já cadastrado — {cnpjDuplicado}
+                  </p>
+                )}
               </div>
               <div className="space-y-1.5">
                 <Label>Contato principal *</Label>
@@ -778,7 +802,7 @@ export default function CadastrarCliente() {
           <Button type="button" variant="outline" onClick={() => navigate("/meus-clientes")}>
             Cancelar
           </Button>
-          <Button type="submit" disabled={loading}>
+          <Button type="submit" disabled={loading || !!cnpjDuplicado}>
             {loading ? "Enviando..." : "Enviar cadastro"}
           </Button>
         </div>
