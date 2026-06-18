@@ -214,6 +214,7 @@ export default function MeuPainel() {
   const [campanhaEntrada, setCampanhaEntrada] = useState(0);
   const [campanhaEntradaPorMarca, setCampanhaEntradaPorMarca] = useState<Record<string, number>>({});
   const [campanhaMetaVendedor, setCampanhaMetaVendedor] = useState<number | null>(null);
+  const [campanhaCategoria, setCampanhaCategoria] = useState<string | null>(null);
   const [faturadoMesAtual, setFaturadoMesAtual] = useState(0);
   const [faturamentoRealMes, setFaturamentoRealMes] = useState<number | null>(null);
   const [faturamentoRealMesAnterior, setFaturamentoRealMesAnterior] = useState<number | null>(null);
@@ -246,6 +247,7 @@ export default function MeuPainel() {
         setCampanhaEntrada(0);
         setCampanhaEntradaPorMarca({});
         setCampanhaMetaVendedor(null);
+        setCampanhaCategoria(null);
         return;
       }
 
@@ -275,7 +277,7 @@ export default function MeuPainel() {
         .eq("vendedor_id", user.id)
         .gte("data_pedido", campanha.data_inicio)
         .lte("data_pedido", campanha.data_fim)
-        .not("status", "in", '("rascunho","cancelado")');
+        .not("status", "in", '("rascunho","cancelado","devolvido")');
 
       let entrada = 0;
       const porMarca: Record<string, number> = {};
@@ -300,12 +302,13 @@ export default function MeuPainel() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: metaData } = await (supabase as any)
         .from("campanha_metas_vendedor")
-        .select("meta_valor")
+        .select("meta_valor, categoria")
         .eq("campanha_id", campanha.id)
         .eq("vendedor_id", user.id)
         .maybeSingle();
 
       setCampanhaMetaVendedor(metaData?.meta_valor != null ? Number(metaData.meta_valor) : null);
+      setCampanhaCategoria(metaData?.categoria ?? null);
     })();
   }, [user]);
 
@@ -1528,7 +1531,8 @@ export default function MeuPainel() {
           (a: any, b: any) => (a.ordem ?? a.valor_minimo ?? 0) - (b.ordem ?? b.valor_minimo ?? 0),
         );
         const meta = campanhaMetaVendedor ?? 0;
-        const pct = meta > 0 ? Math.min((campanhaEntrada / meta) * 100, 100) : 0;
+        const pctGeral = meta > 0 ? (campanhaEntrada / meta) * 100 : 0;
+        const pct = Math.min(pctGeral, 100);
         const falta = meta > 0 ? Math.max(0, meta - campanhaEntrada) : 0;
         const diasRestantes = campanhaAtiva.data_fim
           ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - Date.now()) / 86400000))
@@ -1607,57 +1611,78 @@ export default function MeuPainel() {
 
               <div className="border-t" />
 
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                  <span className="text-muted-foreground">
-                    {meta > 0 ? (
-                      <>
-                        Meta: {formatBRL(meta)} → Entrada: {formatBRL(campanhaEntrada)} · {pct.toFixed(1)}% atingido
-                      </>
-                    ) : (
-                      <>Entrada na campanha: {formatBRL(campanhaEntrada)} · sem meta definida</>
-                    )}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {meta > 0 && falta > 0 && <>Faltam {formatBRL(falta)} · </>}
-                    {diasRestantes} dias restantes
-                  </span>
+              {/* Resumo geral da meta da campanha */}
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">Meta total</div>
+                  <div className="text-xl font-bold">{meta > 0 ? formatBRL(meta) : "—"}</div>
+                  {campanhaCategoria && (
+                    <Badge className={`${nivelBadgeClass(campanhaCategoria)} mt-1.5 text-xs`}>
+                      {campanhaCategoria}
+                    </Badge>
+                  )}
                 </div>
-                {meta > 0 && (
-                  <div className="h-2 w-full rounded-full bg-muted">
-                    <div
-                      className="h-2 rounded-full transition-all"
-                      style={{ width: `${pct}%`, backgroundColor: barColor }}
-                    />
-                  </div>
-                )}
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">Total realizado</div>
+                  <div className="text-xl font-bold text-green-700">{formatBRL(campanhaEntrada)}</div>
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">% atingido</div>
+                  <div className="text-xl font-bold">{meta > 0 ? `${pctGeral.toFixed(1)}%` : "—"}</div>
+                  {meta > 0 && (
+                    <div className="mt-1.5 h-2 w-full rounded-full bg-muted">
+                      <div
+                        className="h-2 rounded-full transition-all"
+                        style={{ width: `${pct}%`, backgroundColor: barColor }}
+                      />
+                    </div>
+                  )}
+                </div>
+                <div className="rounded-md border p-3">
+                  <div className="text-xs text-muted-foreground">Dias restantes</div>
+                  <div className="text-xl font-bold">{diasRestantes}</div>
+                  {meta > 0 && falta > 0 && (
+                    <div className="mt-1 text-xs text-muted-foreground">Faltam {formatBRL(falta)}</div>
+                  )}
+                </div>
               </div>
 
-              {Object.keys(campanhaEntradaPorMarca).length > 0 && (
-                <div className="space-y-1.5">
-                  <div className="text-xs font-medium text-muted-foreground">Entrada por marca</div>
-                  <div className="grid gap-1.5 sm:grid-cols-2">
-                    {Object.entries(campanhaEntradaPorMarca)
-                      .sort(([, a], [, b]) => b - a)
-                      .map(([marca, valor]) => {
-                        const pctMarca = campanhaEntrada > 0 ? (valor / campanhaEntrada) * 100 : 0;
-                        return (
-                          <div key={marca} className="flex items-center gap-2 text-xs">
-                            <span
-                              className="shrink-0"
-                              style={{
-                                width: 10,
-                                height: 10,
-                                borderRadius: 2,
-                                backgroundColor: MARCA_CORES[marca] ?? "#888780",
-                              }}
-                            />
-                            <span className="flex-1 truncate">{marca}</span>
-                            <span className="text-muted-foreground tabular-nums">{pctMarca.toFixed(1)}%</span>
-                            <span className="font-medium tabular-nums">{formatBRL(valor)}</span>
+              {/* Cards de realizado por marca */}
+              {campanhaMarcas.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-xs font-medium text-muted-foreground">Realizado por marca</div>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    {campanhaMarcas.map((marca) => {
+                      const realizado = campanhaEntradaPorMarca[marca] ?? 0;
+                      const pctMeta = meta > 0 ? (realizado / meta) * 100 : 0;
+                      const pctBarra = Math.min(pctMeta, 100);
+                      return (
+                        <div key={marca} className="rounded-md border p-3 space-y-2">
+                          <Badge
+                            style={{ backgroundColor: MARCA_CORES[marca] ?? "#888780", color: "#fff", border: "none" }}
+                          >
+                            {marca}
+                          </Badge>
+                          <div>
+                            <div className="text-xs text-muted-foreground">Realizado</div>
+                            <div className="text-lg font-bold">{formatBRL(realizado)}</div>
                           </div>
-                        );
-                      })}
+                          {meta > 0 && (
+                            <div className="space-y-1">
+                              <div className="text-xs text-muted-foreground tabular-nums">
+                                {pctMeta.toFixed(1)}% da meta total
+                              </div>
+                              <div className="h-2 w-full rounded-full bg-muted">
+                                <div
+                                  className="h-2 rounded-full bg-green-500 transition-all"
+                                  style={{ width: `${pctBarra}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
