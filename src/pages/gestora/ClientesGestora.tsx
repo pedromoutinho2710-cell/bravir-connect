@@ -31,6 +31,7 @@ type ClienteAgregado = {
   uf: string | null;
   cep: string | null;
   cluster: string | null;
+  grupo_cliente: string | null;
   tabela_preco: string | null;
   vendedor_id: string | null;
   status: string | null;
@@ -110,6 +111,7 @@ export default function ClientesGestora() {
   const [busca, setBusca] = useState("");
   const [filtroVendedor, setFiltroVendedor] = useState("todos");
   const [filtroCluster, setFiltroCluster] = useState("todos");
+  const [filtroGrupo, setFiltroGrupo] = useState("todos");
   const [filtroTabela, setFiltroTabela] = useState("todos");
   const [filtroUF, setFiltroUF] = useState("todas");
   const [filtroStatus, setFiltroStatus] = useState("todos");
@@ -186,7 +188,7 @@ export default function ClientesGestora() {
       const [clRes, pedRes] = await Promise.all([
         supabase
           .from("clientes")
-          .select("id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente, codigo_parceiro, canal, desconto_adicional, suframa")
+          .select("id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, grupo_cliente, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente, codigo_parceiro, canal, desconto_adicional, suframa")
           .is("deleted_at", null),
         supabase
           .from("pedidos")
@@ -257,6 +259,7 @@ export default function ClientesGestora() {
           uf: c.uf,
           cep: c.cep,
           cluster: c.cluster,
+          grupo_cliente: c.grupo_cliente,
           tabela_preco: c.tabela_preco,
           vendedor_id: c.vendedor_id,
           status: c.status,
@@ -381,6 +384,13 @@ export default function ClientesGestora() {
     });
   };
 
+  const gruposDistintos = useMemo(
+    () =>
+      Array.from(new Set(clientes.map((c) => c.grupo_cliente).filter((g): g is string => !!g)))
+        .sort((a, b) => a.localeCompare(b, "pt-BR")),
+    [clientes]
+  );
+
   const clientesFiltrados = useMemo(() => {
     let lista = clientes;
 
@@ -398,6 +408,7 @@ export default function ClientesGestora() {
     if (filtroVendedor === "__sem_vendedor__") lista = lista.filter((c) => !c.vendedor_id);
     else if (filtroVendedor !== "todos") lista = lista.filter((c) => c.vendedor_id === filtroVendedor);
     if (filtroCluster !== "todos") lista = lista.filter((c) => c.cluster === filtroCluster);
+    if (filtroGrupo !== "todos") lista = lista.filter((c) => c.grupo_cliente === filtroGrupo);
     if (filtroTabela !== "todos") lista = lista.filter((c) => c.tabela_preco === filtroTabela);
     if (filtroUF !== "todas") lista = lista.filter((c) => c.uf === filtroUF);
     if (filtroStatus !== "todos") lista = lista.filter((c) => (c.status ?? "ativo") === filtroStatus);
@@ -408,7 +419,7 @@ export default function ClientesGestora() {
       if (ordem === "num_pedidos") return b.num_pedidos - a.num_pedidos;
       return (a.nome_parceiro || a.razao_social).localeCompare(b.nome_parceiro || b.razao_social, "pt-BR");
     });
-  }, [clientes, busca, filtroVendedor, filtroCluster, filtroTabela, filtroUF, filtroStatus, ordem]);
+  }, [clientes, busca, filtroVendedor, filtroCluster, filtroGrupo, filtroTabela, filtroUF, filtroStatus, ordem]);
 
   const exportarExcel = async () => {
     setExportando(true);
@@ -428,6 +439,7 @@ export default function ClientesGestora() {
         { header: "Cidade", key: "cidade" },
         { header: "UF", key: "uf" },
         { header: "Cluster", key: "cluster" },
+        { header: "Grupo", key: "grupo_cliente" },
         { header: "Tabela Preço", key: "tabela_preco" },
         { header: "Vendedor", key: "vendedor" },
         { header: "Status", key: "status" },
@@ -451,6 +463,7 @@ export default function ClientesGestora() {
           cidade: c.cidade ?? "",
           uf: c.uf ?? "",
           cluster: c.cluster ?? "",
+          grupo_cliente: c.grupo_cliente ?? "",
           tabela_preco: tabelaLabel(c.tabela_preco),
           vendedor: c.vendedor_id ? (vendedoresMap[c.vendedor_id] ?? "—") : "—",
           status: c.status ?? "",
@@ -593,6 +606,16 @@ export default function ClientesGestora() {
             </SelectContent>
           </Select>
 
+          <Select value={filtroGrupo} onValueChange={setFiltroGrupo}>
+            <SelectTrigger className="w-48">
+              <SelectValue placeholder="Grupo" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os grupos</SelectItem>
+              {gruposDistintos.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
           <Select value={filtroTabela} onValueChange={setFiltroTabela}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="Tabela" />
@@ -664,6 +687,7 @@ export default function ClientesGestora() {
                 <TableHead className="w-10">ABC</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Canal</TableHead>
+                <TableHead>Grupo</TableHead>
                 <TableHead>CNPJ</TableHead>
                 <TableHead className="text-right">LTV</TableHead>
                 <TableHead className="text-right">Pedidos</TableHead>
@@ -727,6 +751,15 @@ export default function ClientesGestora() {
                       {c.canal ? (
                         <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300 text-xs">
                           {c.canal}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {c.grupo_cliente ? (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-300 text-xs">
+                          {c.grupo_cliente}
                         </Badge>
                       ) : (
                         <span className="text-muted-foreground text-sm">—</span>

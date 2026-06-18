@@ -87,6 +87,7 @@ type ClienteInfo = {
   cnpj: string;
   codigo_parceiro: string | null;
   cluster: string | null;
+  grupo_cliente: string | null;
   tabela_preco: string | null;
   cidade: string | null;
   uf: string | null;
@@ -188,6 +189,10 @@ export default function ClienteDetalhe() {
   const [avisoLocal, setAvisoLocal] = useState("");
   const [salvandoAviso, setSalvandoAviso] = useState(false);
 
+  // Grupo de clientes (admin/gestora)
+  const [grupoLocal, setGrupoLocal] = useState("");
+  const [salvandoGrupo, setSalvandoGrupo] = useState(false);
+
   // Delete
   const [excluirOpen, setExcluirOpen] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
@@ -207,6 +212,7 @@ export default function ClienteDetalhe() {
   const canObs = canEditFull || (role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id);
   const canPrecos = role === "admin" || role === "gestora";
   const canAviso = role === "admin" || role === "gestora";
+  const canGrupo = role === "admin" || role === "gestora";
   const canBolsao = role === "admin" || role === "gestora" || role === "vendedor";
   const initialTab = (location.state as { tab?: string } | null)?.tab === "bolsao" && canBolsao ? "bolsao" : "dados";
 
@@ -231,7 +237,7 @@ export default function ClienteDetalhe() {
     const [cRes, pRes, profRes, roleRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional, status, aviso_pedido")
+        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, grupo_cliente, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional, status, aviso_pedido")
         .eq("id", id)
         .single(),
       supabase
@@ -254,6 +260,7 @@ export default function ClienteDetalhe() {
         cnpj: c.cnpj,
         codigo_parceiro: c.codigo_parceiro ?? null,
         cluster: c.cluster,
+        grupo_cliente: c.grupo_cliente ?? null,
         tabela_preco: c.tabela_preco,
         cidade: c.cidade,
         uf: c.uf,
@@ -276,6 +283,7 @@ export default function ClienteDetalhe() {
       setCliente(info);
       setObsLocal(info.observacoes_trade ?? "");
       setAvisoLocal(info.aviso_pedido ?? "");
+      setGrupoLocal(info.grupo_cliente ?? "");
     }
 
     if (pRes.data) {
@@ -476,6 +484,20 @@ export default function ClienteDetalhe() {
     toast.success("Aviso salvo");
   };
 
+  const salvarGrupo = async () => {
+    if (!cliente) return;
+    setSalvandoGrupo(true);
+    const novoGrupo = grupoLocal.trim() || null;
+    const { error } = await supabase
+      .from("clientes")
+      .update({ grupo_cliente: novoGrupo })
+      .eq("id", cliente.id);
+    setSalvandoGrupo(false);
+    if (error) { toast.error("Erro ao salvar: " + error.message); return; }
+    setCliente((c) => c ? { ...c, grupo_cliente: novoGrupo } : c);
+    toast.success("Grupo de clientes salvo");
+  };
+
   const excluir = async () => {
     if (!cliente) return;
     setExcluindo(true);
@@ -626,6 +648,7 @@ export default function ClienteDetalhe() {
               <InfoItem label="Telefone" value={cliente.telefone} icon={<Phone className="h-3 w-3" />} />
               <InfoItem label="Email XML/Boleto" value={cliente.email} icon={<Mail className="h-3 w-3" />} />
               <InfoItem label="Cluster" value={cliente.cluster} />
+              <InfoItem label="Grupo de Clientes" value={cliente.grupo_cliente} />
               <InfoItem label="Tabela de preço" value={cliente.tabela_preco} />
               <InfoItem label="Vendedor" value={vendedorNome} icon={<User className="h-3 w-3" />} />
 
@@ -657,6 +680,29 @@ export default function ClienteDetalhe() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Grupo de clientes (admin e gestora) */}
+          {canGrupo && (
+            <Card className="mt-4">
+              <CardContent className="pt-6 space-y-3">
+                <h3 className="text-sm font-semibold">Grupo de Clientes</h3>
+                <p className="text-xs text-muted-foreground">
+                  Agrupa clientes que pertencem ao mesmo grupo econômico/comercial.
+                </p>
+                <Input
+                  value={grupoLocal}
+                  onChange={(e) => setGrupoLocal(e.target.value)}
+                  placeholder="Ex.: Grupo Bravir"
+                />
+                <div className="flex justify-end">
+                  <Button onClick={salvarGrupo} disabled={salvandoGrupo} size="sm">
+                    {salvandoGrupo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                    Salvar grupo
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Aviso no pedido (admin e gestora) */}
           {canAviso && (
