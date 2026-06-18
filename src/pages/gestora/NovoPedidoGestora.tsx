@@ -286,7 +286,7 @@ export default function NovoPedidoGestora() {
         codigoParceiro={cliente.codigo_parceiro ?? ""}
       />
 
-      <ResumoFinanceiro itens={itens} uf={cliente.uf} tabela_preco={cliente.tabela_preco} clienteId={cliente.cliente_id} tipoPedido={cliente.tipo} />
+      <ResumoFinanceiro itens={itens} uf={cliente.uf} tabela_preco={cliente.tabela_preco} clienteId={cliente.cliente_id} tipoPedido={cliente.tipo} descontoVista={cliente.desconto_vista} onDescontoVistaChange={(v) => setCliente((c) => ({ ...c, desconto_vista: v }))} />
 
       {/* Barra de pedido mínimo + ações — sticky no rodapé */}
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t z-10 -mx-4 px-4 py-3 space-y-3">

@@ -35,6 +35,7 @@ export type DadosCliente = {
   aceita_saldo: boolean;
   ordem_compra: string;
   email_xml: string;
+  desconto_vista?: number;
 };
 
 type UltimoPedido = { id: string; numero_pedido: number; data_pedido: string; status: string; total: number };

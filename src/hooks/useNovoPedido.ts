@@ -62,6 +62,7 @@ export const initialClienteNovoPedido: DadosCliente = {
   aceita_saldo: true,
   ordem_compra: "",
   email_xml: "",
+  desconto_vista: 0,
 };
 
 export function useNovoPedido(options: UseNovoPedidoOptions) {
@@ -371,6 +372,13 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
       id = data.id;
       setPedidoId(id);
     }
+
+    // Persiste desconto à vista (coluna fora dos tipos gerados de pedidos).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from("pedidos")
+      .update({ desconto_vista: cliente.desconto_vista ?? 0 })
+      .eq("id", id);
 
     await supabase.from("itens_pedido").delete().eq("pedido_id", id);
 

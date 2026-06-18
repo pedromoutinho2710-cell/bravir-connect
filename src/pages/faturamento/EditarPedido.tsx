@@ -57,6 +57,7 @@ const INITIAL_CLIENTE: DadosCliente = {
   aceita_saldo: true,
   ordem_compra: "",
   email_xml: "",
+  desconto_vista: 0,
 };
 
 export default function EditarPedido() {
@@ -115,7 +116,7 @@ export default function EditarPedido() {
         supabase
           .from("pedidos")
           .select(`
-            id, numero_pedido, tipo, status, cond_pagamento, pagamento_vista, observacoes, agendamento,
+            id, numero_pedido, tipo, status, cond_pagamento, pagamento_vista, observacoes, agendamento, desconto_vista,
             cliente_id, vigencia_id, tabela_preco, perfil_cliente,
             clientes(id, razao_social, cnpj, cidade, uf, cep, comprador, cluster,
                      tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, email),
@@ -247,6 +248,7 @@ export default function EditarPedido() {
         aceita_saldo: cl?.aceita_saldo ?? true,
         ordem_compra: "",
         email_xml: cl?.email ?? "",
+        desconto_vista: Number(p.desconto_vista ?? 0),
       });
 
       setLoading(false);
@@ -348,6 +350,13 @@ export default function EditarPedido() {
       setSalvando(false);
       return;
     }
+
+    // Persiste desconto à vista (coluna fora dos tipos gerados de pedidos).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any)
+      .from("pedidos")
+      .update({ desconto_vista: cliente.desconto_vista ?? 0 })
+      .eq("id", id);
 
     // c) Sincronizar itens_pedido
     const updatePromises: Promise<unknown>[] = [];
@@ -497,7 +506,12 @@ export default function EditarPedido() {
         codigoParceiro={cliente?.codigo_parceiro ?? ""}
       />
 
-      <ResumoFinanceiro itens={itens} uf={cliente.uf} />
+      <ResumoFinanceiro
+        itens={itens}
+        uf={cliente.uf}
+        descontoVista={cliente.desconto_vista}
+        onDescontoVistaChange={(v) => setCliente((c) => ({ ...c, desconto_vista: v }))}
+      />
 
       {/* Footer sticky */}
       <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t z-10 -mx-4 px-4 py-3">
