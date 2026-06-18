@@ -1302,6 +1302,7 @@ export type Database = {
           data_pedido: string | null
           deleted_at: string | null
           deleted_by: string | null
+          desconto_vista: number | null
           email: string | null
           faturado_em: string | null
           flag_prioridade: string | null
@@ -1334,6 +1335,7 @@ export type Database = {
           data_pedido?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          desconto_vista?: number | null
           email?: string | null
           faturado_em?: string | null
           flag_prioridade?: string | null
@@ -1366,6 +1368,7 @@ export type Database = {
           data_pedido?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
+          desconto_vista?: number | null
           email?: string | null
           faturado_em?: string | null
           flag_prioridade?: string | null
