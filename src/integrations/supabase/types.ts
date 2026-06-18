@@ -487,6 +487,7 @@ export type Database = {
           desconto_adicional: number | null
           email: string | null
           etapa_pipeline: string | null
+          grupo_cliente: string | null
           id: string
           imposto: number | null
           inscricao_estadual: string | null
@@ -531,6 +532,7 @@ export type Database = {
           desconto_adicional?: number | null
           email?: string | null
           etapa_pipeline?: string | null
+          grupo_cliente?: string | null
           id?: string
           imposto?: number | null
           inscricao_estadual?: string | null
@@ -575,6 +577,7 @@ export type Database = {
           desconto_adicional?: number | null
           email?: string | null
           etapa_pipeline?: string | null
+          grupo_cliente?: string | null
           id?: string
           imposto?: number | null
           inscricao_estadual?: string | null
