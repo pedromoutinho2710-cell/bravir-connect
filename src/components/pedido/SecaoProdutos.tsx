@@ -456,7 +456,8 @@ export function SecaoProdutos({
               <TableHeader>
                 <TableRow style={{ backgroundColor: '#1a5c38' }} className="hover:bg-[#1a5c38]">
                   <TableHead className="text-white text-[11px] font-semibold py-2">Produto</TableHead>
-                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-28">Qtd</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-28">{isVendedorLivre ? "Qtd unidades" : "Qtd caixas"}</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">{isVendedorLivre ? "Qtd caixas" : "Qtd unidades"}</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Bruto</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right" style={{ minWidth: 110 }}>Desc. %</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Líquido</TableHead>
@@ -516,6 +517,15 @@ export function SecaoProdutos({
                           </div>
                         </div>
                       )}
+                    </TableCell>
+
+                    {/* Conversão Qtd (somente exibição) */}
+                    <TableCell className="text-right py-2 align-top">
+                      <span className="text-xs font-semibold text-green-700">
+                        {isVendedorLivre
+                          ? `${Math.round(i.quantidade / i.cx_embarque)} cx`
+                          : `${i.quantidade} un`}
+                      </span>
                     </TableCell>
 
                     {/* P. Bruto */}
