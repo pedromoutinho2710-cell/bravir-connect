@@ -175,32 +175,38 @@ export default function ImportarPedidoDialog({
       }));
 
       // Buscar cliente
+      const cnpjRaw = String(aoa[4]?.[7] ?? "").trim(); // H5
+      const cnpjNormalizado = cnpjRaw.replace(/\D/g, "");
+
       if (!codigo_cliente) {
-        setErroCliente("Código do cliente não encontrado na planilha (célula L3).");
-        setDados({
-          codigo_cliente,
-          cond_pagamento,
-          agendamento,
-          observacoes,
-          tabela_preco,
-          produtos: calcularLinhas(produtosResolvidos),
-        });
-        setCondPag(cond_pagamento);
-        setObs(observacoes);
-        setStep(2);
-        return;
-      }
+        // Fallback: tentar resolver o cliente pelo CNPJ (H5) quando L3 está vazio.
+        if (cnpjNormalizado.length === 14) {
+          const { data: clDataByCnpj } = await supabase
+            .from("clientes")
+            .select("id, razao_social, nome_parceiro, cnpj, cluster, vendedor_id")
+            .eq("cnpj", cnpjNormalizado)
+            .maybeSingle();
 
-      const { data: clData } = await supabase
-        .from("clientes")
-        .select("id, razao_social, nome_parceiro, cnpj, cluster, vendedor_id")
-        .eq("codigo_cliente", codigo_cliente)
-        .maybeSingle();
-
-      if (!clData) {
-        setErroCliente(`Cliente com código "${codigo_cliente}" não encontrado. Cadastre antes de importar.`);
+          if (!clDataByCnpj) {
+            setErroCliente(`Cliente com CNPJ ${cnpjRaw} não encontrado. Cadastre antes de importar.`);
+          } else {
+            setCliente({ ...clDataByCnpj, cluster: clDataByCnpj.cluster ?? "" });
+          }
+        } else {
+          setErroCliente("Código do cliente não encontrado na planilha (célula L3).");
+        }
       } else {
-        setCliente({ ...clData, cluster: clData.cluster ?? "" });
+        const { data: clData } = await supabase
+          .from("clientes")
+          .select("id, razao_social, nome_parceiro, cnpj, cluster, vendedor_id")
+          .eq("codigo_cliente", codigo_cliente)
+          .maybeSingle();
+
+        if (!clData) {
+          setErroCliente(`Cliente com código "${codigo_cliente}" não encontrado. Cadastre antes de importar.`);
+        } else {
+          setCliente({ ...clData, cluster: clData.cluster ?? "" });
+        }
       }
 
       const dadosExtraidos: DadosExcel = {
