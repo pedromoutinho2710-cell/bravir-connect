@@ -79,7 +79,7 @@ serve(async (req) => {
     }
 
     const data = await res.json();
-    const text: string = Array.isArray(data?.content)
+    const respText: string = Array.isArray(data?.content)
       ? data.content
           .filter((b: { type?: string }) => b?.type === "text")
           .map((b: { text?: string }) => b.text ?? "")
@@ -89,11 +89,11 @@ serve(async (req) => {
     // Extrai o array JSON da resposta (o modelo pode envolver em texto/markdown).
     let itens: unknown = [];
     try {
-      const inicio = text.indexOf("[");
-      const fim = text.lastIndexOf("]");
-      itens = inicio >= 0 && fim > inicio ? JSON.parse(text.slice(inicio, fim + 1)) : [];
+      const inicio = respText.indexOf("[");
+      const fim = respText.lastIndexOf("]");
+      itens = inicio >= 0 && fim > inicio ? JSON.parse(respText.slice(inicio, fim + 1)) : [];
     } catch (e) {
-      console.error("Falha ao parsear JSON da extração:", e, text);
+      console.error("Falha ao parsear JSON da extração:", e, respText);
       itens = [];
     }
 
