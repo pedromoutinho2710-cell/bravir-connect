@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { formatBRL, formatDate, formatCNPJ, formatCEP } from "@/lib/format";
 import {
-  AlertCircle, ArrowLeft, CreditCard, Pencil, Plus, Trash2,
+  AlertCircle, AlertTriangle, ArrowLeft, CreditCard, Pencil, Plus, Trash2,
   MapPin, Phone, Mail, User, DollarSign, TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -104,6 +104,7 @@ type ClienteInfo = {
   observacoes_trade: string | null;
   desconto_adicional: number | null;
   status: string | null;
+  aviso_pedido: string | null;
 };
 
 type PedidoLinha = {
@@ -183,6 +184,10 @@ export default function ClienteDetalhe() {
   const [obsLocal, setObsLocal] = useState("");
   const [salvandoObs, setSalvandoObs] = useState(false);
 
+  // Aviso no pedido (admin/gestora)
+  const [avisoLocal, setAvisoLocal] = useState("");
+  const [salvandoAviso, setSalvandoAviso] = useState(false);
+
   // Delete
   const [excluirOpen, setExcluirOpen] = useState(false);
   const [excluindo, setExcluindo] = useState(false);
@@ -201,6 +206,7 @@ export default function ClienteDetalhe() {
   const canEdit = canEditFull || canEditLimitado;
   const canObs = canEditFull || (role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id);
   const canPrecos = role === "admin" || role === "gestora";
+  const canAviso = role === "admin" || role === "gestora";
   const canBolsao = role === "admin" || role === "gestora" || role === "vendedor";
   const initialTab = (location.state as { tab?: string } | null)?.tab === "bolsao" && canBolsao ? "bolsao" : "dados";
 
@@ -225,7 +231,7 @@ export default function ClienteDetalhe() {
     const [cRes, pRes, profRes, roleRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional, status")
+        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional, status, aviso_pedido")
         .eq("id", id)
         .single(),
       supabase
@@ -265,9 +271,11 @@ export default function ClienteDetalhe() {
         observacoes_trade: c.observacoes_trade,
         desconto_adicional: c.desconto_adicional ?? null,
         status: c.status ?? null,
+        aviso_pedido: c.aviso_pedido ?? null,
       };
       setCliente(info);
       setObsLocal(info.observacoes_trade ?? "");
+      setAvisoLocal(info.aviso_pedido ?? "");
     }
 
     if (pRes.data) {
@@ -454,6 +462,20 @@ export default function ClienteDetalhe() {
     toast.success("Observações salvas");
   };
 
+  const salvarAviso = async () => {
+    if (!cliente) return;
+    setSalvandoAviso(true);
+    const novoAviso = avisoLocal.trim() || null;
+    const { error } = await supabase
+      .from("clientes")
+      .update({ aviso_pedido: novoAviso })
+      .eq("id", cliente.id);
+    setSalvandoAviso(false);
+    if (error) { toast.error("Erro ao salvar: " + error.message); return; }
+    setCliente((c) => c ? { ...c, aviso_pedido: novoAviso } : c);
+    toast.success("Aviso salvo");
+  };
+
   const excluir = async () => {
     if (!cliente) return;
     setExcluindo(true);
@@ -521,6 +543,11 @@ export default function ClienteDetalhe() {
                 {atividadeConf.label}
               </span>
               {cliente.negativado && <BadgeNegativado />}
+              {cliente.aviso_pedido && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-orange-400 bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-800">
+                  <AlertTriangle className="h-3 w-3" /> Aviso ativo
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
               <span className="font-mono">{formatCNPJ(cliente.cnpj)}</span>
@@ -630,6 +657,33 @@ export default function ClienteDetalhe() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Aviso no pedido (admin e gestora) */}
+          {canAviso && (
+            <Card className="mt-4">
+              <CardContent className="pt-6 space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-orange-600" />
+                  <h3 className="text-sm font-semibold">Aviso no pedido</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Aparece como alerta para o vendedor ao selecionar este cliente em um novo pedido.
+                </p>
+                <Textarea
+                  value={avisoLocal}
+                  onChange={(e) => setAvisoLocal(e.target.value)}
+                  placeholder="Ex.: Cliente exige nota fiscal separada por filial..."
+                  rows={4}
+                />
+                <div className="flex justify-end">
+                  <Button onClick={salvarAviso} disabled={salvandoAviso} size="sm">
+                    {salvandoAviso && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+                    Salvar aviso
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* ABA 2 — Histórico de pedidos */}
