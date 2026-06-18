@@ -279,6 +279,13 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
     status: "rascunho" | "pendente_sankhya",
   ): Promise<string | null> => {
     if (!user || !podeSalvar) return null;
+
+    // Entrega agendada exige telefone e email do comprador.
+    if (cliente.agendamento && (!cliente.telefone.trim() || !cliente.email.trim())) {
+      toast.error("Telefone e email são obrigatórios para entrega agendada.");
+      return null;
+    }
+
     const cliente_id = await garantirCliente();
     if (!cliente_id) return null;
 
