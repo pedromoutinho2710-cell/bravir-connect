@@ -72,6 +72,8 @@ async function lerExcel(file: File): Promise<ItemExtraido[]> {
   const linhas = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
   if (linhas.length === 0) return [];
 
+  console.log('Linhas brutas:', linhas.slice(0, 5));
+
   // Acha a linha de cabeçalho (primeira que tenha alguma palavra-chave conhecida)
   let idxCabecalho = linhas.findIndex((l) => {
     const txt = (l as unknown[]).map((c) => String(c ?? "").toLowerCase()).join(" ");
@@ -80,10 +82,13 @@ async function lerExcel(file: File): Promise<ItemExtraido[]> {
   if (idxCabecalho < 0) idxCabecalho = 0;
 
   const cabecalho = (linhas[idxCabecalho] as unknown[]).map((c) => String(c ?? ""));
+  console.log('Cabeçalho detectado:', cabecalho, 'idx:', idxCabecalho);
+
   const colNome = acharColuna(cabecalho, ["produto", "descri", "item", "mercadoria"]);
   const colCodigo = acharColuna(cabecalho, ["codigo", "código", "sku", "cod", "ref"]);
   const colQtd = acharColuna(cabecalho, ["qtd", "quant"]);
   const colPreco = acharColuna(cabecalho, ["preco", "preço", "valor", "unit"]);
+  console.log('Cols detectadas:', { colNome, colCodigo, colQtd, colPreco });
 
   const itens: ItemExtraido[] = [];
   for (let i = idxCabecalho + 1; i < linhas.length; i++) {
@@ -103,6 +108,8 @@ async function lerExcel(file: File): Promise<ItemExtraido[]> {
       preco_unitario: preco,
     });
   }
+
+  console.log('Itens extraídos:', itens);
   return itens;
 }
 
