@@ -4,7 +4,18 @@ import { formatBRL } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Loader2, Search, Pencil } from "lucide-react";
+import { Loader2, Search, Pencil, RotateCcw } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
 type Props = {
@@ -73,6 +84,7 @@ export function AbaPrecos({
   const [editPreco, setEditPreco] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [salvando, setSalvando] = useState(false);
+  const [restaurandoId, setRestaurandoId] = useState<string | null>(null);
 
   const carregar = async () => {
     if (!clienteTabela) {
@@ -299,6 +311,37 @@ export function AbaPrecos({
     toast.success("Preço do cliente salvo");
   };
 
+  // Remove o preço personalizado do cliente: apaga o registro em
+  // precos_cliente_produto e devolve a linha ao preço de tabela + desconto do
+  // cluster, limpando os campos do cliente localmente.
+  const restaurar = async (l: LinhaProduto) => {
+    if (!l.especialId) return;
+    setRestaurandoId(l.produtoId);
+    const { error } = await supabase
+      .from("precos_cliente_produto")
+      .delete()
+      .eq("id", l.especialId);
+    setRestaurandoId(null);
+    if (error) {
+      toast.error("Erro ao restaurar: " + error.message);
+      return;
+    }
+    setLinhas((prev) =>
+      prev.map((x) =>
+        x.produtoId === l.produtoId
+          ? {
+              ...x,
+              especialId: null,
+              precoEspecial: null,
+              descontoPerfil: null,
+              origem: null,
+            }
+          : x,
+      ),
+    );
+    toast.success("Preço restaurado para o valor original");
+  };
+
   return (
     <div className="space-y-6">
       {/* Tabela de preços do cliente (todos os produtos) */}
@@ -496,7 +539,7 @@ export function AbaPrecos({
                                   </Button>
                                 </div>
                               ) : (
-                                <div className="flex justify-end">
+                                <div className="flex justify-end gap-1">
                                   <Button
                                     size="sm"
                                     variant="ghost"
@@ -506,6 +549,45 @@ export function AbaPrecos({
                                   >
                                     <Pencil className="h-4 w-4" />
                                   </Button>
+                                  {personalizado && (
+                                    <AlertDialog>
+                                      <AlertDialogTrigger asChild>
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          disabled={editId != null || restaurandoId != null}
+                                          title="Restaurar preço original"
+                                          className="text-destructive hover:text-destructive"
+                                        >
+                                          {restaurandoId === l.produtoId ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                          ) : (
+                                            <RotateCcw className="h-4 w-4" />
+                                          )}
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>
+                                            Restaurar preço original?
+                                          </AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            O preço personalizado será removido e o produto voltará
+                                            a usar o preço da tabela e desconto do cluster.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                          <AlertDialogAction
+                                            onClick={() => restaurar(l)}
+                                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                          >
+                                            Restaurar
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  )}
                                 </div>
                               )}
                             </td>
