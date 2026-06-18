@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
 import { formatBRL, formatNum } from "@/lib/format";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import type { ItemPedido } from "./SecaoProdutos";
+
+// Desconto à vista máximo permitido (%)
+const MAX_DESCONTO_VISTA = 5;
 
 type Props = {
   itens: ItemPedido[];
@@ -13,6 +18,8 @@ type Props = {
   tabela_preco?: string;
   clienteId?: string;
   tipoPedido?: string;
+  descontoVista?: number;
+  onDescontoVistaChange?: (value: number) => void;
 };
 
 function icmsPct(uf: string): number {
@@ -32,8 +39,21 @@ function resolveIcms(uf: string, suframa?: boolean, tabela_preco?: string): numb
   return icmsPct(uf);
 }
 
-export function ResumoFinanceiro({ itens, uf, isPDF = false, suframa, tabela_preco, clienteId, tipoPedido }: Props) {
+export function ResumoFinanceiro({ itens, uf, isPDF = false, suframa, tabela_preco, clienteId, tipoPedido, descontoVista, onDescontoVistaChange }: Props) {
   const [bolsaoPct, setBolsaoPct] = useState(1.0);
+  // Desconto à vista: controlado por prop quando informada; caso contrário, estado interno.
+  const [descontoVistaInterno, setDescontoVistaInterno] = useState(0);
+  const descontoVistaValor = descontoVista ?? descontoVistaInterno;
+
+  const setDescontoVista = (raw: number) => {
+    let valor = Number.isFinite(raw) ? Math.max(0, raw) : 0;
+    if (valor > MAX_DESCONTO_VISTA) {
+      valor = MAX_DESCONTO_VISTA;
+      toast.warning(`Desconto à vista máximo é ${MAX_DESCONTO_VISTA}%.`);
+    }
+    if (onDescontoVistaChange) onDescontoVistaChange(valor);
+    else setDescontoVistaInterno(valor);
+  };
   // Saldo de bolsão do cliente (gerado - usado), usado em pedidos de bonificação
   const [saldoBolsaoCliente, setSaldoBolsaoCliente] = useState<number | null>(null);
 
@@ -78,6 +98,9 @@ export function ResumoFinanceiro({ itens, uf, isPDF = false, suframa, tabela_pre
   const pct = resolveIcms(uf, suframa, tabela_preco);
   const icmsValue = totalLiquido * pct;
   const totalComIcms = totalLiquido + icmsValue;
+
+  const descontoVistaValueBRL = totalLiquido * (descontoVistaValor / 100);
+  const totalComDescontoVista = totalLiquido - descontoVistaValueBRL;
 
   const bolsaoGerado = totalLiquido * (bolsaoPct / 100);
   const bolsaoGasto = itens.reduce((s, i) => s + (i.bolsao ?? 0), 0);
@@ -130,6 +153,41 @@ export function ResumoFinanceiro({ itens, uf, isPDF = false, suframa, tabela_pre
             </p>
           </TabsContent>
         </Tabs>
+
+        <div className="rounded-md border bg-muted/30 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Desconto à vista (%)
+            </label>
+            {isPDF ? (
+              <span className="text-sm font-medium">{formatNum(descontoVistaValor, 2)}%</span>
+            ) : (
+              <Input
+                type="number"
+                min={0}
+                max={MAX_DESCONTO_VISTA}
+                step={0.01}
+                value={descontoVistaValor || ""}
+                onChange={(e) => setDescontoVista(parseFloat(e.target.value) || 0)}
+                onFocus={(e) => e.target.select()}
+                placeholder="0"
+                className="w-24 h-8 text-sm text-right [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+            )}
+          </div>
+          {descontoVistaValor > 0 && (
+            <>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Desconto à vista</span>
+                <span className="font-medium text-red-600">- {formatBRL(descontoVistaValueBRL)}</span>
+              </div>
+              <div className="flex justify-between text-base font-bold">
+                <span>Total com desconto à vista</span>
+                <span className="text-green-700">{formatBRL(totalComDescontoVista)}</span>
+              </div>
+            </>
+          )}
+        </div>
 
         {!isPDF && (
           <div className="rounded-md border bg-muted/30 p-3 space-y-2 no-print">
