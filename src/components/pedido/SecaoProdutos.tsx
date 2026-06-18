@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Search } from "lucide-react";
+import { Plus, Trash2, Search, AlertTriangle } from "lucide-react";
 import { formatBRL } from "@/lib/format";
 import { MARCAS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
@@ -486,18 +486,30 @@ export function SecaoProdutos({
                     {/* Quantidade */}
                     <TableCell className="text-right py-2 align-top">
                       {isVendedorLivre ? (
-                        <Input
-                          key={i.produto_id + "-qtd-livre"}
-                          type="number" min={1}
-                          value={qtdDraft[i.produto_id] ?? String(i.quantidade)}
-                          onChange={(e) => setQtdDraft((d) => ({ ...d, [i.produto_id]: e.target.value }))}
-                          onBlur={(e) => {
-                            const qtd = Math.max(1, Number(e.target.value) || 1);
-                            atualizarQtd(i.produto_id, qtd);
-                            limparQtdDraft(i.produto_id);
-                          }}
-                          className={cn("w-20 ml-auto h-7 text-xs")}
-                        />
+                        <div className="space-y-0.5">
+                          <Input
+                            key={i.produto_id + "-qtd-livre"}
+                            type="number" min={1}
+                            value={qtdDraft[i.produto_id] ?? String(i.quantidade)}
+                            onChange={(e) => setQtdDraft((d) => ({ ...d, [i.produto_id]: e.target.value }))}
+                            onBlur={(e) => {
+                              const qtd = Math.max(1, Number(e.target.value) || 1);
+                              atualizarQtd(i.produto_id, qtd);
+                              limparQtdDraft(i.produto_id);
+                            }}
+                            className={cn("w-20 ml-auto h-7 text-xs")}
+                          />
+                          {i.cx_embarque > 0 && i.quantidade % i.cx_embarque !== 0 && (
+                            <div className="flex items-start justify-end gap-1 text-[10px] leading-tight text-amber-600">
+                              <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
+                              <span className="text-left">
+                                Não é múltiplo de caixa ({i.cx_embarque} un). Sugestão:{" "}
+                                {Math.round(i.quantidade / i.cx_embarque) * i.cx_embarque} ou{" "}
+                                {(Math.round(i.quantidade / i.cx_embarque) + 1) * i.cx_embarque} un
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       ) : (
                         <div className="space-y-0.5">
                           <Input
