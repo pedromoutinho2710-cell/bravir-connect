@@ -47,70 +47,22 @@ function fileParaBase64(file: File): Promise<string> {
   });
 }
 
-// Tenta achar índice da coluna a partir de palavras-chave no cabeçalho
-function acharColuna(cabecalho: string[], chaves: string[]): number {
-  return cabecalho.findIndex((c) => {
-    const txt = String(c ?? "").toLowerCase();
-    return chaves.some((k) => txt.includes(k));
-  });
-}
-
-function numeroBR(v: unknown): number | null {
-  if (v == null || v === "") return null;
-  if (typeof v === "number") return v;
-  // "1.234,56" -> 1234.56
-  const n = Number(String(v).replace(/\./g, "").replace(",", ".").replace(/[^0-9.-]/g, ""));
-  return Number.isFinite(n) ? n : null;
-}
-
+// Lê o Excel com SheetJS, converte a 1ª aba para texto (CSV) e deixa a IA
+// extrair os itens — mais robusto que regras fixas de detecção de colunas.
 async function lerExcel(file: File): Promise<ItemExtraido[]> {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array" });
   const sheet = wb.Sheets[wb.SheetNames[0]];
   if (!sheet) return [];
 
-  const linhas = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, blankrows: false });
-  if (linhas.length === 0) return [];
+  const csv = XLSX.utils.sheet_to_csv(sheet);
+  if (!csv.trim()) return [];
 
-  console.log('Linhas brutas:', linhas.slice(0, 5));
-
-  // Acha a linha de cabeçalho (primeira que tenha alguma palavra-chave conhecida)
-  let idxCabecalho = linhas.findIndex((l) => {
-    const txt = (l as unknown[]).map((c) => String(c ?? "").toLowerCase()).join(" ");
-    return /produto|descri|c[oó]digo|sku|qtd|quant|pre[cç]o|valor/.test(txt);
+  const { data, error } = await supabase.functions.invoke("extrair-pedido", {
+    body: { text: csv },
   });
-  if (idxCabecalho < 0) idxCabecalho = 0;
-
-  const cabecalho = (linhas[idxCabecalho] as unknown[]).map((c) => String(c ?? ""));
-  console.log('Cabeçalho detectado:', cabecalho, 'idx:', idxCabecalho);
-
-  const colNome = acharColuna(cabecalho, ["produto", "descri", "item", "mercadoria"]);
-  const colCodigo = acharColuna(cabecalho, ["codigo", "código", "sku", "cod", "ref"]);
-  const colQtd = acharColuna(cabecalho, ["qtd", "quant"]);
-  const colPreco = acharColuna(cabecalho, ["preco", "preço", "valor", "unit"]);
-  console.log('Cols detectadas:', { colNome, colCodigo, colQtd, colPreco });
-
-  const itens: ItemExtraido[] = [];
-  for (let i = idxCabecalho + 1; i < linhas.length; i++) {
-    const linha = linhas[i] as unknown[];
-    const nome = colNome >= 0 ? String(linha[colNome] ?? "").trim() : "";
-    const codigo = colCodigo >= 0 ? String(linha[colCodigo] ?? "").trim() : "";
-    const qtd = colQtd >= 0 ? numeroBR(linha[colQtd]) : null;
-    const preco = colPreco >= 0 ? numeroBR(linha[colPreco]) : null;
-
-    // Ignora linhas sem produto e sem código
-    if (!nome && !codigo) continue;
-
-    itens.push({
-      nome_produto: nome || null,
-      codigo: codigo || null,
-      quantidade: qtd,
-      preco_unitario: preco,
-    });
-  }
-
-  console.log('Itens extraídos:', itens);
-  return itens;
+  if (error) throw error;
+  return Array.isArray(data?.itens) ? (data.itens as ItemExtraido[]) : [];
 }
 
 // Match: primeiro por codigo_jiva, depois por nome (parcial, case-insensitive)

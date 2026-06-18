@@ -33,22 +33,25 @@ serve(async (req) => {
   }
 
   try {
-    const { base64, mediaType } = await req.json();
+    const { base64, mediaType, text } = await req.json();
 
-    if (typeof base64 !== "string" || !base64 || typeof mediaType !== "string") {
+    // Monta o bloco de conteúdo: texto puro (Excel/CSV), imagem ou PDF.
+    let contentBlock:
+      | { type: "text"; text: string }
+      | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+      | { type: "document"; source: { type: "base64"; media_type: string; data: string } };
+
+    if (typeof text === "string" && text.trim()) {
+      // Planilha já convertida para CSV/texto no cliente.
+      contentBlock = { type: "text", text };
+    } else if (typeof base64 === "string" && base64 && typeof mediaType === "string") {
+      // Imagem -> bloco image; PDF -> bloco document. Ambos via base64.
+      contentBlock = mediaType === "application/pdf"
+        ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }
+        : { type: "image", source: { type: "base64", media_type: mediaType, data: base64 } };
+    } else {
       return json({ error: "Arquivo inválido." }, 400);
     }
-
-    // Imagem -> bloco image; PDF -> bloco document. Ambos via base64.
-    const fileBlock = mediaType === "application/pdf"
-      ? {
-          type: "document",
-          source: { type: "base64", media_type: "application/pdf", data: base64 },
-        }
-      : {
-          type: "image",
-          source: { type: "base64", media_type: mediaType, data: base64 },
-        };
 
     const res = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -63,7 +66,7 @@ serve(async (req) => {
         messages: [
           {
             role: "user",
-            content: [fileBlock, { type: "text", text: PROMPT_EXTRACAO }],
+            content: [contentBlock, { type: "text", text: PROMPT_EXTRACAO }],
           },
         ],
       }),
