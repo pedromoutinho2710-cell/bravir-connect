@@ -469,6 +469,7 @@ export type Database = {
         Row: {
           aceita_saldo: boolean
           assumido_por: string | null
+          aviso_pedido: string | null
           bairro: string | null
           campanha_id: string | null
           canal: string | null
@@ -512,6 +513,7 @@ export type Database = {
         Insert: {
           aceita_saldo?: boolean
           assumido_por?: string | null
+          aviso_pedido?: string | null
           bairro?: string | null
           campanha_id?: string | null
           canal?: string | null
@@ -555,6 +557,7 @@ export type Database = {
         Update: {
           aceita_saldo?: boolean
           assumido_por?: string | null
+          aviso_pedido?: string | null
           bairro?: string | null
           campanha_id?: string | null
           canal?: string | null
