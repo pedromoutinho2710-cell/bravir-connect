@@ -513,23 +513,50 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-base font-semibold">Telefone</Label>
+              <Label className="text-base font-semibold">
+                Telefone{value.agendamento && " *"}
+              </Label>
               <Input
                 value={value.telefone}
                 onChange={(e) => set("telefone", e.target.value)}
                 placeholder="(00) 00000-0000"
-                className="h-11 text-base"
+                className={`h-11 text-base ${
+                  value.agendamento && !value.telefone.trim()
+                    ? "border-red-400 focus-visible:ring-red-400"
+                    : ""
+                }`}
               />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-base font-semibold">Email</Label>
+              <Label className="text-base font-semibold">
+                Email{value.agendamento && " *"}
+              </Label>
               <Input
                 value={value.email}
                 onChange={(e) => set("email", e.target.value)}
                 placeholder="comprador@empresa.com"
-                className="h-11 text-base"
+                className={`h-11 text-base ${
+                  value.agendamento && !value.email.trim()
+                    ? "border-red-400 focus-visible:ring-red-400"
+                    : ""
+                }`}
               />
             </div>
+          </div>
+          {value.agendamento && (
+            <p className="flex items-center gap-1 text-xs text-destructive">
+              <AlertCircle className="h-3 w-3" />
+              Telefone e email obrigatórios para agendamento
+            </p>
+          )}
+        </div>
+
+        {/* Entrega agendada */}
+        <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-3">
+          <Switch checked={value.agendamento} onCheckedChange={(c) => set("agendamento", c)} />
+          <div>
+            <div className="text-base font-semibold leading-none">Entrega agendada</div>
+            <div className="text-sm text-muted-foreground mt-0.5">{value.agendamento ? "Sim — telefone e email obrigatórios" : "Não"}</div>
           </div>
         </div>
 
@@ -664,15 +691,6 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
               <div className="text-base font-semibold leading-none">Aceita saldo</div>
               <div className="text-sm text-muted-foreground mt-0.5">{value.aceita_saldo ? "Sim" : "Não"}</div>
             </div>
-          </div>
-        </div>
-
-        {/* Agendamento */}
-        <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-4 py-3">
-          <Switch checked={value.agendamento} onCheckedChange={(c) => set("agendamento", c)} />
-          <div>
-            <div className="text-base font-semibold leading-none">Agendamento</div>
-            <div className="text-sm text-muted-foreground mt-0.5">{value.agendamento ? "Sim — entrega agendada" : "Não"}</div>
           </div>
         </div>
 
