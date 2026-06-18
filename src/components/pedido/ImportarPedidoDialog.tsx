@@ -17,7 +17,17 @@ type ItemExtraido = {
   codigo: string | null;
   quantidade: number | null;
   preco_unitario: number | null;
+  // Match feito pela IA contra o catálogo enviado (pode vir null)
+  produto_id: string | null;
+  codigo_jiva: string | null;
 };
+
+// Catálogo enviado à IA para que ela já faça o match diretamente
+type ItemCatalogo = { id: string; codigo_jiva: string; nome: string };
+
+function montarCatalogo(produtos: Produto[]): ItemCatalogo[] {
+  return produtos.map((p) => ({ id: p.id, codigo_jiva: p.codigo_jiva, nome: p.nome }));
+}
 
 // Linha já com o match (ou não) no catálogo e quantidade editável
 type LinhaRevisao = ItemExtraido & {
@@ -49,7 +59,7 @@ function fileParaBase64(file: File): Promise<string> {
 
 // Lê o Excel com SheetJS, converte a 1ª aba para texto (CSV) e deixa a IA
 // extrair os itens — mais robusto que regras fixas de detecção de colunas.
-async function lerExcel(file: File): Promise<ItemExtraido[]> {
+async function lerExcel(file: File, catalogo: ItemCatalogo[]): Promise<ItemExtraido[]> {
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, { type: "array" });
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -59,14 +69,24 @@ async function lerExcel(file: File): Promise<ItemExtraido[]> {
   if (!csv.trim()) return [];
 
   const { data, error } = await supabase.functions.invoke("extrair-pedido", {
-    body: { text: csv },
+    body: { text: csv, catalogo },
   });
   if (error) throw error;
   return Array.isArray(data?.itens) ? (data.itens as ItemExtraido[]) : [];
 }
 
-// Match: primeiro por codigo_jiva, depois por nome (parcial, case-insensitive)
+// Match: primeiro o que a IA já indicou (produto_id e codigo_jiva do catálogo),
+// depois o código como veio no pedido e, por fim, o nome (parcial, case-insensitive)
 function acharMatch(item: ItemExtraido, produtos: Produto[]): Produto | null {
+  if (item.produto_id) {
+    const porId = produtos.find((p) => p.id === item.produto_id);
+    if (porId) return porId;
+  }
+  const jiva = item.codigo_jiva?.trim().toLowerCase();
+  if (jiva) {
+    const porJiva = produtos.find((p) => p.codigo_jiva.trim().toLowerCase() === jiva);
+    if (porJiva) return porJiva;
+  }
   const codigo = item.codigo?.trim().toLowerCase();
   if (codigo) {
     const porCodigo = produtos.find((p) => p.codigo_jiva.trim().toLowerCase() === codigo);
@@ -125,15 +145,16 @@ export function ImportarPedidoDialog({ produtos, onAdicionarItens, open, onOpenC
     setAnalisando(true);
     try {
       let itens: ItemExtraido[] = [];
+      const catalogo = montarCatalogo(produtos);
 
       if (ehExcel(arquivo)) {
-        itens = await lerExcel(arquivo);
+        itens = await lerExcel(arquivo, catalogo);
       } else {
         // Imagem ou PDF -> Claude Vision via edge function
         const base64 = await fileParaBase64(arquivo);
         const mediaType = arquivo.type || "application/octet-stream";
         const { data, error } = await supabase.functions.invoke("extrair-pedido", {
-          body: { base64, mediaType },
+          body: { base64, mediaType, catalogo },
         });
         if (error) throw error;
         itens = Array.isArray(data?.itens) ? (data.itens as ItemExtraido[]) : [];

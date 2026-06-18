@@ -9,11 +9,31 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const PROMPT_EXTRACAO =
-  "Analise este pedido e extraia os itens. Para cada item retorne " +
-  "um JSON array com objetos {nome_produto, codigo, quantidade, " +
-  "preco_unitario}. Se não encontrar algum campo deixe null. " +
-  "Retorne APENAS o JSON array, sem texto adicional.";
+type ItemCatalogo = { id: string; codigo_jiva: string; nome: string };
+
+function montarPrompt(catalogo: ItemCatalogo[]): string {
+  const lista = catalogo
+    .map((p) => `${p.codigo_jiva} - ${p.nome}`)
+    .join("\n");
+
+  return (
+    "Analise este pedido/documento e extraia os itens solicitados.\n" +
+    "Para cada item encontrado, tente identificar o produto correspondente " +
+    "no catálogo abaixo usando o código ou nome mais similar.\n\n" +
+    "CATÁLOGO DE PRODUTOS:\n" +
+    lista +
+    "\n\nRetorne APENAS um JSON array com objetos:\n" +
+    "{\n" +
+    '  nome_produto: string | null,  (nome como aparece no pedido)\n' +
+    '  codigo: string | null,        (código como aparece no pedido)\n' +
+    '  quantidade: number | null,\n' +
+    '  preco_unitario: number | null,\n' +
+    '  produto_id: string | null,    (id do produto do catálogo, se encontrou match)\n' +
+    '  codigo_jiva: string | null    (codigo_jiva do catálogo, se encontrou match)\n' +
+    "}\n" +
+    "Retorne APENAS o JSON array, sem texto adicional."
+  );
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -33,7 +53,8 @@ serve(async (req) => {
   }
 
   try {
-    const { base64, mediaType, text } = await req.json();
+    const { base64, mediaType, text, catalogo } = await req.json();
+    const catalogoSeguro: ItemCatalogo[] = Array.isArray(catalogo) ? catalogo : [];
 
     // Monta o bloco de conteúdo: texto puro (Excel/CSV), imagem ou PDF.
     let contentBlock:
@@ -66,7 +87,7 @@ serve(async (req) => {
         messages: [
           {
             role: "user",
-            content: [contentBlock, { type: "text", text: PROMPT_EXTRACAO }],
+            content: [contentBlock, { type: "text", text: montarPrompt(catalogoSeguro) }],
           },
         ],
       }),
