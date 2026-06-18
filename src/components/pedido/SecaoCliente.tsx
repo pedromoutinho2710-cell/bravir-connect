@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { formatCNPJ, formatCEP, isValidCNPJ, onlyDigits, formatBRL, formatDate } from "@/lib/format";
 import { UFS } from "@/lib/constants";
-import { AlertCircle, CheckCircle2, Search, PlusCircle, Banknote } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Search, PlusCircle, Banknote } from "lucide-react";
 
 /** Texto legível gravado em cond_pagamento quando o pedido é à vista. */
 export const COND_A_VISTA = "À Vista";
@@ -59,6 +59,7 @@ type Sugestao = {
   aceita_saldo: boolean | null;
   negativado: boolean | null;
   email: string | null;
+  aviso_pedido: string | null;
 };
 
 type Props = {
@@ -75,6 +76,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
   const [alertaMesmoDia, setAlertaMesmoDia] = useState(false);
   const [negativado, setNegativado] = useState(false);
   const [enderecoDisplay, setEnderecoDisplay] = useState<string | null>(null);
+  const [avisoPedido, setAvisoPedido] = useState<string | null>(null);
 
   // Search field state
   const [searchText, setSearchText] = useState(() => value.razao_social || "");
@@ -115,6 +117,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
     setCnpjStatus("encontrado");
     const isNegativado = cl.negativado ?? false;
     setNegativado(isNegativado);
+    setAvisoPedido(cl.aviso_pedido?.trim() ? cl.aviso_pedido : null);
     setSearchText(cl.razao_social);
     setSugestoes([]);
     setShowSugestoes(false);
@@ -149,6 +152,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
         setUltimosPedidos([]);
         setAlertaMesmoDia(false);
         setNegativado(false);
+        setAvisoPedido(null);
       }
       return;
     }
@@ -194,6 +198,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
           aceita_saldo: cl.aceita_saldo,
           negativado: cl.negativado,
           email: cl.email ?? null,
+          aviso_pedido: cl.aviso_pedido ?? null,
         });
 
         const { data: peds } = await supabase
@@ -230,6 +235,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
         setUltimosPedidos([]);
         setAlertaMesmoDia(false);
         setNegativado(false);
+        setAvisoPedido(null);
         onChange({ ...value, cliente_id: undefined });
       }
     })();
@@ -258,7 +264,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
         const termo = text.trim();
         const { data } = await supabase
           .from("clientes")
-          .select("id, razao_social, nome_parceiro, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, cluster, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado, email")
+          .select("id, razao_social, nome_parceiro, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, cluster, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado, email, aviso_pedido")
           .or(`razao_social.ilike.%${termo}%,nome_parceiro.ilike.%${termo}%`)
           .limit(10);
         setSugestoes((data ?? []) as Sugestao[]);
@@ -353,6 +359,17 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
                 <span className="text-muted-foreground">Novo cliente — preencha os dados abaixo</span>
               )}
               {cnpjStatus === "buscando" && <span className="text-muted-foreground">Buscando…</span>}
+            </div>
+          </div>
+        )}
+
+        {/* Aviso cadastrado na ficha do cliente */}
+        {avisoPedido && (
+          <div className="rounded-md border-2 border-orange-400 bg-yellow-50 p-3 text-sm text-orange-900 flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 shrink-0 text-orange-500" />
+            <div>
+              <span className="font-semibold">Aviso: </span>
+              <span className="whitespace-pre-wrap">{avisoPedido}</span>
             </div>
           </div>
         )}
