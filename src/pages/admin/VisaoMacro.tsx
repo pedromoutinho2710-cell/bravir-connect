@@ -49,6 +49,23 @@ const COR_B2B = "#3B82F6";
 const COR_MP = "#0F6E56";
 const COR_ONLINE = "#EC4899";
 
+// Cores das marcas
+const COR_LABY = "#8B5CF6";
+const COR_ALIVIK = "#0EA5E9";
+const COR_BENDITA = "#F59E0B";
+
+// Classifica um registro de faturamento em uma marca.
+// Marca Própria agrupa todo o canal "MP"; as demais saem do grupo (coluna que
+// indica a marca). Retorna null quando o registro não se encaixa em nenhuma.
+function marcaDeRow(row: SankhyaRow): string | null {
+  if ((row.canal ?? "").toUpperCase() === "MP") return "Marca Própria";
+  const g = (row.grupo ?? "").toUpperCase();
+  if (g.includes("LABY")) return "Laby";
+  if (g.includes("ALIVIK")) return "Alivik";
+  if (g.includes("BRAVIR") || g.includes("BENDITA")) return "Bendita Cânfora/Bravir";
+  return null;
+}
+
 // URL de autorização OAuth do Bling (client_id público; secret fica só no backend)
 const BLING_AUTH_URL = `https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=52c28f14c3e549679570757457681add807daee1&redirect_uri=https://bravir-connect.vercel.app/admin/bling-callback&state=bravir`;
 
@@ -200,6 +217,27 @@ export default function VisaoMacro() {
     },
   });
 
+  // Meta total da campanha ativa: soma meta_valor de todos os vendedores
+  const { data: metaCampanha } = useQuery({
+    queryKey: ["meta-total-campanha"],
+    queryFn: async () => {
+      const { data: camps, error } = await supabase
+        .from("campanhas")
+        .select("id, nome")
+        .eq("ativa", true);
+      if (error) throw error;
+      const ids = (camps ?? []).map((c) => c.id);
+      if (ids.length === 0) return { total: 0, nomes: [] as string[] };
+      const { data: metasVend, error: errMetas } = await supabase
+        .from("campanha_metas_vendedor")
+        .select("meta_valor")
+        .in("campanha_id", ids);
+      if (errMetas) throw errMetas;
+      const total = (metasVend ?? []).reduce((s, m) => s + (m.meta_valor ?? 0), 0);
+      return { total, nomes: (camps ?? []).map((c) => c.nome) };
+    },
+  });
+
   // Vendas online (Bling) do ano selecionado — só quando conectado
   const { data: vendasOnline, isLoading: loadingOnline } = useQuery({
     queryKey: ["bling-vendas", ano],
@@ -230,6 +268,31 @@ export default function VisaoMacro() {
   const mp2026 = useMemo(() => mpPorMes(rows ?? [], 2026), [rows]);
   const mpAno = ano === 2026 ? mp2026 : mp2025;
   const onlinePorMes = useMemo(() => onlinePorMesFn(vendasOnline ?? []), [vendasOnline]);
+
+  // Realizado por marca no mês/ano selecionados (mesmo filtro dos cards de canal):
+  // exclui devoluções e SUFRAMA, usa valor_bruto ?? valor_liquido.
+  const realizadoPorMarca = useMemo(() => {
+    const acc: Record<string, number> = {};
+    for (const r of rows ?? []) {
+      const op = (r.tipo_operacao ?? "").toUpperCase();
+      if (op.includes("DEVOLU") || op.includes("SUFRAMA")) continue;
+      if (getAno(r) !== ano) continue;
+      if (getMesIndex(r) !== mes) continue;
+      const marca = marcaDeRow(r);
+      if (!marca) continue;
+      acc[marca] = (acc[marca] ?? 0) + (r.valor_bruto ?? r.valor_liquido ?? 0);
+    }
+    const ordem = [
+      { nome: "Marca Própria", cor: COR_MP },
+      { nome: "Laby", cor: COR_LABY },
+      { nome: "Alivik", cor: COR_ALIVIK },
+      { nome: "Bendita Cânfora/Bravir", cor: COR_BENDITA },
+    ];
+    const lista = ordem.map((o) => ({ ...o, valor: acc[o.nome] ?? 0 }));
+    const total = lista.reduce((s, m) => s + m.valor, 0);
+    const max = Math.max(1, ...lista.map((m) => m.valor));
+    return { lista, total, max };
+  }, [rows, ano, mes]);
 
   // Realizado do mês selecionado por canal
   const realB2B = b2bAno[mes] ?? 0;
@@ -539,6 +602,71 @@ export default function VisaoMacro() {
                 </Card>
               );
             })}
+          </div>
+
+          {/* Meta total da campanha ativa */}
+          <Card className="border-2 border-primary/30 bg-primary/5">
+            <CardContent className="p-6">
+              <p className="text-sm font-medium text-muted-foreground">
+                Meta Total da Campanha
+              </p>
+              <p className="mt-1 text-3xl font-bold">
+                {formatBRL(metaCampanha?.total ?? 0)}
+              </p>
+              {metaCampanha?.nomes?.length ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {metaCampanha.nomes.join(" · ")}
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Nenhuma campanha ativa
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Realizado por marca */}
+          <div>
+            <h2 className="mb-3 text-lg font-semibold">
+              Realizado por marca — {MESES[mes]}/{ano}
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {realizadoPorMarca.lista.map((m) => {
+                const pctMax = (m.valor / realizadoPorMarca.max) * 100;
+                const pctTotal =
+                  realizadoPorMarca.total > 0
+                    ? (m.valor / realizadoPorMarca.total) * 100
+                    : 0;
+                return (
+                  <Card key={m.nome}>
+                    <CardHeader className="pb-2">
+                      <Badge
+                        className="w-fit text-white hover:opacity-90"
+                        style={{ backgroundColor: m.cor }}
+                      >
+                        {m.nome}
+                      </Badge>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="text-2xl font-bold">{formatBRL(m.valor)}</p>
+                      {/* Barra em relação ao maior valor entre marcas */}
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{
+                            width: `${Math.min(100, pctMax)}%`,
+                            backgroundColor: m.cor,
+                          }}
+                        />
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {pctTotal.toFixed(1)}% do total geral
+                      </p>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
           </div>
 
           {/* Gráfico de barras mensal */}
