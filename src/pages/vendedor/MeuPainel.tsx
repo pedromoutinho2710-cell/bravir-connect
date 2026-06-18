@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
+import { useImpersonation } from "@/contexts/ImpersonationContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -192,6 +193,8 @@ function nivelBadgeClass(nivel: string) {
 
 export default function MeuPainel() {
   const { user } = useAuth();
+  const { active, userId: impersonatedId } = useImpersonation();
+  const effectiveUserId = active ? impersonatedId : user?.id;
   const navigate = useNavigate();
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [customInicio, setCustomInicio] = useState("");
@@ -232,7 +235,7 @@ export default function MeuPainel() {
   const [historicoMeses, setHistoricoMeses] = useState<HistoricoMes[]>([]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     (async () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: campanha } = await (supabase as any)
@@ -274,7 +277,7 @@ export default function MeuPainel() {
       const { data: pedidosCampData } = await supabase
         .from("pedidos")
         .select("id, vendedor_id, data_pedido, status, itens_pedido(quantidade, total_item, produto_id, produtos(marca))")
-        .eq("vendedor_id", user.id)
+        .eq("vendedor_id", effectiveUserId)
         .gte("data_pedido", campanha.data_inicio)
         .lte("data_pedido", campanha.data_fim)
         .not("status", "in", '("rascunho","cancelado","devolvido")');
@@ -304,16 +307,16 @@ export default function MeuPainel() {
         .from("campanha_metas_vendedor")
         .select("meta_valor, categoria")
         .eq("campanha_id", campanha.id)
-        .eq("vendedor_id", user.id)
+        .eq("vendedor_id", effectiveUserId)
         .maybeSingle();
 
       setCampanhaMetaVendedor(metaData?.meta_valor != null ? Number(metaData.meta_valor) : null);
       setCampanhaCategoria(metaData?.categoria ?? null);
     })();
-  }, [user]);
+  }, [effectiveUserId]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     (async () => {
       const agora = new Date();
 
@@ -329,26 +332,26 @@ export default function MeuPainel() {
         supabase
           .from("pedidos")
           .select("id, status, itens_pedido(total_item)")
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId)
           .gte("data_pedido", kpiInicio)
           .lte("data_pedido", kpiFim)
           .not("status", "in", '("rascunho","cancelado")'),
         supabase
           .from("pedidos")
           .select("id", { count: "exact", head: true })
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId)
           .eq("status", "rascunho"),
         supabase
           .from("metas")
           .select("valor_meta_reais")
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId)
           .eq("mes", mesFiltro)
           .eq("ano", anoFiltro)
           .maybeSingle(),
         supabase
           .from("pedidos")
           .select("id, numero_pedido, status, data_pedido, itens_pedido(total_item), clientes(razao_social, nome_parceiro)")
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId)
           .not("status", "in", '("rascunho")')
           .order("created_at", { ascending: false }),
       ]);
@@ -389,11 +392,11 @@ export default function MeuPainel() {
           .eq("ativa", true)
           .or(`data_fim.is.null,data_fim.gte.${hoje}`),
         // RPC returns aggregated rows (≤10) instead of entire order history
-        supabase.rpc("vendedor_ltv_clientes", { _vendedor_id: user.id }),
+        supabase.rpc("vendedor_ltv_clientes", { _vendedor_id: effectiveUserId }),
         supabase
           .from("tarefas")
           .select("id, titulo, data_vencimento, concluida, cliente_id, clientes(razao_social, nome_parceiro)")
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId)
           .eq("concluida", false)
           .or(`data_vencimento.is.null,data_vencimento.lte.${hoje}`)
           .order("data_vencimento", { ascending: true }),
@@ -441,10 +444,10 @@ export default function MeuPainel() {
         data_pedido: p.data_pedido,
       })));
     })().finally(() => setLoading(false));
-  }, [user, periodo, customAtivo, customInicio, customFim]);
+  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     let cancelado = false;
     setLoadingPeriodo(true);
     (async () => {
@@ -452,7 +455,7 @@ export default function MeuPainel() {
       const { data, error } = await supabase
         .from("pedidos")
         .select("status, itens_pedido(total_item)")
-        .eq("vendedor_id", user.id)
+        .eq("vendedor_id", effectiveUserId)
         .gte("data_pedido", inicio)
         .lte("data_pedido", fim)
         .not("status", "in", '("rascunho","cancelado")');
@@ -476,18 +479,18 @@ export default function MeuPainel() {
       setLoadingPeriodo(false);
     })();
     return () => { cancelado = true; };
-  }, [user, periodo, customAtivo, customInicio, customFim]);
+  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim]);
 
   // Faturado do mês — agora vem de faturamentos_sankhya casado por nome_vendedor.
   // Busca profiles.full_name → ILIKE em faturamentos_sankhya.nome_vendedor.
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     let cancelado = false;
     (async () => {
       const { data: prof } = await supabase
         .from("profiles")
         .select("full_name, nome_sankhya")
-        .eq("id", user.id)
+        .eq("id", effectiveUserId)
         .maybeSingle();
       const fullName = prof?.full_name?.trim() || null;
       const nomeSankhya = prof?.nome_sankhya?.trim() || null;
@@ -543,10 +546,10 @@ export default function MeuPainel() {
       setFaturamentoRealMesAnterior(sumAnt);
     })();
     return () => { cancelado = true; };
-  }, [user]);
+  }, [effectiveUserId]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     (async () => {
       const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
       const agora = new Date();
@@ -564,7 +567,7 @@ export default function MeuPainel() {
           const { data } = await supabase
             .from("pedidos")
             .select("id, itens_pedido(total_item)")
-            .eq("vendedor_id", user.id)
+            .eq("vendedor_id", effectiveUserId)
             .gte("data_pedido", m.inicio)
             .lte("data_pedido", m.fim)
             .not("status", "in", '("rascunho","cancelado")');
@@ -584,13 +587,13 @@ export default function MeuPainel() {
       );
       setHistoricoMeses(resultados);
     })();
-  }, [user]);
+  }, [effectiveUserId]);
 
   // Mini-ranking de posições — faturado real (Sankhya) por vendedor no período.
   // Mostra a posição de todos SEM valores; o próprio vendedor é destacado via
   // match com nome_vendedor: nome_sankhya (exato) quando preenchido, senão full_name.
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     let cancelado = false;
     const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
     (async () => {
@@ -628,13 +631,13 @@ export default function MeuPainel() {
       setRankingPosicoes(lista);
     })();
     return () => { cancelado = true; };
-  }, [user, periodo, customAtivo, customInicio, customFim, vendedorFullName, vendedorNomeSankhya]);
+  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim, vendedorFullName, vendedorNomeSankhya]);
 
   // Faturamento mensal (Sankhya) do próprio vendedor — últimos 6 meses.
   // Mesma lógica/visual do Dashboard admin, filtrado por nome_vendedor
   // (nome_sankhya exato quando preenchido, senão %full_name%).
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     const matchPattern = vendedorNomeSankhya
       ? vendedorNomeSankhya
       : (vendedorFullName ? `%${vendedorFullName}%` : null);
@@ -671,18 +674,18 @@ export default function MeuPainel() {
       setFatMensalVendedor(arr);
     })();
     return () => { cancelado = true; };
-  }, [user, vendedorFullName, vendedorNomeSankhya]);
+  }, [effectiveUserId, vendedorFullName, vendedorNomeSankhya]);
 
   // Top 5 clientes do vendedor por valor de entrada no período (RLS limita aos próprios pedidos)
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     let cancelado = false;
     const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
     (async () => {
       const { data, error } = await supabase
         .from("pedidos")
         .select("cliente_id, clientes(razao_social, nome_parceiro), itens_pedido(total_item)")
-        .eq("vendedor_id", user.id)
+        .eq("vendedor_id", effectiveUserId)
         .gte("data_pedido", inicio)
         .lte("data_pedido", fim)
         .not("status", "in", '("rascunho","cancelado","devolvido")');
@@ -705,18 +708,18 @@ export default function MeuPainel() {
       setTopClientes(lista);
     })();
     return () => { cancelado = true; };
-  }, [user, periodo, customAtivo, customInicio, customFim]);
+  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim]);
 
   // Entrada por marca do vendedor no período (donut) — soma total_item por marca do produto
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     let cancelado = false;
     const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
     (async () => {
       const { data, error } = await supabase
         .from("pedidos")
         .select("itens_pedido(total_item, produtos(marca))")
-        .eq("vendedor_id", user.id)
+        .eq("vendedor_id", effectiveUserId)
         .gte("data_pedido", inicio)
         .lte("data_pedido", fim)
         .not("status", "in", '("rascunho","cancelado")');
@@ -734,18 +737,18 @@ export default function MeuPainel() {
       setEntradaMarca(agg);
     })();
     return () => { cancelado = true; };
-  }, [user, periodo, customAtivo, customInicio, customFim]);
+  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim]);
 
   // Ranking de produtos do vendedor no período — top 10 por quantidade e por valor
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     let cancelado = false;
     const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
     (async () => {
       const { data, error } = await supabase
         .from("pedidos")
         .select("itens_pedido(quantidade, total_item, produto_id, produtos(codigo_jiva, nome, marca))")
-        .eq("vendedor_id", user.id)
+        .eq("vendedor_id", effectiveUserId)
         .gte("data_pedido", inicio)
         .lte("data_pedido", fim)
         .not("status", "in", '("rascunho","cancelado")');
@@ -777,22 +780,22 @@ export default function MeuPainel() {
       setTopSkusValor([...lista].sort((a, b) => b.valor - a.valor).slice(0, 10));
     })();
     return () => { cancelado = true; };
-  }, [user, periodo, customAtivo, customInicio, customFim]);
+  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim]);
 
   useEffect(() => {
-    if (!user) return;
+    if (!effectiveUserId) return;
     const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
     (async () => {
       const [carteiraRes, pedidosRes, novosRes] = await Promise.all([
         supabase
           .from("clientes")
           .select("id, razao_social, nome_parceiro, cidade", { count: "exact" })
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId)
           .eq("status", "ativo"),
         supabase
           .from("pedidos")
           .select("cliente_id, data_pedido")
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId)
           .gte("data_pedido", inicio)
           .lte("data_pedido", fim)
           .not("status", "in", '("cancelado","devolvido")'),
@@ -800,7 +803,7 @@ export default function MeuPainel() {
         supabase
           .from("clientes")
           .select("id", { count: "exact", head: true })
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId)
           .eq("status", "ativo")
           .gte("created_at", inicio)
           .lte("created_at", `${fim}T23:59:59`),
@@ -822,7 +825,7 @@ export default function MeuPainel() {
         const { data: ultimosData } = await supabase
           .from("pedidos")
           .select("cliente_id, data_pedido")
-          .eq("vendedor_id", user.id)
+          .eq("vendedor_id", effectiveUserId)
           .in("cliente_id", semPedidoIds)
           .not("status", "in", '("cancelado","devolvido","rascunho")')
           .order("data_pedido", { ascending: false });
@@ -848,7 +851,7 @@ export default function MeuPainel() {
         semPedidoList,
       });
     })();
-  }, [user, periodo, customAtivo, customInicio, customFim]);
+  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim]);
 
   useEffect(() => {
     let cancelado = false;
