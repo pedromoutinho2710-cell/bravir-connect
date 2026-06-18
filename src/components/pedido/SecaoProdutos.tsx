@@ -3,12 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Search, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Search, AlertTriangle, Upload } from "lucide-react";
 import { formatBRL } from "@/lib/format";
 import { MARCAS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { ImportarPedidoDialog } from "@/components/pedido/ImportarPedidoDialog";
 
 export type Produto = {
   id: string;
@@ -100,6 +101,7 @@ export function SecaoProdutos({
 }: Props) {
   const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
   const [precos, setPrecos] = useState<Record<string, Record<string, number>>>({});
   const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, { preco: number; desconto_perfil: number | null; origem: string }>>({});
   // Valor "em digitação" do campo de quantidade (string), por produto.
@@ -186,6 +188,30 @@ export function SecaoProdutos({
       return;
     }
     onChange([...itens, calcItem(p, p.cx_embarque)]);
+  };
+
+  // Adiciona em lote itens vindos da importação de arquivo (foto/PDF/Excel).
+  // Aplica as mesmas validações de adicionar(): cliente preenchido, dedup e bonificação.
+  const adicionarImportados = (novos: { produto: Produto; quantidade: number }[]) => {
+    if (bloqueado) {
+      toast.error("Preencha todos os campos obrigatórios do cliente antes de adicionar produtos");
+      return;
+    }
+    if (!tabelaPreco || !perfilCliente) {
+      toast.error("Selecione perfil do cliente e tabela de preço primeiro");
+      return;
+    }
+    const atuais = [...itens];
+    const idsExistentes = new Set(itens.map((i) => i.produto_id));
+    let ignorados = 0;
+    for (const { produto, quantidade } of novos) {
+      if (idsExistentes.has(produto.id)) { ignorados++; continue; }
+      if (tipoPedido === "Bonificação" && MARCAS_BLOQUEADAS_BONIFICACAO.includes(produto.marca)) { ignorados++; continue; }
+      atuais.push(calcItem(produto, Math.max(1, Math.floor(quantidade) || 1)));
+      idsExistentes.add(produto.id);
+    }
+    if (atuais.length > itens.length) onChange(atuais);
+    if (ignorados > 0) toast.info(`${ignorados} item(ns) ignorado(s) (já no pedido ou marca bloqueada na bonificação).`);
   };
 
   const atualizarQtd = (produto_id: string, qtd: number) => {
@@ -388,6 +414,17 @@ export function SecaoProdutos({
               disabled={bloqueado}
             />
           </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setImportOpen(true)}
+            disabled={bloqueado}
+            className="shrink-0"
+          >
+            <Upload className="h-4 w-4" />
+            Importar pedido
+          </Button>
           <div className="flex flex-wrap gap-2">
             {(["Todas", ...MARCAS] as const).map((m) => (
               <button
@@ -623,6 +660,13 @@ export function SecaoProdutos({
           </div>
         )}
       </CardContent>
+
+      <ImportarPedidoDialog
+        produtos={produtos}
+        onAdicionarItens={adicionarImportados}
+        open={importOpen}
+        onOpenChange={setImportOpen}
+      />
     </Card>
   );
 }
