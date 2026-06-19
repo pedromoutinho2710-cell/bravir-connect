@@ -319,6 +319,7 @@ export default function MeuPainel() {
       setCampanhaMetaTipo(tipoMetaCamp);
       setCampanhaMetaQuantidade(metaData?.meta_quantidade ?? null);
       setCampanhaEntrada(tipoMetaCamp === "unidades" ? entradaUnidades : entrada);
+      console.log("[DEBUG campanha]", { metaData, tipoMetaCamp, entradaUnidades, entrada });
     })();
   }, [effectiveUserId]);
 
