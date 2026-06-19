@@ -26,7 +26,9 @@ dist-ssr
 scripts/
 *.xls
 
-# Scripts utilitários com possíveis credenciais — não versionar
-sync_bling.py
-seed.mjs
+# Scripts utilitários com possíveis credenciais e arquivos temporários — não versionar
 *.py
+seed.mjs
+output.txt
+# Arquivos .sql soltos na raiz (migrations ficam em supabase/migrations/)
+/*.sql
