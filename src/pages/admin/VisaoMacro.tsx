@@ -14,7 +14,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, MESES_ABREV } from "@/lib/format";
 
 // Linha agregada retornada pela RPC get_faturamentos_b2b_agregado:
 // faturamento somado por (ano, mês, canal, grupo), já sem devoluções,
@@ -39,11 +39,6 @@ type BlingVenda = {
   data?: string;
   total?: number;
 };
-
-const MESES = [
-  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
-];
 
 // Cores dos canais
 const COR_B2B = "#3B82F6";
@@ -308,7 +303,7 @@ export default function VisaoMacro() {
     const idxs: number[] = [];
     for (let i = inicio; i <= mes; i++) idxs.push(i);
     const lista = idxs.map((i) => ({
-      mes: MESES[i],
+      mes: MESES_ABREV[i],
       b2b: b2bAno[i] ?? 0,
       mp: mpAno[i] ?? 0,
       online: blingConectado ? (onlinePorMes[i] ?? 0) : 0,
@@ -322,7 +317,7 @@ export default function VisaoMacro() {
 
   // Tabela comparativa (todos os meses)
   const tabela = useMemo(() => {
-    const linhas = MESES.map((nome, i) => {
+    const linhas = MESES_ABREV.map((nome, i) => {
       const b25 = b2b2025[i] ?? 0;
       const b26 = b2b2026[i] ?? 0;
       const mp26 = mp2026[i] ?? 0;
@@ -422,7 +417,7 @@ export default function VisaoMacro() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {MESES.map((m, i) => (
+              {MESES_ABREV.map((m, i) => (
                 <SelectItem key={i} value={String(i)}>
                   {m}
                 </SelectItem>
@@ -469,7 +464,7 @@ export default function VisaoMacro() {
                 <p className="text-xs text-muted-foreground">Total realizado</p>
                 <p className="mt-1 text-2xl font-bold">{formatBRL(kpis.totalReal)}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {MESES[mes]}/{ano}
+                  {MESES_ABREV[mes]}/{ano}
                 </p>
               </CardContent>
             </Card>
@@ -585,7 +580,7 @@ export default function VisaoMacro() {
           {/* Realizado por marca */}
           <div>
             <h2 className="mb-3 text-lg font-semibold">
-              Realizado por marca — {MESES[mes]}/{ano}
+              Realizado por marca — {MESES_ABREV[mes]}/{ano}
             </h2>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {realizadoPorMarca.lista.map((m) => {
@@ -753,7 +748,7 @@ export default function VisaoMacro() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              Editar metas — {MESES[mes]}/{ano}
+              Editar metas — {MESES_ABREV[mes]}/{ano}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">

@@ -1,5 +1,16 @@
 // Utilitários de formatação BR
 
+// Nomes dos meses (índice 0 = Janeiro). MESES = nome completo, MESES_ABREV = abreviado.
+export const MESES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+export const MESES_ABREV = [
+  "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
+  "Jul", "Ago", "Set", "Out", "Nov", "Dez",
+];
+
 export const formatBRL = (n: number) =>
   (Number.isFinite(n) ? n : 0).toLocaleString("pt-BR", {
     style: "currency",

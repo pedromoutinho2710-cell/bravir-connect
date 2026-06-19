@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { formatBRL, formatDate } from "@/lib/format";
+import { formatBRL, formatDate, MESES_ABREV } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -526,7 +526,6 @@ export default function MeuPainel() {
   useEffect(() => {
     if (!effectiveUserId) return;
     (async () => {
-      const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
       const agora = new Date();
       const meses = Array.from({ length: 3 }, (_, i) => {
         const d = new Date(agora.getFullYear(), agora.getMonth() - (2 - i), 1);
@@ -619,7 +618,6 @@ export default function MeuPainel() {
     if (!matchPattern) { setFatMensalVendedor([]); return; }
     let cancelado = false;
     (async () => {
-      const MESES_ABREV = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
       const agora = new Date();
       const meses6 = Array.from({ length: 6 }, (_, i) => {
         const d = new Date(agora.getFullYear(), agora.getMonth() - (5 - i), 1);

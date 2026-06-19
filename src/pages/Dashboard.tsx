@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, ArrowRight, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
-import { formatBRL, formatDate } from "@/lib/format";
+import { formatBRL, formatDate, MESES_ABREV } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 import { exportDashboardExcel } from "@/lib/exportDashboardExcel";
 import { exportarBaseDadosCompleta } from "@/lib/excel";
@@ -131,8 +131,6 @@ const MARCA_CORES: Record<string, string> = {
   "Bravir": "#888780",
   "Alivik": "#1d9e75",
 };
-
-const MESES_ABREV = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 const NIVEL_ORDEM: Record<string, number> = { "Bronze": 1, "Prata": 2, "Ouro": 3, "Diamante": 4 };
 
