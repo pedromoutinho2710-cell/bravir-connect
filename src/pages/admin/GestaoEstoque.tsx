@@ -332,6 +332,11 @@ export default function GestaoEstoque() {
 
   return (
     <div className="space-y-6">
+      {/* Aviso — tela em desenvolvimento com dados simulados */}
+      <div className="rounded-md border border-yellow-300 bg-yellow-100 px-4 py-3 text-sm text-yellow-800">
+        ⚠️ Esta tela está em desenvolvimento. Os dados exibidos são simulados.
+      </div>
+
       {/* Cabeçalho */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-3">

@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { FileText, Calculator, LayoutTemplate, Eye, ClipboardList, Package } from "lucide-react";
+import { FileText, Calculator, LayoutTemplate, Eye, ClipboardList } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -138,15 +138,6 @@ export function AppSidebar() {
             ? { ...item, badge: leadsNovosCount }
             : item
         ),
-      };
-    }
-    if (section.label === "Administração") {
-      return {
-        ...section,
-        items: [
-          ...section.items,
-          { title: "Gestão de Estoque", url: "/admin/gestao-estoque", icon: Package },
-        ],
       };
     }
     return section;
