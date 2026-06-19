@@ -16,14 +16,15 @@ import {
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
 
-type SankhyaRow = {
-  data_faturamento: string | null;
-  valor_liquido: number | null;
-  valor_bruto: number | null;
-  tipo_operacao: string | null;
-  numero_nota: string | null;
-  grupo: string | null;
+// Linha agregada retornada pela RPC get_faturamentos_b2b_agregado:
+// faturamento somado por (ano, mês, canal, grupo), já sem devoluções,
+// SUFRAMA e bonificações.
+type AggRow = {
+  ano: number;
+  mes: number; // 1-12
   canal: string | null;
+  grupo: string | null;
+  total: number;
 };
 
 type MetasRow = {
@@ -57,7 +58,7 @@ const COR_BENDITA = "#F59E0B";
 // Classifica um registro de faturamento em uma marca.
 // Marca Própria agrupa todo o canal "MP"; as demais saem do grupo (coluna que
 // indica a marca). Retorna null quando o registro não se encaixa em nenhuma.
-function marcaDeRow(row: SankhyaRow): string | null {
+function marcaDeRow(row: { canal: string | null; grupo: string | null }): string | null {
   if ((row.canal ?? "").toUpperCase() === "MP") return "Marca Própria";
   const g = (row.grupo ?? "").toUpperCase();
   if (g.includes("LABY")) return "Laby";
@@ -69,80 +70,28 @@ function marcaDeRow(row: SankhyaRow): string | null {
 // URL de autorização OAuth do Bling (client_id público; secret fica só no backend)
 const BLING_AUTH_URL = `https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=52c28f14c3e549679570757457681add807daee1&redirect_uri=https://bravir-connect.vercel.app/admin/bling-callback&state=bravir`;
 
-// Busca todos os registros B2B (paginado) de 2025-01-01 até 2026-12-31, para
-// suportar o comparativo histórico. B2B = exclui devoluções e bonificações.
-async function fetchFaturamentosB2B(): Promise<SankhyaRow[]> {
-  const all: SankhyaRow[] = [];
-  const pageSize = 1000;
-  let from = 0;
-
-  for (;;) {
-    const { data, error } = await supabase
-      .from("faturamentos_sankhya")
-      .select("data_faturamento, valor_liquido, valor_bruto, tipo_operacao, numero_nota, grupo, canal")
-      .gte("data_faturamento", "2025-01-01")
-      .lte("data_faturamento", "2026-12-31")
-      .not("tipo_operacao", "ilike", "%devolucao%")
-      .not("tipo_operacao", "ilike", "%devolução%")
-      .not("tipo_operacao", "ilike", "%Devolução%")
-      .not("tipo_operacao", "ilike", "%BONIFICACAO%")
-      .range(from, from + pageSize - 1);
-
-    if (error) throw error;
-    const rows = (data ?? []) as SankhyaRow[];
-    all.push(...rows);
-    if (rows.length < pageSize) break;
-    from += pageSize;
-  }
-
-  return all;
-}
-
-function getAno(row: SankhyaRow): number | null {
-  if (!row.data_faturamento) return null;
-  const y = Number(row.data_faturamento.slice(0, 4));
-  return Number.isFinite(y) ? y : null;
-}
-
-function getMesIndex(row: SankhyaRow): number | null {
-  if (!row.data_faturamento) return null;
-  const m = Number(row.data_faturamento.slice(5, 7));
-  return m >= 1 && m <= 12 ? m - 1 : null;
-}
-
-// Soma B2B por mês (12 posições) para um ano específico.
-// B2B = registros cujo canal é "BRAVIR" (a coluna canal classifica o registro,
-// mantendo os canais mutuamente exclusivos com Marca Própria).
-function b2bPorMes(rows: SankhyaRow[], ano: number): number[] {
+// Soma B2B por mês (12 posições) para um ano específico, a partir das linhas
+// já agregadas no banco. B2B = canal "BRAVIR" (a coluna canal classifica o
+// registro, mantendo os canais mutuamente exclusivos com Marca Própria).
+// Devoluções, SUFRAMA e bonificações já são excluídas pela RPC.
+function b2bPorMes(rows: AggRow[], ano: number): number[] {
   const arr = new Array(12).fill(0);
   for (const r of rows) {
-    {
-      const op = (r.tipo_operacao ?? "").toUpperCase();
-      if (op.includes("DEVOLU") || op.includes("SUFRAMA")) continue;
-    }
+    if (r.ano !== ano) continue;
     if ((r.canal ?? "").toUpperCase() !== "BRAVIR") continue;
-    if (getAno(r) !== ano) continue;
-    const mes = getMesIndex(r);
-    if (mes === null) continue;
-    arr[mes] += r.valor_bruto ?? r.valor_liquido ?? 0;
+    if (r.mes >= 1 && r.mes <= 12) arr[r.mes - 1] += Number(r.total) || 0;
   }
   return arr;
 }
 
 // Soma Marca Própria por mês (12 posições) para um ano específico.
-// Marca Própria = registros cujo canal é "MP".
-function mpPorMes(rows: SankhyaRow[], ano: number): number[] {
+// Marca Própria = canal "MP".
+function mpPorMes(rows: AggRow[], ano: number): number[] {
   const arr = new Array(12).fill(0);
   for (const r of rows) {
-    {
-      const op = (r.tipo_operacao ?? "").toUpperCase();
-      if (op.includes("DEVOLU") || op.includes("SUFRAMA")) continue;
-    }
+    if (r.ano !== ano) continue;
     if ((r.canal ?? "").toUpperCase() !== "MP") continue;
-    if (getAno(r) !== ano) continue;
-    const mes = getMesIndex(r);
-    if (mes === null) continue;
-    arr[mes] += r.valor_bruto ?? r.valor_liquido ?? 0;
+    if (r.mes >= 1 && r.mes <= 12) arr[r.mes - 1] += Number(r.total) || 0;
   }
   return arr;
 }
@@ -184,10 +133,20 @@ export default function VisaoMacro() {
   const [formMeta, setFormMeta] = useState({ b2b: "", mp: "", online: "" });
   const [salvando, setSalvando] = useState(false);
 
-  // B2B (Sankhya)
+  // B2B (Sankhya) — agregado no banco via RPC (antes baixava milhares de linhas
+  // para o browser). A janela cobre 2025 e 2026 para alimentar o comparativo YoY.
   const { data: rows, isLoading: loadingB2B } = useQuery({
-    queryKey: ["visao-macro-sankhya"],
-    queryFn: fetchFaturamentosB2B,
+    queryKey: ["faturamentos-b2b-agregado", ano],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<AggRow[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc(
+        "get_faturamentos_b2b_agregado",
+        { p_ano: ano }
+      );
+      if (error) throw error;
+      return (data ?? []) as AggRow[];
+    },
   });
 
   // Status da conexão Bling (admin consegue ler bling_tokens)
@@ -269,18 +228,16 @@ export default function VisaoMacro() {
   const mpAno = ano === 2026 ? mp2026 : mp2025;
   const onlinePorMes = useMemo(() => onlinePorMesFn(vendasOnline ?? []), [vendasOnline]);
 
-  // Realizado por marca no mês/ano selecionados (mesmo filtro dos cards de canal):
-  // exclui devoluções e SUFRAMA, usa valor_bruto ?? valor_liquido.
+  // Realizado por marca no mês/ano selecionados, a partir das linhas agregadas
+  // (devoluções/SUFRAMA/bonificações já excluídas e valor já somado pela RPC).
   const realizadoPorMarca = useMemo(() => {
     const acc: Record<string, number> = {};
     for (const r of rows ?? []) {
-      const op = (r.tipo_operacao ?? "").toUpperCase();
-      if (op.includes("DEVOLU") || op.includes("SUFRAMA")) continue;
-      if (getAno(r) !== ano) continue;
-      if (getMesIndex(r) !== mes) continue;
+      if (r.ano !== ano) continue;
+      if (r.mes - 1 !== mes) continue;
       const marca = marcaDeRow(r);
       if (!marca) continue;
-      acc[marca] = (acc[marca] ?? 0) + (r.valor_bruto ?? r.valor_liquido ?? 0);
+      acc[marca] = (acc[marca] ?? 0) + (Number(r.total) || 0);
     }
     const ordem = [
       { nome: "Marca Própria", cor: COR_MP },
