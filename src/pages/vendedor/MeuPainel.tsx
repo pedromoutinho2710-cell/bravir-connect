@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
@@ -201,14 +202,10 @@ export default function MeuPainel() {
   const [customFim, setCustomFim] = useState("");
   const [customAtivo, setCustomAtivo] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
-  const [periodTotais, setPeriodTotais] = useState<PeriodTotais>({ entrada: 0, faturado: 0, aFaturar: 0 });
-  const [loadingPeriodo, setLoadingPeriodo] = useState(false);
-  const [kpis, setKpis] = useState<KPIs>({ faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0, aFaturar: 0, pedidosSemEstoque: 0, valorSemEstoque: 0 });
   const [ultimosPedidos, setUltimosPedidos] = useState<UltimoPedido[]>([]);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
   const [clientesReativar, setClientesReativar] = useState<ClienteReativar[]>([]);
   const [tarefasDia, setTarefasDia] = useState<TarefaDia[]>([]);
-  const [loading, setLoading] = useState(true);
   const [baixandoTabela, setBaixandoTabela] = useState(false);
   const [clientesPeriodo, setClientesPeriodo] = useState<ClientesPeriodo>({ carteira: 0, comPedido: 0, novos: 0, semPedidoList: [] });
   const [modalSemPedidoOpen, setModalSemPedidoOpen] = useState(false);
@@ -218,11 +215,6 @@ export default function MeuPainel() {
   const [campanhaEntradaPorMarca, setCampanhaEntradaPorMarca] = useState<Record<string, number>>({});
   const [campanhaMetaVendedor, setCampanhaMetaVendedor] = useState<number | null>(null);
   const [campanhaCategoria, setCampanhaCategoria] = useState<string | null>(null);
-  const [faturadoMesAtual, setFaturadoMesAtual] = useState(0);
-  const [faturamentoRealMes, setFaturamentoRealMes] = useState<number | null>(null);
-  const [faturamentoRealMesAnterior, setFaturamentoRealMesAnterior] = useState<number | null>(null);
-  const [vendedorFullName, setVendedorFullName] = useState<string | null>(null);
-  const [vendedorNomeSankhya, setVendedorNomeSankhya] = useState<string | null>(null);
   const [rankingPosicoes, setRankingPosicoes] = useState<{ nome: string; isVoce: boolean }[]>([]);
   const [fatMensalVendedor, setFatMensalVendedor] = useState<{ mes: string; valor: number }[]>([]);
   const [topClientes, setTopClientes] = useState<{ cliente_id: string; nome: string; total: number }[]>([]);
@@ -233,6 +225,12 @@ export default function MeuPainel() {
   const [produtosIndisponiveis, setProdutosIndisponiveis] = useState<{ id: string; nome: string }[]>([]);
   const [modalIndispOpen, setModalIndispOpen] = useState(false);
   const [historicoMeses, setHistoricoMeses] = useState<HistoricoMes[]>([]);
+
+  const queryClient = useQueryClient();
+  const agoraData = useMemo(() => new Date(), []);
+  const mesAtual = agoraData.getMonth() + 1;
+  const anoAtual = agoraData.getFullYear();
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!effectiveUserId) return;
@@ -315,11 +313,15 @@ export default function MeuPainel() {
     })();
   }, [effectiveUserId]);
 
-  useEffect(() => {
-    if (!effectiveUserId) return;
-    (async () => {
-      const agora = new Date();
-
+  // ── KPIs do período (pedidos) — agregação cacheada via TanStack Query.
+  //    Consolida a antiga query redundante de "totais do período" (entrada/
+  //    faturado/a faturar saem do mesmo fetch).
+  const periodoQuery = useQuery({
+    queryKey: ["painel-periodo", effectiveUserId, periodo, customAtivo, customInicio, customFim],
+    enabled: !!effectiveUserId,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
+    queryFn: async () => {
       // Período efetivo dos KPIs: filtro personalizado ou período selecionado
       const { inicio: kpiInicio, fim: kpiFim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
 
@@ -328,7 +330,7 @@ export default function MeuPainel() {
       const mesFiltro = periodoDate.getMonth() + 1;
       const anoFiltro = periodoDate.getFullYear();
 
-      const [pedidosRes, rascunhosRes, metasRes, ultimosRes] = await Promise.all([
+      const [pedidosRes, rascunhosRes, metasRes] = await Promise.all([
         supabase
           .from("pedidos")
           .select("id, status, itens_pedido(total_item)")
@@ -348,13 +350,8 @@ export default function MeuPainel() {
           .eq("mes", mesFiltro)
           .eq("ano", anoFiltro)
           .maybeSingle(),
-        supabase
-          .from("pedidos")
-          .select("id, numero_pedido, status, data_pedido, itens_pedido(total_item), clientes(razao_social, nome_parceiro)")
-          .eq("vendedor_id", effectiveUserId)
-          .not("status", "in", '("rascunho")')
-          .order("created_at", { ascending: false }),
       ]);
+      if (pedidosRes.error) throw pedidosRes.error;
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const pedidos = (pedidosRes.data ?? []) as any[];
@@ -362,6 +359,7 @@ export default function MeuPainel() {
       let pedidosSemEstoque = 0;
       let valorSemEstoque = 0;
       let aFaturar = 0;
+      let faturado = 0;
       pedidos.forEach((p) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const total = (p.itens_pedido ?? []).reduce((si: number, i: any) => si + Number(i.total_item), 0);
@@ -373,6 +371,9 @@ export default function MeuPainel() {
         if (p.status === "no_sankhya" || p.status === "parcialmente_faturado" || p.status === "nao_liberado_envio" || p.status === "liberado_envio") {
           aFaturar += total;
         }
+        if (p.status === "faturado" || p.status === "parcialmente_faturado") {
+          faturado += total;
+        }
       });
       const numPedidos = pedidos.length;
       const ticketMedio = numPedidos > 0 ? faturamento / numPedidos : 0;
@@ -380,12 +381,58 @@ export default function MeuPainel() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const meta = Number((metasRes.data as any)?.valor_meta_reais ?? 0);
 
-      setKpis({ faturamento, numPedidos, ticketMedio, rascunhos, meta, aFaturar, pedidosSemEstoque, valorSemEstoque });
+      return {
+        kpis: { faturamento, numPedidos, ticketMedio, rascunhos, meta, aFaturar, pedidosSemEstoque, valorSemEstoque } as KPIs,
+        periodTotais: { entrada: faturamento, faturado, aFaturar } as PeriodTotais,
+      };
+    },
+  });
 
-      // Second wave: campanhas, reativação via RPC, tarefas — all in parallel
-      const hoje = agora.toISOString().slice(0, 10);
+  // ── Faturamento Real (Sankhya) — mês atual + anterior, agregado no banco
+  //    via RPC. A RPC também devolve full_name/nome_sankhya (usados no ranking
+  //    e no gráfico mensal), evitando uma query separada de profiles.
+  const painelQuery = useQuery({
+    queryKey: ["painel-vendedor", effectiveUserId, anoAtual, mesAtual],
+    enabled: !!effectiveUserId,
+    staleTime: 5 * 60 * 1000,
+    queryFn: async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc("get_painel_vendedor", {
+        p_vendedor_id: effectiveUserId,
+        p_mes: mesAtual,
+        p_ano: anoAtual,
+      });
+      if (error) throw error;
+      const row = (Array.isArray(data) ? data[0] : data) ?? null;
+      return row as {
+        full_name: string | null;
+        nome_sankhya: string | null;
+        faturamento_mes: number | null;
+        faturamento_mes_anterior: number | null;
+      } | null;
+    },
+  });
 
-      const [campRes, ltvRes, tarRes] = await Promise.all([
+  // Valores derivados das queries — mantêm os mesmos nomes usados no JSX.
+  const kpis: KPIs = periodoQuery.data?.kpis ?? { faturamento: 0, numPedidos: 0, ticketMedio: 0, rascunhos: 0, meta: 0, aFaturar: 0, pedidosSemEstoque: 0, valorSemEstoque: 0 };
+  const periodTotais: PeriodTotais = periodoQuery.data?.periodTotais ?? { entrada: 0, faturado: 0, aFaturar: 0 };
+  const loading = !effectiveUserId || periodoQuery.isLoading;
+  const loadingPeriodo = periodoQuery.isFetching;
+  const painel = painelQuery.data;
+  const vendedorFullName = painel?.full_name?.trim() || null;
+  const vendedorNomeSankhya = painel?.nome_sankhya?.trim() || null;
+  const faturadoMesAtual = Number(painel?.faturamento_mes ?? 0);
+  const faturamentoRealMes = painel ? Number(painel.faturamento_mes ?? 0) : null;
+  const faturamentoRealMesAnterior = painel ? Number(painel.faturamento_mes_anterior ?? 0) : null;
+
+  // Segunda onda (não dependem do período): campanhas ativas, clientes para
+  // reativar (RPC), tarefas do dia e últimos pedidos.
+  useEffect(() => {
+    if (!effectiveUserId) return;
+    let cancelado = false;
+    (async () => {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const [campRes, ltvRes, tarRes, ultimosRes] = await Promise.all([
         supabase
           .from("campanhas")
           .select("id, nome, descricao, tipo, valor, data_inicio, data_fim, created_at")
@@ -400,7 +447,14 @@ export default function MeuPainel() {
           .eq("concluida", false)
           .or(`data_vencimento.is.null,data_vencimento.lte.${hoje}`)
           .order("data_vencimento", { ascending: true }),
+        supabase
+          .from("pedidos")
+          .select("id, numero_pedido, status, data_pedido, itens_pedido(total_item), clientes(razao_social, nome_parceiro)")
+          .eq("vendedor_id", effectiveUserId)
+          .not("status", "in", '("rascunho")')
+          .order("created_at", { ascending: false }),
       ]);
+      if (cancelado) return;
 
       if (campRes.error) toast.error("Erro ao carregar campanhas");
       else setCampanhas((campRes.data ?? []) as Campanha[]);
@@ -443,110 +497,31 @@ export default function MeuPainel() {
         total: (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0),
         data_pedido: p.data_pedido,
       })));
-    })().finally(() => setLoading(false));
-  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim]);
-
-  useEffect(() => {
-    if (!effectiveUserId) return;
-    let cancelado = false;
-    setLoadingPeriodo(true);
-    (async () => {
-      const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
-      const { data, error } = await supabase
-        .from("pedidos")
-        .select("status, itens_pedido(total_item)")
-        .eq("vendedor_id", effectiveUserId)
-        .gte("data_pedido", inicio)
-        .lte("data_pedido", fim)
-        .not("status", "in", '("rascunho","cancelado")');
-      if (cancelado) return;
-      if (error) {
-        toast.error("Erro ao carregar totais do período");
-        setPeriodTotais({ entrada: 0, faturado: 0, aFaturar: 0 });
-      } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const pedidos = (data ?? []) as any[];
-        let entrada = 0, faturado = 0, aFaturar = 0;
-        for (const p of pedidos) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
-          entrada += total;
-          if (p.status === "faturado" || p.status === "parcialmente_faturado") faturado += total;
-          if (p.status === "no_sankhya" || p.status === "parcialmente_faturado" || p.status === "nao_liberado_envio" || p.status === "liberado_envio") aFaturar += total;
-        }
-        setPeriodTotais({ entrada, faturado, aFaturar });
-      }
-      setLoadingPeriodo(false);
-    })();
-    return () => { cancelado = true; };
-  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim]);
-
-  // Faturado do mês — agora vem de faturamentos_sankhya casado por nome_vendedor.
-  // Busca profiles.full_name → ILIKE em faturamentos_sankhya.nome_vendedor.
-  useEffect(() => {
-    if (!effectiveUserId) return;
-    let cancelado = false;
-    (async () => {
-      const { data: prof } = await supabase
-        .from("profiles")
-        .select("full_name, nome_sankhya")
-        .eq("id", effectiveUserId)
-        .maybeSingle();
-      const fullName = prof?.full_name?.trim() || null;
-      const nomeSankhya = prof?.nome_sankhya?.trim() || null;
-      if (cancelado) return;
-      setVendedorFullName(fullName);
-      setVendedorNomeSankhya(nomeSankhya);
-
-      // nome_sankhya tem prioridade (match exato, sem wildcards);
-      // sem ele, usa o full_name com %...% como fallback.
-      const matchPattern = nomeSankhya ? nomeSankhya : (fullName ? `%${fullName}%` : null);
-      if (!matchPattern) {
-        setFaturadoMesAtual(0);
-        setFaturamentoRealMes(null);
-        setFaturamentoRealMesAnterior(null);
-        return;
-      }
-
-      const agora = new Date();
-      const mesInicio = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-01`;
-      const mesFim = new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10);
-      const antAno = agora.getMonth() === 0 ? agora.getFullYear() - 1 : agora.getFullYear();
-      const antMes = agora.getMonth() === 0 ? 12 : agora.getMonth();
-      const antInicio = `${antAno}-${String(antMes).padStart(2, "0")}-01`;
-      const antFim = new Date(antAno, antMes, 0).toISOString().slice(0, 10);
-
-      // TODO: adicionar faturamentos_sankhya ao types.ts
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const [atualRes, antRes] = await Promise.all([
-        (supabase as any)
-          .from("faturamentos_sankhya")
-          .select("valor_liquido")
-          .ilike("nome_vendedor", matchPattern)
-          .gte("data_faturamento", mesInicio)
-          .lte("data_faturamento", mesFim)
-          .not("tipo_operacao", "ilike", "%devolução%"),
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (supabase as any)
-          .from("faturamentos_sankhya")
-          .select("valor_liquido")
-          .ilike("nome_vendedor", matchPattern)
-          .gte("data_faturamento", antInicio)
-          .lte("data_faturamento", antFim)
-          .not("tipo_operacao", "ilike", "%devolução%"),
-      ]);
-      if (cancelado) return;
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sumAtual = ((atualRes.data ?? []) as any[]).reduce((s, r) => s + Number(r.valor_liquido ?? 0), 0);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const sumAnt = ((antRes.data ?? []) as any[]).reduce((s, r) => s + Number(r.valor_liquido ?? 0), 0);
-      setFaturadoMesAtual(sumAtual);
-      setFaturamentoRealMes(sumAtual);
-      setFaturamentoRealMesAnterior(sumAnt);
     })();
     return () => { cancelado = true; };
   }, [effectiveUserId]);
+
+  // Realtime com debounce de 1,5s: agrupa rajadas de eventos numa única
+  // invalidação das queries do painel, evitando recarregar tudo a cada evento.
+  useEffect(() => {
+    if (!effectiveUserId) return;
+    const agendarInvalidacao = () => {
+      if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+      realtimeDebounceRef.current = setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ["painel-periodo"] });
+        queryClient.invalidateQueries({ queryKey: ["painel-vendedor"] });
+      }, 1500);
+    };
+    const channel = supabase
+      .channel("meu-painel-realtime")
+      .on("postgres_changes", { event: "*", schema: "public", table: "pedidos" }, agendarInvalidacao)
+      .on("postgres_changes", { event: "*", schema: "public", table: "faturamentos_sankhya" }, agendarInvalidacao)
+      .subscribe();
+    return () => {
+      if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current);
+      supabase.removeChannel(channel);
+    };
+  }, [effectiveUserId, queryClient]);
 
   useEffect(() => {
     if (!effectiveUserId) return;
