@@ -1086,10 +1086,11 @@ export function CampanhasContent() {
                       <SelectValue placeholder="Categoria..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Bronze">Bronze</SelectItem>
-                      <SelectItem value="Prata">Prata</SelectItem>
-                      <SelectItem value="Ouro">Ouro</SelectItem>
-                      <SelectItem value="Diamante">Diamante</SelectItem>
+                      {c.niveis.map((n) => (
+                        <SelectItem key={n.id ?? n.nome} value={n.nome}>
+                          {n.nome}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Button
@@ -1212,10 +1213,11 @@ export function CampanhasContent() {
                                       <SelectValue placeholder="Categoria..." />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="Bronze">Bronze</SelectItem>
-                                      <SelectItem value="Prata">Prata</SelectItem>
-                                      <SelectItem value="Ouro">Ouro</SelectItem>
-                                      <SelectItem value="Diamante">Diamante</SelectItem>
+                                      {c.niveis.map((n) => (
+                                        <SelectItem key={n.id ?? n.nome} value={n.nome}>
+                                          {n.nome}
+                                        </SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                   <Button

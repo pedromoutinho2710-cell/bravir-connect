@@ -214,6 +214,8 @@ export default function MeuPainel() {
   const [campanhaEntrada, setCampanhaEntrada] = useState(0);
   const [campanhaEntradaPorMarca, setCampanhaEntradaPorMarca] = useState<Record<string, number>>({});
   const [campanhaMetaVendedor, setCampanhaMetaVendedor] = useState<number | null>(null);
+  const [campanhaMetaTipo, setCampanhaMetaTipo] = useState<"valor" | "unidades">("valor");
+  const [campanhaMetaQuantidade, setCampanhaMetaQuantidade] = useState<number | null>(null);
   const [campanhaCategoria, setCampanhaCategoria] = useState<string | null>(null);
   const [rankingPosicoes, setRankingPosicoes] = useState<{ nome: string; isVoce: boolean }[]>([]);
   const [fatMensalVendedor, setFatMensalVendedor] = useState<{ mes: string; valor: number }[]>([]);
@@ -248,6 +250,8 @@ export default function MeuPainel() {
         setCampanhaEntrada(0);
         setCampanhaEntradaPorMarca({});
         setCampanhaMetaVendedor(null);
+        setCampanhaMetaTipo("valor");
+        setCampanhaMetaQuantidade(null);
         setCampanhaCategoria(null);
         return;
       }
@@ -281,6 +285,7 @@ export default function MeuPainel() {
         .not("status", "in", '("rascunho","cancelado","devolvido")');
 
       let entrada = 0;
+      let entradaUnidades = 0;
       const porMarca: Record<string, number> = {};
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const p of (pedidosCampData ?? []) as any[]) {
@@ -291,25 +296,29 @@ export default function MeuPainel() {
           if ((marca && marcasSet.has(marca)) || (prodId && produtosSet.has(prodId))) {
             const valor = Number(it.total_item ?? 0);
             entrada += valor;
+            entradaUnidades += Number(it.quantidade ?? 0);
             const chaveMarca = marca ?? "Outros";
             porMarca[chaveMarca] = (porMarca[chaveMarca] ?? 0) + valor;
           }
         }
       }
-      setCampanhaEntrada(entrada);
       setCampanhaEntradaPorMarca(porMarca);
 
       // Meta individual do vendedor na campanha
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data: metaData } = await (supabase as any)
         .from("campanha_metas_vendedor")
-        .select("meta_valor, categoria")
+        .select("meta_valor, categoria, tipo_meta, meta_quantidade")
         .eq("campanha_id", campanha.id)
         .eq("vendedor_id", effectiveUserId)
         .maybeSingle();
 
+      const tipoMetaCamp = (metaData?.tipo_meta ?? "valor") as "valor" | "unidades";
       setCampanhaMetaVendedor(metaData?.meta_valor != null ? Number(metaData.meta_valor) : null);
       setCampanhaCategoria(metaData?.categoria ?? null);
+      setCampanhaMetaTipo(tipoMetaCamp);
+      setCampanhaMetaQuantidade(metaData?.meta_quantidade ?? null);
+      setCampanhaEntrada(tipoMetaCamp === "unidades" ? entradaUnidades : entrada);
     })();
   }, [effectiveUserId]);
 
@@ -1507,9 +1516,11 @@ export default function MeuPainel() {
           (a: any, b: any) => (a.ordem ?? a.valor_minimo ?? 0) - (b.ordem ?? b.valor_minimo ?? 0),
         );
         const meta = campanhaMetaVendedor ?? 0;
-        const pctGeral = meta > 0 ? (campanhaEntrada / meta) * 100 : 0;
+        const ehUnidades = campanhaMetaTipo === "unidades";
+        const metaAlvo = ehUnidades ? (campanhaMetaQuantidade ?? 0) : meta;
+        const pctGeral = metaAlvo > 0 ? (campanhaEntrada / metaAlvo) * 100 : 0;
         const pct = Math.min(pctGeral, 100);
-        const falta = meta > 0 ? Math.max(0, meta - campanhaEntrada) : 0;
+        const falta = metaAlvo > 0 ? Math.max(0, metaAlvo - campanhaEntrada) : 0;
         const diasRestantes = campanhaAtiva.data_fim
           ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - Date.now()) / 86400000))
           : 0;
@@ -1591,7 +1602,11 @@ export default function MeuPainel() {
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-md border p-3">
                   <div className="text-xs text-muted-foreground">Meta total</div>
-                  <div className="text-xl font-bold">{meta > 0 ? formatBRL(meta) : "—"}</div>
+                  <div className="text-xl font-bold">
+                    {ehUnidades
+                      ? `${campanhaMetaQuantidade ?? 0} un.`
+                      : meta > 0 ? formatBRL(meta) : "—"}
+                  </div>
                   {campanhaCategoria && (
                     <Badge className={`${nivelBadgeClass(campanhaCategoria)} mt-1.5 text-xs`}>
                       {campanhaCategoria}
@@ -1600,12 +1615,14 @@ export default function MeuPainel() {
                 </div>
                 <div className="rounded-md border p-3">
                   <div className="text-xs text-muted-foreground">Total realizado</div>
-                  <div className="text-xl font-bold text-green-700">{formatBRL(campanhaEntrada)}</div>
+                  <div className="text-xl font-bold text-green-700">
+                    {ehUnidades ? `${campanhaEntrada} un.` : formatBRL(campanhaEntrada)}
+                  </div>
                 </div>
                 <div className="rounded-md border p-3">
                   <div className="text-xs text-muted-foreground">% atingido</div>
-                  <div className="text-xl font-bold">{meta > 0 ? `${pctGeral.toFixed(1)}%` : "—"}</div>
-                  {meta > 0 && (
+                  <div className="text-xl font-bold">{metaAlvo > 0 ? `${pctGeral.toFixed(1)}%` : "—"}</div>
+                  {metaAlvo > 0 && (
                     <div className="mt-1.5 h-2 w-full rounded-full bg-muted">
                       <div
                         className="h-2 rounded-full transition-all"
@@ -1617,8 +1634,10 @@ export default function MeuPainel() {
                 <div className="rounded-md border p-3">
                   <div className="text-xs text-muted-foreground">Dias restantes</div>
                   <div className="text-xl font-bold">{diasRestantes}</div>
-                  {meta > 0 && falta > 0 && (
-                    <div className="mt-1 text-xs text-muted-foreground">Faltam {formatBRL(falta)}</div>
+                  {metaAlvo > 0 && falta > 0 && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Faltam {ehUnidades ? `${falta} un.` : formatBRL(falta)}
+                    </div>
                   )}
                 </div>
               </div>
