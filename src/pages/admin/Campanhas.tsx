@@ -76,6 +76,8 @@ type MetaVendedor = {
   vendedor_id: string;
   nome: string;
   meta_valor: number;
+  tipo_meta: "valor" | "unidades";
+  meta_quantidade?: number | null;
   categoria?: string | null;
   realizado?: number;
   nivel_atual?: string | null;
@@ -245,6 +247,8 @@ async function fetchCampanhas(): Promise<Campanha[]> {
       vendedor_id: m.vendedor_id,
       nome: profilesMap[m.vendedor_id] ?? m.vendedor_id,
       meta_valor: m.meta_valor,
+      tipo_meta: (m.tipo_meta ?? "valor") as "valor" | "unidades",
+      meta_quantidade: m.meta_quantidade ?? null,
       categoria: m.categoria ?? null,
     });
   });
@@ -301,6 +305,11 @@ function fmtBRL(v: number | null): string {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+function fmtMeta(m: MetaVendedor): string {
+  if (m.tipo_meta === "unidades") return m.meta_quantidade ? `${m.meta_quantidade} un.` : "—";
+  return fmtBRL(m.meta_valor);
+}
+
 function calcDias(dataInicio: string | null, dataFim: string | null) {
   if (!dataInicio || !dataFim) return { total: 0, passados: 0, restantes: 0 };
   const inicio = new Date(dataInicio);
@@ -351,10 +360,12 @@ export function CampanhasContent() {
   const timerBusca = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Metas por vendedor
-  const [metaInputs, setMetaInputs] = useState<Record<string, { vendedorId: string; metaValor: string }>>({});
+  const [metaInputs, setMetaInputs] = useState<Record<string, { vendedorId: string; tipoMeta: "valor" | "unidades"; metaValor: string; metaQuantidade: string }>>({});
   const [vendedorSelecionado, setVendedorSelecionado] = useState<Record<string, string>>({});
   const [categoriasSelecionadas, setCategoriasSelecionadas] = useState<Record<string, string>>({});
   const [editandoMeta, setEditandoMeta] = useState<Record<string, string | null>>({});
+  const [editandoMetaTipo, setEditandoMetaTipo] = useState<Record<string, "valor" | "unidades">>({});
+  const [editandoMetaQtd, setEditandoMetaQtd] = useState<Record<string, string>>({});
   const [editandoCat, setEditandoCat] = useState<Record<string, string | null>>({});
 
   // Metas por cliente
@@ -458,19 +469,25 @@ export function CampanhasContent() {
     mutationFn: async ({
       campanhaId,
       vendedorId,
+      tipoMeta,
       metaValor,
+      metaQuantidade,
       categoria,
     }: {
       campanhaId: string;
       vendedorId: string;
+      tipoMeta: "valor" | "unidades";
       metaValor: number;
+      metaQuantidade: number | null;
       categoria: string | null;
     }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from("campanha_metas_vendedor") as any).insert({
         campanha_id: campanhaId,
         vendedor_id: vendedorId,
+        tipo_meta: tipoMeta,
         meta_valor: metaValor,
+        meta_quantidade: metaQuantidade,
         categoria,
       });
       if (error) throw error;
@@ -492,10 +509,10 @@ export function CampanhasContent() {
   });
 
   const updateMetaVendedor = useMutation({
-    mutationFn: async ({ id, metaValor, categoria }: { id: string; metaValor: number; categoria?: string | null }) => {
+    mutationFn: async ({ id, tipoMeta, metaValor, metaQuantidade, categoria }: { id: string; tipoMeta: "valor" | "unidades"; metaValor: number; metaQuantidade: number | null; categoria?: string | null }) => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from("campanha_metas_vendedor") as any)
-        .update({ meta_valor: metaValor, categoria: categoria ?? null })
+        .update({ tipo_meta: tipoMeta, meta_valor: metaValor, meta_quantidade: metaQuantidade, categoria: categoria ?? null })
         .eq("id", id);
       if (error) throw error;
     },
@@ -998,22 +1015,67 @@ export function CampanhasContent() {
                         ))}
                     </SelectContent>
                   </Select>
-                  <Input
-                    type="number"
-                    min={0}
-                    className="w-36"
-                    placeholder="Meta R$"
-                    value={metaInputs[c.id]?.metaValor ?? ""}
-                    onChange={(e) =>
+                  <Select
+                    value={metaInputs[c.id]?.tipoMeta ?? "valor"}
+                    onValueChange={(v) =>
                       setMetaInputs((prev) => ({
                         ...prev,
                         [c.id]: {
                           vendedorId: vendedorSelecionado[c.id] ?? "",
-                          metaValor: e.target.value,
+                          tipoMeta: v as "valor" | "unidades",
+                          metaValor: prev[c.id]?.metaValor ?? "",
+                          metaQuantidade: prev[c.id]?.metaQuantidade ?? "",
                         },
                       }))
                     }
-                  />
+                  >
+                    <SelectTrigger className="w-36">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="valor">Meta R$</SelectItem>
+                      <SelectItem value="unidades">Meta Unidades</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {(metaInputs[c.id]?.tipoMeta ?? "valor") === "valor" ? (
+                    <Input
+                      type="number"
+                      min={0}
+                      className="w-36"
+                      placeholder="Meta R$"
+                      value={metaInputs[c.id]?.metaValor ?? ""}
+                      onChange={(e) =>
+                        setMetaInputs((prev) => ({
+                          ...prev,
+                          [c.id]: {
+                            vendedorId: vendedorSelecionado[c.id] ?? "",
+                            tipoMeta: prev[c.id]?.tipoMeta ?? "valor",
+                            metaValor: e.target.value,
+                            metaQuantidade: prev[c.id]?.metaQuantidade ?? "",
+                          },
+                        }))
+                      }
+                    />
+                  ) : (
+                    <Input
+                      type="number"
+                      min={0}
+                      className="w-36"
+                      placeholder="Qtd unidades"
+                      value={metaInputs[c.id]?.metaQuantidade ?? ""}
+                      onChange={(e) =>
+                        setMetaInputs((prev) => ({
+                          ...prev,
+                          [c.id]: {
+                            vendedorId: vendedorSelecionado[c.id] ?? "",
+                            tipoMeta: prev[c.id]?.tipoMeta ?? "unidades",
+                            metaValor: prev[c.id]?.metaValor ?? "",
+                            metaQuantidade: e.target.value,
+                          },
+                        }))
+                      }
+                    />
+                  )}
                   <Select
                     value={categoriasSelecionadas[c.id] ?? ""}
                     onValueChange={(v) =>
@@ -1034,23 +1096,29 @@ export function CampanhasContent() {
                     size="sm"
                     disabled={
                       !vendedorSelecionado[c.id] ||
-                      !metaInputs[c.id]?.metaValor ||
+                      ((metaInputs[c.id]?.tipoMeta ?? "valor") === "valor"
+                        ? !metaInputs[c.id]?.metaValor
+                        : !metaInputs[c.id]?.metaQuantidade) ||
                       !categoriasSelecionadas[c.id] ||
                       addMetaVendedor.isPending
                     }
                     onClick={() => {
                       const vid = vendedorSelecionado[c.id];
-                      const val = Number(metaInputs[c.id]?.metaValor);
+                      const tipoMeta = metaInputs[c.id]?.tipoMeta ?? "valor";
                       const cat = categoriasSelecionadas[c.id] ?? null;
-                      if (!vid || !val) return;
+                      const metaValor = tipoMeta === "valor" ? Number(metaInputs[c.id]?.metaValor) : 0;
+                      const metaQuantidade = tipoMeta === "unidades" ? Number(metaInputs[c.id]?.metaQuantidade) : null;
+                      if (!vid) return;
+                      if (tipoMeta === "valor" && !metaValor) return;
+                      if (tipoMeta === "unidades" && !metaQuantidade) return;
                       addMetaVendedor.mutate(
-                        { campanhaId: c.id, vendedorId: vid, metaValor: val, categoria: cat },
+                        { campanhaId: c.id, vendedorId: vid, tipoMeta, metaValor, metaQuantidade, categoria: cat },
                         {
                           onSuccess: () => {
                             setVendedorSelecionado((prev) => ({ ...prev, [c.id]: "" }));
                             setMetaInputs((prev) => ({
                               ...prev,
-                              [c.id]: { vendedorId: "", metaValor: "" },
+                              [c.id]: { vendedorId: "", tipoMeta: "valor", metaValor: "", metaQuantidade: "" },
                             }));
                             setCategoriasSelecionadas((prev) => ({ ...prev, [c.id]: "" }));
                           },
@@ -1091,18 +1159,49 @@ export function CampanhasContent() {
                             <TableCell>
                               {isEditing ? (
                                 <div className="flex items-center gap-1">
-                                  <Input
-                                    type="number"
-                                    min={0}
-                                    className="w-28 h-7 text-sm"
-                                    value={editandoMeta[m.id!] ?? ""}
-                                    onChange={(e) =>
-                                      setEditandoMeta((prev) => ({
-                                        ...prev,
-                                        [m.id!]: e.target.value,
-                                      }))
+                                  <Select
+                                    value={editandoMetaTipo[m.id!] ?? "valor"}
+                                    onValueChange={(v) =>
+                                      setEditandoMetaTipo((prev) => ({ ...prev, [m.id!]: v as "valor" | "unidades" }))
                                     }
-                                  />
+                                  >
+                                    <SelectTrigger className="w-28 h-7 text-sm">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="valor">Meta R$</SelectItem>
+                                      <SelectItem value="unidades">Meta Unidades</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                  {(editandoMetaTipo[m.id!] ?? "valor") === "valor" ? (
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="w-28 h-7 text-sm"
+                                      placeholder="Meta R$"
+                                      value={editandoMeta[m.id!] ?? ""}
+                                      onChange={(e) =>
+                                        setEditandoMeta((prev) => ({
+                                          ...prev,
+                                          [m.id!]: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  ) : (
+                                    <Input
+                                      type="number"
+                                      min={0}
+                                      className="w-28 h-7 text-sm"
+                                      placeholder="Qtd unidades"
+                                      value={editandoMetaQtd[m.id!] ?? ""}
+                                      onChange={(e) =>
+                                        setEditandoMetaQtd((prev) => ({
+                                          ...prev,
+                                          [m.id!]: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  )}
                                   <Select
                                     value={editandoCat[m.id!] ?? ""}
                                     onValueChange={(v) =>
@@ -1125,13 +1224,17 @@ export function CampanhasContent() {
                                     className="h-7 w-7 text-green-600 hover:text-green-700"
                                     disabled={updateMetaVendedor.isPending}
                                     onClick={() => {
-                                      const val = Number(editandoMeta[m.id!]);
-                                      if (!val) return;
+                                      const tipoMeta = editandoMetaTipo[m.id!] ?? "valor";
+                                      const metaValor = tipoMeta === "valor" ? Number(editandoMeta[m.id!]) : 0;
+                                      const metaQuantidade = tipoMeta === "unidades" ? Number(editandoMetaQtd[m.id!]) : null;
+                                      if (tipoMeta === "valor" && !metaValor) return;
+                                      if (tipoMeta === "unidades" && !metaQuantidade) return;
                                       updateMetaVendedor.mutate(
-                                        { id: m.id!, metaValor: val, categoria: editandoCat[m.id!] ?? m.categoria },
+                                        { id: m.id!, tipoMeta, metaValor, metaQuantidade, categoria: editandoCat[m.id!] ?? m.categoria },
                                         {
                                           onSuccess: () => {
                                             setEditandoMeta((prev) => ({ ...prev, [m.id!]: null }));
+                                            setEditandoMetaQtd((prev) => ({ ...prev, [m.id!]: "" }));
                                             setEditandoCat((prev) => ({ ...prev, [m.id!]: null }));
                                           },
                                         }
@@ -1153,7 +1256,7 @@ export function CampanhasContent() {
                                   </Button>
                                 </div>
                               ) : (
-                                <span>{fmtBRL(m.meta_valor)}</span>
+                                <span>{fmtMeta(m)}</span>
                               )}
                             </TableCell>
                             <TableCell>
@@ -1202,6 +1305,14 @@ export function CampanhasContent() {
                                       setEditandoMeta((prev) => ({
                                         ...prev,
                                         [m.id!]: String(m.meta_valor),
+                                      }));
+                                      setEditandoMetaTipo((prev) => ({
+                                        ...prev,
+                                        [m.id!]: m.tipo_meta ?? "valor",
+                                      }));
+                                      setEditandoMetaQtd((prev) => ({
+                                        ...prev,
+                                        [m.id!]: m.meta_quantidade != null ? String(m.meta_quantidade) : "",
                                       }));
                                       setEditandoCat((prev) => ({
                                         ...prev,
