@@ -498,7 +498,8 @@ export default function Faturamento() {
         `)
         .neq("status", "rascunho")
         .is("deleted_at", null)
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: false })
+        .limit(5000);
 
       const { data, error } = await query;
       if (error) { toast.error("Erro ao carregar pedidos"); return; }
@@ -1176,7 +1177,8 @@ export default function Faturamento() {
     const { data: filhos } = await supabase
       .from("pedidos")
       .select("id")
-      .eq("pedido_origem_id", pedidoId);
+      .eq("pedido_origem_id", pedidoId)
+      .limit(5000);
 
     const softDelete = { deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null };
 
