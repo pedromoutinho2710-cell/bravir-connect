@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Link2, CheckCircle2 } from "lucide-react";
+import { Loader2, Pencil, Link2, CheckCircle2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,28 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { formatBRL } from "@/lib/format";
+import { STATUS_LABEL } from "@/lib/status";
+import { exportarBaseDadosExcel, type BaseDadosRow } from "@/lib/excel";
+
+// Estrutura aninhada retornada pelo Supabase ao exportar a base de dados.
+type BaseDadosPedido = {
+  numero_pedido: number | null;
+  data_pedido: string | null;
+  status: string | null;
+  total: number | null;
+  cliente: {
+    razao_social: string | null;
+    nome_parceiro: string | null;
+    codigo_parceiro: string | null;
+  } | null;
+  vendedor: { full_name: string | null } | null;
+  itens_pedido: {
+    quantidade: number | null;
+    preco_final: number | null;
+    total_item: number | null;
+    produto: { nome: string | null; codigo_jiva: string | null; marca: string | null } | null;
+  }[];
+};
 
 type SankhyaRow = {
   data_faturamento: string | null;
@@ -183,6 +205,78 @@ export default function VisaoMacro() {
   const [editOpen, setEditOpen] = useState(false);
   const [formMeta, setFormMeta] = useState({ b2b: "", mp: "", online: "" });
   const [salvando, setSalvando] = useState(false);
+  const [exportando, setExportando] = useState(false);
+
+  // Exporta a base de dados completa (pedidos x itens) para Excel.
+  async function exportarBaseDados() {
+    setExportando(true);
+    try {
+      const todos: BaseDadosPedido[] = [];
+      const pageSize = 1000;
+      let from = 0;
+
+      for (;;) {
+        const { data, error } = await supabase
+          .from("pedidos")
+          .select(
+            `numero_pedido, data_pedido, status, total,
+             cliente:clientes!cliente_id ( razao_social, nome_parceiro, codigo_parceiro ),
+             vendedor:profiles!vendedor_id ( full_name ),
+             itens_pedido ( quantidade, preco_final, total_item,
+               produto:produtos!produto_id ( nome, codigo_jiva, marca ) )`
+          )
+          .is("deleted_at", null)
+          .order("data_pedido", { ascending: false })
+          .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+        const rows = (data ?? []) as unknown as BaseDadosPedido[];
+        todos.push(...rows);
+        if (rows.length < pageSize) break;
+        from += pageSize;
+      }
+
+      // Uma linha por item de pedido.
+      const linhas: BaseDadosRow[] = [];
+      for (const p of todos) {
+        const base = {
+          numero_pedido: p.numero_pedido,
+          data_pedido: p.data_pedido,
+          vendedor: p.vendedor?.full_name ?? "",
+          cliente: p.cliente?.razao_social ?? "",
+          nome_fantasia: p.cliente?.nome_parceiro ?? "",
+          codigo_cliente: p.cliente?.codigo_parceiro ?? "",
+          status: p.status ? STATUS_LABEL[p.status] ?? p.status : "",
+          total_pedido: p.total ?? 0,
+        };
+        for (const item of p.itens_pedido ?? []) {
+          linhas.push({
+            ...base,
+            produto: item.produto?.nome ?? "",
+            marca: item.produto?.marca ?? "",
+            codigo_produto: item.produto?.codigo_jiva ?? "",
+            quantidade: item.quantidade ?? 0,
+            preco_unitario: item.preco_final ?? 0,
+            total_item: item.total_item ?? 0,
+          });
+        }
+      }
+
+      if (linhas.length === 0) {
+        toast.error("Nenhum pedido encontrado para exportar.");
+        return;
+      }
+
+      const hoje = new Date().toISOString().slice(0, 10);
+      await exportarBaseDadosExcel(linhas, `base_dados_${hoje}.xlsx`);
+      toast.success(`Base exportada — ${linhas.length} linhas.`);
+    } catch (e) {
+      console.error("Erro ao exportar base de dados:", e);
+      toast.error("Erro ao exportar base de dados.");
+    } finally {
+      setExportando(false);
+    }
+  }
 
   // B2B (Sankhya)
   const { data: rows, isLoading: loadingB2B } = useQuery({
@@ -484,6 +578,14 @@ export default function VisaoMacro() {
           <Button variant="outline" onClick={abrirEditarMetas}>
             <Pencil className="mr-2 h-4 w-4" />
             Editar Metas
+          </Button>
+          <Button variant="outline" onClick={exportarBaseDados} disabled={exportando}>
+            {exportando ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            Exportar base de dados
           </Button>
           {blingConectado ? (
             <Badge className="bg-green-100 text-green-800 hover:bg-green-100">

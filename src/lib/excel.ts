@@ -350,6 +350,127 @@ export async function exportarTabelaPrecosExcel(produtos: ProdutoTabela[]): Prom
   window.URL.revokeObjectURL(url);
 }
 
+export interface BaseDadosRow {
+  numero_pedido: number | null;
+  data_pedido: string | null;
+  vendedor: string;
+  cliente: string;
+  nome_fantasia: string;
+  codigo_cliente: string;
+  status: string;
+  produto: string;
+  marca: string;
+  codigo_produto: string;
+  quantidade: number;
+  preco_unitario: number;
+  total_item: number;
+  total_pedido: number;
+}
+
+/**
+ * Exporta a base de dados completa (pedidos x itens) para Excel.
+ * Uma linha por item de pedido.
+ */
+export async function exportarBaseDadosExcel(
+  rows: BaseDadosRow[],
+  nomeArquivo: string
+): Promise<void> {
+  const workbook = new ExcelJS.Workbook();
+  const ws = workbook.addWorksheet("Base de Dados");
+
+  ws.columns = [
+    { key: "numero_pedido", width: 12 },
+    { key: "data_pedido", width: 14 },
+    { key: "vendedor", width: 24 },
+    { key: "cliente", width: 36 },
+    { key: "nome_fantasia", width: 28 },
+    { key: "codigo_cliente", width: 14 },
+    { key: "status", width: 22 },
+    { key: "produto", width: 44 },
+    { key: "marca", width: 18 },
+    { key: "codigo_produto", width: 16 },
+    { key: "quantidade", width: 10 },
+    { key: "preco_unitario", width: 14 },
+    { key: "total_item", width: 14 },
+    { key: "total_pedido", width: 16 },
+  ];
+
+  const headers = [
+    "Nº Pedido",
+    "Data",
+    "Vendedor",
+    "Cliente",
+    "Nome Fantasia",
+    "Cód. Cliente",
+    "Status",
+    "Produto",
+    "Marca",
+    "Cód. Produto",
+    "Qtd",
+    "Preço Unit.",
+    "Total Item",
+    "Total Pedido",
+  ];
+  const cols = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N"];
+
+  cols.forEach((col, idx) => {
+    const cell = ws.getCell(`${col}1`);
+    cell.value = headers[idx];
+    cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: GREEN_FILL } };
+    cell.alignment = { horizontal: "center", vertical: "center", wrapText: true };
+  });
+  ws.getRow(1).height = 24;
+  ws.views = [{ state: "frozen", ySplit: 1 }];
+
+  rows.forEach((r, idx) => {
+    const row = idx + 2;
+    ws.getCell(`A${row}`).value = r.numero_pedido;
+    ws.getCell(`B${row}`).value = r.data_pedido;
+    ws.getCell(`C${row}`).value = r.vendedor;
+    ws.getCell(`D${row}`).value = r.cliente;
+    ws.getCell(`E${row}`).value = r.nome_fantasia;
+    ws.getCell(`F${row}`).value = r.codigo_cliente;
+    ws.getCell(`G${row}`).value = r.status;
+    ws.getCell(`H${row}`).value = r.produto;
+    ws.getCell(`I${row}`).value = r.marca;
+    ws.getCell(`J${row}`).value = r.codigo_produto;
+    ws.getCell(`K${row}`).value = r.quantidade;
+    ws.getCell(`L${row}`).value = r.preco_unitario;
+    ws.getCell(`M${row}`).value = r.total_item;
+    ws.getCell(`N${row}`).value = r.total_pedido;
+
+    if (idx % 2 === 0) {
+      cols.forEach((col) => {
+        ws.getCell(`${col}${row}`).fill = {
+          type: "pattern",
+          pattern: "solid",
+          fgColor: { argb: "FFF5F5F5" },
+        };
+      });
+    }
+
+    ["L", "M", "N"].forEach((col) => {
+      ws.getCell(`${col}${row}`).numFmt = "#,##0.00";
+      ws.getCell(`${col}${row}`).alignment = { horizontal: "right" };
+    });
+    ws.getCell(`K${row}`).alignment = { horizontal: "center" };
+  });
+
+  ws.autoFilter = { from: "A1", to: `N${rows.length + 1}` };
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nomeArquivo;
+  link.click();
+  window.URL.revokeObjectURL(url);
+}
+
 /**
  * Lê arquivo XLSX e extrai codigos JIVA da coluna COD. JIVA
  */
