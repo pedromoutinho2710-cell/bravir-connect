@@ -279,7 +279,7 @@ export default function NovoPedidoGestora() {
         perfilCliente={cliente.cluster}
         itens={itens}
         onChange={setItens}
-        vendedorEmail={vendedorDisplayName}
+        quantidadeLivre={/pedro|julia|tamiris/i.test(vendedorDisplayName)}
         vigenciaId={vigenciaId}
         descontoLivre={descontoLivre}
         bloqueado={!camposObrigatoriosOk}

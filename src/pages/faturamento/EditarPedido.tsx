@@ -499,7 +499,7 @@ export default function EditarPedido() {
         perfilCliente={cliente.cluster}
         itens={itens}
         onChange={setItens}
-        vendedorEmail={user?.email ?? ""}
+        quantidadeLivre={/pedro|julia|tamiris/i.test(user?.email ?? "")}
         vigenciaId={vigenciaId}
         descontoLivre={descontoLivre}
         bloqueado={false}

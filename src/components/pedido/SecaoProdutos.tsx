@@ -72,8 +72,9 @@ type Props = {
   perfilCliente: string;
   itens: ItemPedido[];
   onChange: (itens: ItemPedido[]) => void;
-  vendedorEmail: string;
   vigenciaId: string;
+  /** true → quantidade em unidades (modo livre); false → quantidade em caixas (padrão) */
+  quantidadeLivre?: boolean;
   descontoLivre?: boolean;
   bloqueado?: boolean;
   codigoParceiro?: string;
@@ -91,15 +92,14 @@ export function SecaoProdutos({
   perfilCliente,
   itens,
   onChange,
-  vendedorEmail,
   vigenciaId,
+  quantidadeLivre = false,
   descontoLivre = false,
   bloqueado = false,
   codigoParceiro = "",
   preservarDescontos = false,
   tipoPedido,
 }: Props) {
-  const isVendedorLivre = /pedro|julia|tamiris/i.test(vendedorEmail);
   const [busca, setBusca] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [precos, setPrecos] = useState<Record<string, Record<string, number>>>({});
@@ -493,8 +493,8 @@ export function SecaoProdutos({
               <TableHeader>
                 <TableRow style={{ backgroundColor: '#1a5c38' }} className="hover:bg-[#1a5c38]">
                   <TableHead className="text-white text-[11px] font-semibold py-2">Produto</TableHead>
-                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-28">{isVendedorLivre ? "Qtd unidades" : "Qtd caixas"}</TableHead>
-                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">{isVendedorLivre ? "Qtd caixas" : "Qtd unidades"}</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-28">{quantidadeLivre ? "Qtd unidades" : "Qtd caixas"}</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">{quantidadeLivre ? "Qtd caixas" : "Qtd unidades"}</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Bruto</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right" style={{ minWidth: 110 }}>Desc. %</TableHead>
                   <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Líquido</TableHead>
@@ -522,7 +522,7 @@ export function SecaoProdutos({
 
                     {/* Quantidade */}
                     <TableCell className="text-right py-2 align-top">
-                      {isVendedorLivre ? (
+                      {quantidadeLivre ? (
                         <div className="space-y-0.5">
                           <Input
                             key={i.produto_id + "-qtd-livre"}
@@ -571,7 +571,7 @@ export function SecaoProdutos({
                     {/* Conversão Qtd (somente exibição) */}
                     <TableCell className="text-right py-2 align-top">
                       <span className="text-xs font-semibold text-green-700">
-                        {isVendedorLivre
+                        {quantidadeLivre
                           ? `${Math.round(i.quantidade / i.cx_embarque)} cx`
                           : `${i.quantidade} un`}
                       </span>
