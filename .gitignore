@@ -25,3 +25,8 @@ dist-ssr
 
 scripts/
 *.xls
+
+# Scripts utilitários com possíveis credenciais — não versionar
+sync_bling.py
+seed.mjs
+*.py
