@@ -15,17 +15,13 @@ import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
 import NovoPedido from "./pages/vendedor/NovoPedido";
 import MeusPedidos from "./pages/vendedor/MeusPedidos";
-import MeuPainel from "./pages/vendedor/MeuPainel";
 import MeusClientes from "./pages/vendedor/MeusClientes";
 import MinhasTarefas from "./pages/vendedor/MinhasTarefas";
 import CadastrarCliente from "./pages/vendedor/CadastrarCliente";
-import Faturamento from "./pages/Faturamento";
 import Formularios from "./pages/admin/Formularios";
 import Equipe from "./pages/admin/Equipe";
 import Metas from "./pages/admin/Metas";
 import GestaoMetas from "./pages/admin/GestaoMetas";
-import Dashboard from "./pages/Dashboard";
-import VisaoMacro from "./pages/admin/VisaoMacro";
 import BlingCallback from "@/pages/admin/BlingCallback";
 import Trade from "./pages/Trade";
 import TradeCampanhas from "./pages/TradeCampanhas";
@@ -48,7 +44,6 @@ import ClientesAdmin from "./pages/admin/ClientesAdmin";
 import ClientesAdminLista from "./pages/admin/ClientesAdminLista";
 import Lixeira from "./pages/Lixeira";
 import ImportarClientes from "./pages/admin/ImportarClientes";
-import ClienteDetalhe from "./pages/ClienteDetalhe";
 import BolsaoPage from "./pages/BolsaoPage";
 import TabelasPreco from "./pages/admin/TabelasPreco";
 import Configuracoes from "./pages/admin/Configuracoes";
@@ -75,6 +70,13 @@ const PropostaPublica = lazy(() => import("./pages/PropostaPublica"));
 const CalculadoraPublica = lazy(() => import("./pages/CalculadoraPublica"));
 const MinhasPropostas = lazy(() => import("./pages/MinhasPropostas"));
 const CalculadoraMargem = lazy(() => import("./pages/CalculadoraMargem"));
+
+// Páginas pesadas (queries/relatórios grandes) — carregadas sob demanda.
+const Faturamento = lazy(() => import("./pages/Faturamento"));
+const MeuPainel = lazy(() => import("./pages/vendedor/MeuPainel"));
+const VisaoMacro = lazy(() => import("./pages/admin/VisaoMacro"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const ClienteDetalhe = lazy(() => import("./pages/ClienteDetalhe"));
 
 const queryClient = new QueryClient();
 

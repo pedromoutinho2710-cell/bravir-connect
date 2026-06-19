@@ -102,7 +102,7 @@ function acharMatch(item: ItemExtraido, produtos: Produto[]): Produto | null {
   return null;
 }
 
-export function ImportarPedidoDialog({ produtos, onAdicionarItens, open, onOpenChange }: Props) {
+export function ExtrairPedidoDialog({ produtos, onAdicionarItens, open, onOpenChange }: Props) {
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [analisando, setAnalisando] = useState(false);

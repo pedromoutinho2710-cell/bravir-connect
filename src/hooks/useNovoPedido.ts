@@ -241,10 +241,6 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
     ? (representanteNome ?? user?.email ?? "")
     : (user?.email ?? "");
 
-  const notificationLabel = isGestora
-    ? `${representanteNome ?? "Gestora"} (via Gestora)`
-    : (user?.email ?? "Vendedor");
-
   const pedidoVendedorId = isGestora ? (representanteId ?? "") : (user?.id ?? "");
 
   const garantirCliente = async (): Promise<string | null> => {
@@ -503,29 +499,8 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
           .then(() => {});
       }
 
-      try {
-        const { data: fatRoles } = await supabase
-          .from("user_roles")
-          .select("user_id")
-          .eq("role", "faturamento");
-        const fatIds = (fatRoles ?? []).map((r) => r.user_id);
-        if (fatIds.length > 0) {
-          const { data: pedData2 } = await supabase
-            .from("pedidos")
-            .select("numero_pedido")
-            .eq("id", id)
-            .single();
-          const numPed = pedData2?.numero_pedido ?? "";
-          await supabase.from("notificacoes").insert(
-            fatIds.map((uid: string) => ({
-              destinatario_id: uid,
-              destinatario_role: "faturamento",
-              tipo: "novo_pedido",
-              mensagem: `Novo pedido #${numPed} de ${notificationLabel}`,
-            })),
-          );
-        }
-      } catch { /* best-effort */ }
+      // Notificações (vendedor + faturamento) são criadas exclusivamente pela
+      // Edge Function `enviar-pedido-email`, evitando duplicidade.
 
       // Pedido de bonificação: debita o valor do bolsão do cliente.
       if (cliente.tipo === "Bonificação") {

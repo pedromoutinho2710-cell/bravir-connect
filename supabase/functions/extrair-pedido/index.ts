@@ -1,13 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { authenticate, corsHeaders as buildCors } from "../_shared/auth.ts";
 
 // Chave do Anthropic guardada como secret no servidor — nunca chega ao browser.
 // Configure com: npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const corsHeaders = buildCors();
 
 type ItemCatalogo = { id: string; codigo_jiva: string; nome: string };
 
@@ -45,6 +43,11 @@ function json(body: unknown, status = 200) {
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  const auth = await authenticate(req, ["vendedor", "gestora", "faturamento", "admin"]);
+  if (!auth.ok) {
+    return json({ error: auth.message }, auth.status);
   }
 
   if (!ANTHROPIC_API_KEY) {

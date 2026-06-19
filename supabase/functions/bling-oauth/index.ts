@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { authenticate, corsHeaders } from "../_shared/auth.ts";
 
 const CLIENT_ID = Deno.env.get("BLING_CLIENT_ID")!;
 const CLIENT_SECRET = Deno.env.get("BLING_CLIENT_SECRET")!;
@@ -7,17 +8,23 @@ const REDIRECT_URI = "https://bravir-connect.vercel.app/admin/bling-callback";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
+const cors = corsHeaders("x-action");
+
 serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response("ok", { headers: { ...cors, "Content-Type": "application/json" } });
+
+  // Integração Bling é restrita a administradores.
+  const auth = await authenticate(req, ["admin"]);
+  if (!auth.ok) {
+    return new Response(JSON.stringify({ error: auth.message }), {
+      status: auth.status,
+      headers: { ...cors, "Content-Type": "application/json" },
+    });
+  }
+
   const action = new URL(req.url).searchParams.get("action") ?? req.headers.get("x-action");
-  console.log("action recebida:", action, "method:", req.method);
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
   const body = req.method === "POST" ? await req.json() : {};
-  const cors = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-action",
-  };
-
-  if (req.method === "OPTIONS") return new Response("ok", { headers: { ...cors, "Content-Type": "application/json" } });
 
   const basicAuth = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
 
@@ -95,8 +102,6 @@ serve(async (req) => {
       }).eq("id", tokenRow.id);
       tokenRow = { ...tokenRow, access_token: refreshData.access_token };
     }
-    console.log("refresh status:", refreshData.access_token ? "ok" : "falhou", "error:", refreshData.error);
-    console.log("buscando vendas com token:", tokenRow.access_token?.slice(0, 8) + "...");
     const { dataInicial, dataFinal } = body;
     // Extrai ano do dataInicial (formato DD/MM/YYYY)
     const ano = dataInicial.slice(6, 10);
@@ -132,7 +137,6 @@ serve(async (req) => {
         total: Number(item.totalProdutos ?? item.total ?? 0),
       }));
       todos.push(...itensMapeados);
-      console.log(`mes ${mes.ini}: ${itens.length} pedidos`);
     }
 
     return new Response(JSON.stringify({ data: todos }), {

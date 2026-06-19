@@ -9,7 +9,7 @@ import { MARCAS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { ImportarPedidoDialog } from "@/components/pedido/ImportarPedidoDialog";
+import { ExtrairPedidoDialog } from "@/components/pedido/ExtrairPedidoDialog";
 
 export type Produto = {
   id: string;
@@ -661,7 +661,7 @@ export function SecaoProdutos({
         )}
       </CardContent>
 
-      <ImportarPedidoDialog
+      <ExtrairPedidoDialog
         produtos={produtos}
         onAdicionarItens={adicionarImportados}
         open={importOpen}

@@ -1,13 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { authenticate, corsHeaders as buildCors } from "../_shared/auth.ts";
 
 // Chave do Anthropic guardada como secret no servidor — nunca chega ao browser.
 // Configure com: npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+const corsHeaders = buildCors();
 
 const SYSTEM_PROMPT = `Você é o assistente interno do Bravir CRM, plataforma B2B da Bravir Industrial (marcas: Bravir, Alivik, Bendita Cânfora, Laby, Tattoo do Bem). Ajude colaboradores com dúvidas sobre o sistema, colete bugs e sugestões.
 
@@ -33,6 +31,12 @@ function json(body: unknown, status = 200) {
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
+  }
+
+  // Qualquer usuário autenticado pode usar o assistente, mas exige JWT válido.
+  const auth = await authenticate(req, null);
+  if (!auth.ok) {
+    return json({ error: auth.message }, auth.status);
   }
 
   if (!ANTHROPIC_API_KEY) {
