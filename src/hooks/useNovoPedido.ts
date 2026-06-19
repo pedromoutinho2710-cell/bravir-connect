@@ -19,17 +19,6 @@ export type Vigencia = {
 
 export type NovoPedidoVariant = "vendedor" | "gestora";
 
-// Vendedores autorizados a ver a tabela "Fevereiro 2026" (desconto_livre=true).
-const VENDEDORES_FEVEREIRO = new Set([
-  '7cd2e2f3-034e-45aa-a0a2-6cb650082239', // Almeida Lopes
-  '06f7c7ca-0cc8-4f68-9669-b3e186204f6a', // Bruna Silva
-  '56c9bdff-e584-41ce-bfac-94df70d55078', // Direto
-  '9dd0fb94-0969-486e-a017-a6dbc2197048', // Graciano Amarante
-  '621e4bd2-5641-48fa-ac10-45275a358faa', // Paulo Queiroz
-  '1646a283-b2b2-4e38-b782-1f20fb6e63d2', // Tiago Alves
-  'a0855bfa-7918-4996-aa9a-97f7d847b39d', // Pedro Menezes (admin)
-]);
-
 export interface UseNovoPedidoOptions {
   variant: NovoPedidoVariant;
   /** For "gestora": id of selected representante. Ignored for "vendedor". */
@@ -69,7 +58,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
   const { variant, representanteId, representanteNome, setRepresentanteId, navigateAfterEnviar } = options;
   const isGestora = variant === "gestora";
 
-  const { user, role } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const rascunhoKey = isGestora
@@ -128,17 +117,12 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         setDescontos(map);
       }
       if (vigRes.data && vigRes.data.length > 0) {
-        // Gestora/admin veem todas as vigências; demais vendedores só veem
-        // as vigências desconto_livre se estiverem autorizados.
-        const podeVerDescontoLivre =
-          isGestora || role === "admin" || role === "gestora" || VENDEDORES_FEVEREIRO.has(user?.id ?? "");
-        const vigenciasFiltradas = podeVerDescontoLivre
-          ? (vigRes.data as Vigencia[])
-          : (vigRes.data as Vigencia[]).filter((v) => !v.desconto_livre);
-        if (vigenciasFiltradas.length > 0) {
-          setVigencias(vigenciasFiltradas);
-          setVigenciaId(vigenciasFiltradas[0].id);
-        }
+        // Todas as vigências ativas ficam visíveis. Quem define o modo de preço
+        // é o campo desconto_livre da vigência selecionada (ver `descontoLivre`
+        // abaixo), dispensando whitelist de vendedores.
+        const vigenciasAtivas = vigRes.data as Vigencia[];
+        setVigencias(vigenciasAtivas);
+        setVigenciaId(vigenciasAtivas[0].id);
       }
 
       // Restore rascunho silently
