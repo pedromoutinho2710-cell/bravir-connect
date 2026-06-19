@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Plus, Trash2, Search, AlertTriangle, Upload } from "lucide-react";
 import { formatBRL } from "@/lib/format";
+import { calcularPrecoItem } from "@/lib/preco";
 import { MARCAS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -43,6 +44,9 @@ export type ItemPedido = {
 /**
  * Calcula precos com cascata de descontos (nunca soma)
  * Fluxo: bruto -> aplica desconto perfil -> aplica desc comercial -> aplica desc trade
+ *
+ * Wrapper posicional sobre calcularPrecoItem (@/lib/preco) que mantém o
+ * formato de retorno snake_case usado pelos itens de pedido.
  */
 export function calcularPrecos(
   bruto: number,
@@ -51,17 +55,19 @@ export function calcularPrecos(
   dTrade: number = 0,
   qtd: number = 1
 ) {
-  const apos_perfil_raw = bruto * (1 - dPerfil - dCom / 100); // cluster + adicional somados antes de aplicar
-  const apos_perfil = Math.round(apos_perfil_raw * 100) / 100;
-  const apos_comercial = apos_perfil; // mantido por compatibilidade
-  const preco_final_raw = apos_perfil_raw * (1 - dTrade / 100);
-  const preco_final = Math.round(preco_final_raw * 100) / 100;
+  const r = calcularPrecoItem({
+    precoBruto: bruto,
+    descontoPerfil: dPerfil,
+    descontoComercial: dCom,
+    descontoTrade: dTrade,
+    quantidade: qtd,
+  });
 
   return {
-    preco_apos_perfil: apos_perfil,
-    preco_apos_comercial: apos_comercial,
-    preco_final: preco_final,
-    total: Math.round(preco_final_raw * qtd * 100) / 100,
+    preco_apos_perfil: r.precoAposPerfil,
+    preco_apos_comercial: r.precoAposComercial,
+    preco_final: r.precoFinal,
+    total: r.totalItem,
   };
 }
 

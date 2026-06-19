@@ -3,6 +3,7 @@ import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { formatBRL, formatCNPJ } from "@/lib/format";
+import { calcularPrecoItem } from "@/lib/preco";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -51,13 +52,14 @@ type DadosExcel = {
 
 function calcularLinhas(rows: ProdutoRow[]) {
   return rows.map((r) => {
-    const temDesconto = r.desconto_perfil !== 0 || r.desconto_comercial !== 0 || r.desconto_trade !== 0;
-    if (!temDesconto) {
-      return { ...r, preco_apos_perfil: r.preco_bruto, preco_final: r.preco_bruto, total: r.preco_bruto * r.quantidade };
-    }
-    const preco_apos_perfil = r.preco_bruto * (1 - r.desconto_perfil - r.desconto_comercial / 100);
-    const preco_final = preco_apos_perfil * (1 - r.desconto_trade / 100);
-    return { ...r, preco_apos_perfil, preco_final, total: preco_final * r.quantidade };
+    const { precoAposPerfil, precoFinal, totalItem } = calcularPrecoItem({
+      precoBruto: r.preco_bruto,
+      descontoPerfil: r.desconto_perfil,
+      descontoComercial: r.desconto_comercial,
+      descontoTrade: r.desconto_trade,
+      quantidade: r.quantidade,
+    });
+    return { ...r, preco_apos_perfil: precoAposPerfil, preco_final: precoFinal, total: totalItem };
   });
 }
 
