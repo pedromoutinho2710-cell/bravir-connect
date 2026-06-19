@@ -95,6 +95,11 @@ type ExcelItemRaw = {
 const STATUS_TERMINAL = new Set(["faturado", "devolvido", "cancelado"]);
 const STATUS_ACTIVE = new Set(["pendente_sankhya", "no_sankhya", "parcialmente_faturado", "com_problema", "em_faturamento", "sem_estoque"]);
 
+// Tamanho da página usada para esgotar a query de pedidos em lotes (range) e
+// para fatiar a busca de histórico, evitando truncar resultados silenciosamente
+// ou empurrar todo o conjunto de ids num único filtro `.in(...)`.
+const PAGE_SIZE = 1000;
+
 // Status após faturar por completo: pedido à vista vai para a fila do financeiro
 // (nao_liberado_envio); pedido a prazo segue o fluxo normal (no_sankhya).
 const statusPosFaturado = (pagamentoVista: boolean): string =>
@@ -304,6 +309,8 @@ export default function Faturamento() {
 
   const [pedidos, setPedidos] = useState<PedidoFat[]>([]);
   const [loading, setLoading] = useState(true);
+  // Total de pedidos no servidor x quantos foram carregados em memória (lotes).
+  const [totalPedidos, setTotalPedidos] = useState(0);
   const [profiles, setProfiles] = useState<Record<string, string>>({});
   const [vendedores, setVendedores] = useState<{ id: string; label: string }[]>([]);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -481,10 +488,7 @@ export default function Faturamento() {
   useEffect(() => {
     setLoading(true);
     (async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let query: any = supabase
-        .from("pedidos")
-        .select(`
+      const SELECT_PEDIDOS = `
           id, numero_pedido, tipo, data_pedido, status, status_atualizado_em,
           cond_pagamento, pagamento_vista, observacoes, ordem_compra, pedido_origem_id, responsavel_id, motivo, vendedor_id, flag_prioridade,
           cliente_id, perfil_cliente, tabela_preco, agendamento, total,
@@ -495,17 +499,44 @@ export default function Faturamento() {
             preco_apos_perfil, preco_apos_comercial, preco_final,
             produtos(nome, codigo_jiva, marca, cx_embarque, peso_unitario, disponivel)
           )
-        `)
-        .neq("status", "rascunho")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false })
-        .limit(5000);
+        `;
 
-      const { data, error } = await query;
-      if (error) { toast.error("Erro ao carregar pedidos"); return; }
+      // Busca paginada por `range`: percorre todas as páginas até esgotar o
+      // conjunto, em vez de aplicar um teto fixo que esconderia pedidos quando
+      // o volume cresce. `count: "exact"` dá o total real no servidor.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rawRows: any[] = [];
+      let totalCount = 0;
+      let pagina = 0;
+      let erroCarregamento = false;
+      let temMaisPaginas = true;
+      while (temMaisPaginas) {
+        const from = pagina * PAGE_SIZE;
+        const to = from + PAGE_SIZE - 1;
+        const { data, error, count } = await supabase
+          .from("pedidos")
+          .select(SELECT_PEDIDOS, { count: "exact" })
+          .neq("status", "rascunho")
+          .is("deleted_at", null)
+          .order("created_at", { ascending: false })
+          .range(from, to);
+        if (error) { toast.error("Erro ao carregar pedidos"); erroCarregamento = true; break; }
+        if (typeof count === "number") totalCount = count;
+        const lote = data ?? [];
+        rawRows.push(...lote);
+        // Última página quando o lote vem menor que o tamanho pedido, ou quando
+        // já alcançamos o total informado pelo servidor.
+        if (lote.length < PAGE_SIZE || (totalCount && rawRows.length >= totalCount)) {
+          temMaisPaginas = false;
+        } else {
+          pagina += 1;
+        }
+      }
+      if (erroCarregamento) return;
+      setTotalPedidos(totalCount || rawRows.length);
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let mapped: PedidoFat[] = (data ?? []).map((p: any) => {
+      let mapped: PedidoFat[] = rawRows.map((p: any) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const itensList = (p.itens_pedido ?? []) as any[];
         const marcas = [...new Set(itensList.map((i) => i.produtos?.marca).filter(Boolean))] as string[];
@@ -581,32 +612,34 @@ export default function Faturamento() {
       // Ordenação inicial por score de prioridade decrescente
       mapped.sort((a, b) => calcScore(b) - calcScore(a));
 
-      // Historico em batch
+      // Historico em lotes: cada query `.in(...)` opera apenas sobre uma página
+      // de ids já carregados, em vez de assumir que todo o dataset cabe num
+      // único filtro. Os resultados são agregados por pedido.
       if (mapped.length > 0) {
-        const ids = mapped.map((p) => p.id);
-        const { data: hist } = await supabase
-          .from("historico_status")
-          .select("pedido_id, usuario_nome, created_at, acao")
-          .in("pedido_id", ids)
-          .order("created_at", { ascending: true });
-
-        if (hist) {
-          const porPedido: Record<string, typeof hist> = {};
-          hist.forEach((h) => {
+        type HistRow = { pedido_id: string; usuario_nome: string | null; created_at: string; acao: string };
+        const porPedido: Record<string, HistRow[]> = {};
+        for (let i = 0; i < mapped.length; i += PAGE_SIZE) {
+          const idsPagina = mapped.slice(i, i + PAGE_SIZE).map((p) => p.id);
+          const { data: hist } = await supabase
+            .from("historico_status")
+            .select("pedido_id, usuario_nome, created_at, acao")
+            .in("pedido_id", idsPagina)
+            .order("created_at", { ascending: true });
+          (hist ?? []).forEach((h) => {
             if (!porPedido[h.pedido_id]) porPedido[h.pedido_id] = [];
-            porPedido[h.pedido_id].push(h);
-          });
-          mapped = mapped.map((p) => {
-            const entries = porPedido[p.id] ?? [];
-            return {
-              ...p,
-              aberto_por: entries[0]?.usuario_nome ?? null,
-              ultima_acao: entries.length > 0
-                ? { nome: entries[entries.length - 1].usuario_nome ?? "—", data: entries[entries.length - 1].created_at }
-                : null,
-            };
+            porPedido[h.pedido_id].push(h as HistRow);
           });
         }
+        mapped = mapped.map((p) => {
+          const entries = porPedido[p.id] ?? [];
+          return {
+            ...p,
+            aberto_por: entries[0]?.usuario_nome ?? null,
+            ultima_acao: entries.length > 0
+              ? { nome: entries[entries.length - 1].usuario_nome ?? "—", data: entries[entries.length - 1].created_at }
+              : null,
+          };
+        });
       }
 
       setPedidos(mapped);
@@ -2257,6 +2290,10 @@ export default function Faturamento() {
           {ABAS.find((a) => a.key === abaAtiva)?.descricao}
           {" · "}
           <span className="font-medium">{pedidosFiltrados.length} pedido(s)</span>
+          {" · "}
+          <span title={`Carregados em lotes de ${PAGE_SIZE}`}>
+            {pedidos.length} de {totalPedidos} carregados
+          </span>
         </p>
 
         {ABAS.map((aba) => (

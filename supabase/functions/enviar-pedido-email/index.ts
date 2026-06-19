@@ -32,6 +32,11 @@ serve(async (req) => {
       });
     }
 
+    // Acompanha falhas parciais para devolver um status não-2xx ao final,
+    // garantindo que o caller (useNovoPedido) não reporte sucesso completo.
+    let emailFalhou = false;
+    let notificacoesFalharam = false;
+
     // Send email via Resend
     const emailRes = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -50,6 +55,7 @@ serve(async (req) => {
     });
 
     if (!emailRes.ok) {
+      emailFalhou = true;
       console.error("Resend error: status", emailRes.status);
     }
 
@@ -106,8 +112,28 @@ serve(async (req) => {
       }
 
       if (notifs.length > 0) {
-        await supabase.from("notificacoes").insert(notifs);
+        const { error: notifError } = await supabase.from("notificacoes").insert(notifs);
+        if (notifError) {
+          notificacoesFalharam = true;
+          console.error("notificacoes insert error:", notifError.message);
+        }
       }
+    }
+
+    // Se o email OU as notificações falharam, devolve um status não-2xx para que
+    // o caller exiba o aviso e não reporte que o handoff foi 100% concluído.
+    if (emailFalhou || notificacoesFalharam) {
+      return new Response(
+        JSON.stringify({
+          error: "Falha ao enviar email e/ou criar notificações.",
+          email_falhou: emailFalhou,
+          notificacoes_falharam: notificacoesFalharam,
+        }),
+        {
+          status: 502,
+          headers: { ...cors, "Content-Type": "application/json" },
+        },
+      );
     }
 
     return new Response(JSON.stringify({ ok: true }), {

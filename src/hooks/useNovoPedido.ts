@@ -440,6 +440,10 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
 
     const id = await salvarPedido("pendente_sankhya");
     if (id) {
+      // Sucesso do envio de email/notificações controla se reportamos o handoff
+      // como 100% concluído. Em caso de falha mostramos um aviso (e não o toast
+      // de sucesso), evitando a perda silenciosa de notificações.
+      let emailOk = true;
       try {
         const { data: pedData } = await supabase
           .from("pedidos")
@@ -482,13 +486,15 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
           for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
           const docx_base64 = btoa(binary);
           const filename = `Pedido_${pedData.numero_pedido}.docx`;
-          await supabase.functions.invoke("enviar-pedido-email", {
+          const { error: emailError } = await supabase.functions.invoke("enviar-pedido-email", {
             body: { pedido_id: id, docx_base64, filename },
           });
+          if (emailError) throw emailError;
         }
       } catch (err) {
+        emailOk = false;
         console.warn("Falha ao enviar email:", err);
-        toast.warning("Pedido salvo, mas houve falha ao enviar o email de notificação.");
+        toast.warning("Pedido salvo, mas houve falha ao enviar o email/notificações. Avise o faturamento.");
       }
 
       if (cliente.email_xml.trim()) {
@@ -537,7 +543,9 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
       pedidoEnviadoRef.current = true;
       if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
       localStorage.removeItem(rascunhoKey);
-      toast.success("Pedido enviado para faturamento!");
+      // Só reporta sucesso completo se o email/notificações foram entregues.
+      // Em caso de falha o aviso já foi exibido acima — não sobrepõe com sucesso.
+      if (emailOk) toast.success("Pedido enviado para faturamento!");
       navigate(navigateAfterEnviar);
     }
     setEnviando(false);

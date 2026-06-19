@@ -57,6 +57,13 @@ CREATE POLICY "metas_visao_macro_select" ON public.metas_visao_macro
   );
 
 -- ─────────────────────────────────────────────────────────────────────────
+-- SELECT `USING (true)` das tabelas críticas (clientes, precos, descontos,
+-- faturamentos_sankhya): TRATADO no follow-up
+-- 20260619010000_rls_tabelas_criticas_select.sql, que substitui essas políticas
+-- por leitura escopada por papel (public.user_roles), preservando os fluxos.
+-- O escopo POR LINHA (vendedor só vê seus clientes / seu faturamento Sankhya)
+-- permanece adiado pelos motivos abaixo:
+--
 -- OMITIDO INTENCIONALMENTE (NÃO aplicar sem resolver os bloqueios):
 --
 --  • clientes (SELECT USING(true) → escopo por vendedor_id):
