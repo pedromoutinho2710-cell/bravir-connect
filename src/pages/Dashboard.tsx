@@ -10,7 +10,9 @@ import { toast } from "sonner";
 import { formatBRL, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 import { exportDashboardExcel } from "@/lib/exportDashboardExcel";
+import { exportarBaseDadosCompleta } from "@/lib/excel";
 import { Download } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 type Periodo = "hoje" | "semana" | "mes" | "mes_anterior" | "ano";
 
@@ -153,6 +155,9 @@ function nivelMaior(a: string | null, b: string | null): string | null {
 }
 
 export default function Dashboard() {
+  const { role } = useAuth();
+  const podeExportarBase = role === "admin" || role === "gestora";
+  const [exportandoBase, setExportandoBase] = useState(false);
   const [periodo, setPeriodo] = useState<Periodo>("mes");
   const [loading, setLoading] = useState(true);
   const [kpis, setKpis] = useState<KPIs>({
@@ -930,6 +935,24 @@ export default function Dashboard() {
     }
   }
 
+  async function handleExportBaseDados() {
+    setExportandoBase(true);
+    try {
+      const hoje = new Date().toISOString().slice(0, 10);
+      const linhas = await exportarBaseDadosCompleta(`base_dados_${hoje}.xlsx`);
+      if (linhas === 0) {
+        toast.error("Nenhum pedido encontrado para exportar.");
+        return;
+      }
+      toast.success(`Base exportada — ${linhas} linhas.`);
+    } catch (e) {
+      console.error("Erro ao exportar base de dados:", e);
+      toast.error("Erro ao exportar base de dados.");
+    } finally {
+      setExportandoBase(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -988,6 +1011,17 @@ export default function Dashboard() {
               <Download className="h-4 w-4 mr-1.5" />
               Exportar Excel
             </Button>
+
+            {podeExportarBase && (
+              <Button size="sm" variant="outline" onClick={handleExportBaseDados} disabled={exportandoBase}>
+                {exportandoBase ? (
+                  <Loader2 className="h-4 w-4 mr-1.5 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-1.5" />
+                )}
+                Exportar base de dados
+              </Button>
+            )}
           </div>
 
           {/* Linha 2: painel personalizar — só aparece se mostrarPersonalizar */}

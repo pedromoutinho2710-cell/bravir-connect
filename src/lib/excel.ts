@@ -1,4 +1,6 @@
 import ExcelJS from "exceljs";
+import { supabase } from "@/integrations/supabase/client";
+import { STATUS_LABEL } from "@/lib/status";
 
 export interface PedidoParaExcel {
   numero_pedido: number;
@@ -469,6 +471,136 @@ export async function exportarBaseDadosExcel(
   link.download = nomeArquivo;
   link.click();
   window.URL.revokeObjectURL(url);
+}
+
+type PedidoBase = {
+  id: string;
+  numero_pedido: number | null;
+  data_pedido: string | null;
+  status: string | null;
+  total: number | null;
+  cliente_id: string | null;
+  vendedor_id: string | null;
+};
+
+type ItemComProduto = {
+  pedido_id: string;
+  quantidade: number | null;
+  preco_final: number | null;
+  total_item: number | null;
+  produtos: { nome: string | null; codigo_jiva: string | null; marca: string | null } | null;
+};
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/**
+ * Busca a base de dados completa (pedidos x itens) usando queries separadas —
+ * evita o erro 400 do PostgREST com joins aninhados — e gera o Excel.
+ * Retorna o número de linhas exportadas (uma por item de pedido).
+ */
+export async function exportarBaseDadosCompleta(nomeArquivo: string): Promise<number> {
+  // 1. Pedidos (paginado)
+  const pedidos: PedidoBase[] = [];
+  const pageSize = 1000;
+  let from = 0;
+  for (;;) {
+    const { data, error } = await supabase
+      .from("pedidos")
+      .select("id, numero_pedido, data_pedido, status, total, cliente_id, vendedor_id")
+      .is("deleted_at", null)
+      .order("data_pedido", { ascending: false })
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    const rows = (data ?? []) as unknown as PedidoBase[];
+    pedidos.push(...rows);
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+
+  if (pedidos.length === 0) return 0;
+
+  // 2. Itens de pedido com produtos — em lotes de ids
+  const itensPorPedido: Record<string, ItemComProduto[]> = {};
+  for (const lote of chunk(pedidos.map((p) => p.id), 200)) {
+    const { data, error } = await supabase
+      .from("itens_pedido")
+      .select("pedido_id, quantidade, preco_final, total_item, produtos(nome, codigo_jiva, marca)")
+      .in("pedido_id", lote);
+    if (error) throw error;
+    for (const item of (data ?? []) as unknown as ItemComProduto[]) {
+      if (!item.pedido_id) continue;
+      if (!itensPorPedido[item.pedido_id]) itensPorPedido[item.pedido_id] = [];
+      itensPorPedido[item.pedido_id].push(item);
+    }
+  }
+
+  // 3. Clientes — em lotes de ids
+  const clienteMap: Record<string, { razao_social: string | null; nome_parceiro: string | null; codigo_parceiro: string | null }> = {};
+  const clienteIds = [...new Set(pedidos.map((p) => p.cliente_id).filter(Boolean) as string[])];
+  for (const lote of chunk(clienteIds, 200)) {
+    const { data, error } = await supabase
+      .from("clientes")
+      .select("id, razao_social, nome_parceiro, codigo_parceiro")
+      .in("id", lote);
+    if (error) throw error;
+    for (const c of data ?? []) {
+      clienteMap[c.id] = {
+        razao_social: c.razao_social,
+        nome_parceiro: c.nome_parceiro,
+        codigo_parceiro: c.codigo_parceiro,
+      };
+    }
+  }
+
+  // 4. Profiles (vendedores) — em lotes de ids
+  const vendedorMap: Record<string, string> = {};
+  const vendedorIds = [...new Set(pedidos.map((p) => p.vendedor_id).filter(Boolean) as string[])];
+  for (const lote of chunk(vendedorIds, 200)) {
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", lote);
+    if (error) throw error;
+    for (const v of data ?? []) {
+      vendedorMap[v.id] = v.full_name ?? "";
+    }
+  }
+
+  // 5. Junta tudo no client — uma linha por item de pedido
+  const linhas: BaseDadosRow[] = [];
+  for (const p of pedidos) {
+    const cliente = p.cliente_id ? clienteMap[p.cliente_id] : null;
+    const base = {
+      numero_pedido: p.numero_pedido,
+      data_pedido: p.data_pedido,
+      vendedor: p.vendedor_id ? vendedorMap[p.vendedor_id] ?? "" : "",
+      cliente: cliente?.razao_social ?? "",
+      nome_fantasia: cliente?.nome_parceiro ?? "",
+      codigo_cliente: cliente?.codigo_parceiro ?? "",
+      status: p.status ? STATUS_LABEL[p.status] ?? p.status : "",
+      total_pedido: p.total ?? 0,
+    };
+    for (const item of itensPorPedido[p.id] ?? []) {
+      linhas.push({
+        ...base,
+        produto: item.produtos?.nome ?? "",
+        marca: item.produtos?.marca ?? "",
+        codigo_produto: item.produtos?.codigo_jiva ?? "",
+        quantidade: item.quantidade ?? 0,
+        preco_unitario: item.preco_final ?? 0,
+        total_item: item.total_item ?? 0,
+      });
+    }
+  }
+
+  if (linhas.length === 0) return 0;
+
+  await exportarBaseDadosExcel(linhas, nomeArquivo);
+  return linhas.length;
 }
 
 /**
