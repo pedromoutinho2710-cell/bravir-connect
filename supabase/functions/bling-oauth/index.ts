@@ -1,148 +1,134 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { authenticate, corsHeaders } from "../_shared/auth.ts";
 
-const CLIENT_ID = Deno.env.get("BLING_CLIENT_ID")!;
-const CLIENT_SECRET = Deno.env.get("BLING_CLIENT_SECRET")!;
-const REDIRECT_URI = "https://bravir-connect.vercel.app/admin/bling-callback";
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-const cors = corsHeaders("x-action");
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: { ...cors, "Content-Type": "application/json" } });
-
-  // Integração Bling é restrita a administradores.
-  const auth = await authenticate(req, ["admin"]);
-  if (!auth.ok) {
-    return new Response(JSON.stringify({ error: auth.message }), {
-      status: auth.status,
-      headers: { ...cors, "Content-Type": "application/json" },
-    });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
-  const action = new URL(req.url).searchParams.get("action") ?? req.headers.get("x-action");
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-  const body = req.method === "POST" ? await req.json() : {};
+  try {
+    const supabaseClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
 
-  const basicAuth = btoa(`${CLIENT_ID}:${CLIENT_SECRET}`);
+    const { action, code, redirect_uri } = await req.json();
 
-  if (action === "token") {
-    const res = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${basicAuth}`,
-      },
-      body: new URLSearchParams({
+    const clientId = Deno.env.get("BLING_CLIENT_ID") ?? "";
+    const clientSecret = Deno.env.get("BLING_CLIENT_SECRET") ?? "";
+
+    if (action === "exchange") {
+      // Troca o code pelo access_token + refresh_token
+      const params = new URLSearchParams({
         grant_type: "authorization_code",
-        code: body.code,
-        redirect_uri: REDIRECT_URI,
-      }),
-    });
-    const data = await res.json();
-    if (!data.access_token) return new Response(JSON.stringify({ error: data }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
-    await supabase.from("bling_tokens").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-    await supabase.from("bling_tokens").insert({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
-    });
-    return new Response(JSON.stringify({ success: true }), { headers: { ...cors, "Content-Type": "application/json" } });
-  }
+        code,
+        redirect_uri,
+      });
 
-  if (action === "refresh") {
-    const { data: tokenRow } = await supabase.from("bling_tokens").select("*").order("created_at", { ascending: false }).limit(1).maybeSingle();
-    if (!tokenRow) return new Response(JSON.stringify({ error: "no token" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
-    const res = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${basicAuth}`,
-      },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: tokenRow.refresh_token,
-      }),
-    });
-    const data = await res.json();
-    if (!data.access_token) return new Response(JSON.stringify({ error: data }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
-    await supabase.from("bling_tokens").update({
-      access_token: data.access_token,
-      refresh_token: data.refresh_token,
-      expires_at: new Date(Date.now() + data.expires_in * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-    }).eq("id", tokenRow.id);
-    return new Response(JSON.stringify({ access_token: data.access_token }), { headers: { ...cors, "Content-Type": "application/json" } });
-  }
+      const credentials = btoa(`${clientId}:${clientSecret}`);
 
-  if (action === "vendas") {
-    let { data: tokenRow } = await supabase.from("bling_tokens").select("*").order("created_at", { ascending: false }).limit(1).maybeSingle();
-    if (!tokenRow) return new Response(JSON.stringify({ error: "não conectado" }), { status: 401, headers: { ...cors, "Content-Type": "application/json" } });
-    // Sempre tenta renovar o token antes de usar
-    const refreshRes = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        "Authorization": `Basic ${basicAuth}`,
-      },
-      body: new URLSearchParams({
-        grant_type: "refresh_token",
-        refresh_token: tokenRow.refresh_token,
-      }),
-    });
-    const refreshData = await refreshRes.json();
-    if (refreshData.access_token) {
-      await supabase.from("bling_tokens").update({
-        access_token: refreshData.access_token,
-        refresh_token: refreshData.refresh_token,
-        expires_at: new Date(Date.now() + refreshData.expires_in * 1000).toISOString(),
+      const response = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Basic ${credentials}`,
+        },
+        body: params.toString(),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return new Response(JSON.stringify({ error: data }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Salva tokens no banco
+      const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+      await supabaseClient.from("bling_tokens").upsert({
+        id: 1,
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: expiresAt,
         updated_at: new Date().toISOString(),
-      }).eq("id", tokenRow.id);
-      tokenRow = { ...tokenRow, access_token: refreshData.access_token };
-    }
-    const { dataInicial, dataFinal } = body;
-    // Extrai ano do dataInicial (formato DD/MM/YYYY)
-    const ano = dataInicial.slice(6, 10);
-    const todos: any[] = [];
+      });
 
-    const meses = [
-      { ini: `01/01/${ano}`, fim: `31/01/${ano}` },
-      { ini: `01/02/${ano}`, fim: `28/02/${ano}` },
-      { ini: `01/03/${ano}`, fim: `31/03/${ano}` },
-      { ini: `01/04/${ano}`, fim: `30/04/${ano}` },
-      { ini: `01/05/${ano}`, fim: `31/05/${ano}` },
-      { ini: `01/06/${ano}`, fim: `30/06/${ano}` },
-      { ini: `01/07/${ano}`, fim: `31/07/${ano}` },
-      { ini: `01/08/${ano}`, fim: `31/08/${ano}` },
-      { ini: `01/09/${ano}`, fim: `30/09/${ano}` },
-      { ini: `01/10/${ano}`, fim: `31/10/${ano}` },
-      { ini: `01/11/${ano}`, fim: `30/11/${ano}` },
-      { ini: `01/12/${ano}`, fim: `31/12/${ano}` },
-    ];
-
-    const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-
-    for (const mes of meses) {
-      await sleep(400);
-      const res = await fetch(
-        `https://www.bling.com.br/Api/v3/pedidos/vendas?pagina=1&limite=100&dataEmissaoInicial=${mes.ini}&dataEmissaoFinal=${mes.fim}`,
-        { headers: { "Authorization": `Bearer ${tokenRow.access_token}` } }
-      );
-      const data = await res.json();
-      const itens = data?.data ?? [];
-      const itensMapeados = itens.map((item: any) => ({
-        data: item.data,
-        total: Number(item.totalProdutos ?? item.total ?? 0),
-      }));
-      todos.push(...itensMapeados);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    return new Response(JSON.stringify({ data: todos }), {
-      headers: { ...cors, "Content-Type": "application/json" }
+    if (action === "refresh") {
+      // Busca o refresh_token atual
+      const { data: tokenRow, error: fetchError } = await supabaseClient
+        .from("bling_tokens")
+        .select("refresh_token")
+        .eq("id", 1)
+        .single();
+
+      if (fetchError || !tokenRow) {
+        return new Response(JSON.stringify({ error: "Token não encontrado" }), {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const params = new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokenRow.refresh_token,
+      });
+
+      const credentials = btoa(`${clientId}:${clientSecret}`);
+
+      const response = await fetch("https://www.bling.com.br/Api/v3/oauth/token", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          Authorization: `Basic ${credentials}`,
+        },
+        body: params.toString(),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return new Response(JSON.stringify({ error: data }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      // Atualiza tokens no banco
+      const expiresAt = new Date(Date.now() + data.expires_in * 1000).toISOString();
+      await supabaseClient.from("bling_tokens").upsert({
+        id: 1,
+        access_token: data.access_token,
+        refresh_token: data.refresh_token,
+        expires_at: expiresAt,
+        updated_at: new Date().toISOString(),
+      });
+
+      // Retorna apenas confirmação de sucesso — o access_token NÃO deve ser exposto ao cliente
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    return new Response(JSON.stringify({ error: "Action inválida" }), {
+      status: 400,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
-
-  return new Response(JSON.stringify({ error: "action inválida" }), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
 });
