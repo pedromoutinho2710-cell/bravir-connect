@@ -267,6 +267,85 @@ function ehChamadorAutomatizado(req: Request): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Criação de solicitações
+// ---------------------------------------------------------------------------
+
+// Cria solicitações para os problemas novos (sem similar já aberta). Reutilizado
+// pelo fluxo automático (cron) e pela aprovação do plano de ação na UI.
+async function criarSolicitacoes(
+  problemas: Problema[],
+): Promise<{ criados: Problema[]; ignorados: Problema[] }> {
+  // Carrega solicitações abertas para deduplicar por título.
+  const { data: abertas } = await supabase
+    .from("solicitacoes_gestor")
+    .select("titulo, descricao")
+    .eq("status", "aberto")
+    .is("deleted_at", null);
+  const titulosAbertos = ((abertas ?? []) as Array<{ titulo: string | null; descricao: string | null }>)
+    .map((s) => s.titulo || (s.descricao ?? "").slice(0, 80))
+    .filter(Boolean);
+
+  const criados: Problema[] = [];
+  const ignorados: Problema[] = [];
+  for (const p of problemas) {
+    if (criados.length >= MAX_PROBLEMAS_CRIADOS) {
+      ignorados.push(p);
+      continue;
+    }
+    const jaExiste = titulosAbertos.some((t) => tituloSimilar(t, p.titulo));
+    if (jaExiste) {
+      ignorados.push(p);
+      continue;
+    }
+
+    const descricao = [
+      `[${p.categoria}] ${p.arquivo}`.trim(),
+      "",
+      p.descricao,
+      "",
+      "_Detectado automaticamente pelo Agente Monitor._",
+    ].join("\n");
+
+    const { error } = await supabase.from("solicitacoes_gestor").insert({
+      tipo: "bug",
+      titulo: p.titulo,
+      descricao,
+      criado_por: null,
+      criado_por_nome: "Agente Monitor",
+      status: "aberto",
+      prioridade: p.prioridade === "normal" ? "normal" : "alta",
+      tela: p.arquivo || null,
+    });
+    if (error) {
+      console.error("Falha ao criar solicitação:", error.message);
+      ignorados.push(p);
+      continue;
+    }
+    criados.push(p);
+    // Inclui o título recém-criado no conjunto para deduplicar dentro do mesmo run.
+    titulosAbertos.push(p.titulo);
+  }
+  return { criados, ignorados };
+}
+
+// Sanitiza a lista de problemas recebida do cliente (aprovação do plano de ação).
+function sanitizarProblemas(raw: unknown): Problema[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(
+      (p): p is Record<string, unknown> =>
+        !!p && typeof (p as { titulo?: unknown }).titulo === "string",
+    )
+    .map((p) => ({
+      titulo: String(p.titulo).slice(0, 120),
+      descricao: typeof p.descricao === "string" ? p.descricao : "",
+      categoria: typeof p.categoria === "string" ? p.categoria : "bug",
+      arquivo: typeof p.arquivo === "string" ? p.arquivo : "",
+      prioridade: p.prioridade === "normal" ? "normal" : "alta",
+    }));
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -289,7 +368,31 @@ serve(async (req) => {
     return json({ error: "Monitor indisponível: GITHUB_TOKEN não configurado." }, 500);
   }
 
+  // Body opcional. O cron (GitHub Actions) chama sem body (analisa + cria).
+  //   { dry_run: true }      → apenas detecta e devolve o plano de ação.
+  //   { criar: Problema[] }  → cria as solicitações já revisadas (aprovação do plano).
+  let body: { dry_run?: boolean; criar?: unknown } = {};
   try {
+    body = await req.json();
+  } catch {
+    body = {};
+  }
+
+  try {
+    // Aprovação do plano de ação: cria as solicitações já revisadas, sem nova
+    // chamada à IA nem leitura do repositório.
+    if (Array.isArray(body.criar)) {
+      const problemas = sanitizarProblemas(body.criar);
+      const { criados, ignorados } = await criarSolicitacoes(problemas);
+      return json({
+        ok: true,
+        encontrados: problemas.length,
+        criados: criados.length,
+        ignorados: ignorados.length,
+        problemas,
+      });
+    }
+
     // 1. Lê os arquivos críticos + as Edge Functions.
     const arquivos: Array<{ path: string; conteudo: string }> = [];
     for (const path of ARQUIVOS_CRITICOS) {
@@ -317,57 +420,19 @@ serve(async (req) => {
     // 2. Analisa com a IA.
     const problemas = await analisarComIA(arquivos);
 
-    // 3. Carrega solicitações abertas para deduplicar por título.
-    const { data: abertas } = await supabase
-      .from("solicitacoes_gestor")
-      .select("titulo, descricao")
-      .eq("status", "aberto")
-      .is("deleted_at", null);
-    const titulosAbertos = ((abertas ?? []) as Array<{ titulo: string | null; descricao: string | null }>)
-      .map((s) => s.titulo || (s.descricao ?? "").slice(0, 80))
-      .filter(Boolean);
-
-    // 4. Cria solicitações para os problemas novos (sem similar já aberta).
-    const criados: Problema[] = [];
-    const ignorados: Problema[] = [];
-    for (const p of problemas) {
-      if (criados.length >= MAX_PROBLEMAS_CRIADOS) {
-        ignorados.push(p);
-        continue;
-      }
-      const jaExiste = titulosAbertos.some((t) => tituloSimilar(t, p.titulo));
-      if (jaExiste) {
-        ignorados.push(p);
-        continue;
-      }
-
-      const descricao = [
-        `[${p.categoria}] ${p.arquivo}`.trim(),
-        "",
-        p.descricao,
-        "",
-        "_Detectado automaticamente pelo Agente Monitor._",
-      ].join("\n");
-
-      const { error } = await supabase.from("solicitacoes_gestor").insert({
-        tipo: "bug",
-        titulo: p.titulo,
-        descricao,
-        criado_por: null,
-        criado_por_nome: "Agente Monitor",
-        status: "aberto",
-        prioridade: p.prioridade === "normal" ? "normal" : "alta",
-        tela: p.arquivo || null,
+    // dry_run: devolve só o plano de ação para revisão na UI, sem criar nada.
+    if (body.dry_run) {
+      return json({
+        ok: true,
+        dry_run: true,
+        analisados: arquivos.map((a) => a.path),
+        encontrados: problemas.length,
+        problemas,
       });
-      if (error) {
-        console.error("Falha ao criar solicitação:", error.message);
-        ignorados.push(p);
-        continue;
-      }
-      criados.push(p);
-      // Inclui o título recém-criado no conjunto para deduplicar dentro do mesmo run.
-      titulosAbertos.push(p.titulo);
     }
+
+    // 3. Fluxo automático: cria solicitações para os problemas novos.
+    const { criados, ignorados } = await criarSolicitacoes(problemas);
 
     return json({
       ok: true,
