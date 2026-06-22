@@ -1,246 +1,105 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { requireAdmin } from '../_shared/auth.ts'
+
+const CORS_ORIGIN = Deno.env.get('CORS_ORIGIN') ?? 'https://bravir.com.br'
 
 const corsHeaders = {
-  "Access-Control-Allow-Origin": Deno.env.get("CORS_ORIGIN") ?? "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
-
-// Always HTTP 200 — supabase-js v2 loses the JSON body for non-2xx responses.
-function ok(data: Record<string, unknown>): Response {
-  return new Response(JSON.stringify(data), {
-    status: 200,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-function err(message: string): Response {
-  return ok({ error: message });
+  'Access-Control-Allow-Origin': CORS_ORIGIN,
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
   }
 
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-  const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-  // Admin client — used for auth.admin.* and privileged DB writes
-  const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-
-  // ── Extract and verify the caller's JWT ───────────────────────────
-  // supabase.functions.invoke() sends Authorization: Bearer <user_access_token>
-  // when a user session is active. We pass that token to auth.getUser(jwt)
-  // which calls GET /auth/v1/user with it — works for real user JWTs,
-  // correctly rejects anon key and service role key.
-  const authHeader = req.headers.get("Authorization") ?? "";
-  const jwt = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-
-  if (!jwt) {
-    return err("Unauthorized: missing Authorization header");
-  }
-
-  const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(jwt);
-  if (userErr || !user) {
-    return err("Unauthorized: " + (userErr?.message ?? "invalid token"));
-  }
-
-  // ── Verify caller has admin role ──────────────────────────────────
-  const { data: roleRow } = await supabaseAdmin
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", user.id)
-    .eq("role", "admin")
-    .maybeSingle();
-
-  if (!roleRow) {
-    return err("Forbidden: admin role required");
-  }
-
-  // ── Parse body ────────────────────────────────────────────────────
-  let body: Record<string, unknown>;
   try {
-    body = await req.json();
-  } catch {
-    return err("Invalid JSON body");
-  }
+    const adminClient = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    )
 
-  const { acao } = body;
+    await requireAdmin(req)
 
-  // ── criar ─────────────────────────────────────────────────────────
-  if (acao === "criar") {
-    const email = body.email as string;
-    const senha = body.senha as string;
-    const full_name = body.full_name as string;
-    const role = body.role as string;
+    const body = await req.json()
+    const { action, userId, email, password, role, nome } = body
 
-    if (!email || !senha || !full_name || !role) {
-      return err("Campos obrigatórios: email, senha, full_name, role");
+    if (action === 'create') {
+      const { data, error } = await adminClient.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { nome, role },
+      })
+      if (error) throw error
+
+      const { error: profileError } = await adminClient
+        .from('perfis')
+        .upsert({ id: data.user.id, email, nome, role })
+      if (profileError) throw profileError
+
+      return new Response(JSON.stringify({ user: data.user }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
     }
 
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password: senha,
-      email_confirm: true,
-      user_metadata: { full_name },
-    });
+    if (action === 'update') {
+      const updates: Record<string, unknown> = {}
+      if (email) updates.email = email
+      if (password) updates.password = password
+      if (nome || role) updates.user_metadata = { nome, role }
 
-    let userId: string;
+      const { data, error } = await adminClient.auth.admin.updateUserById(userId, updates)
+      if (error) throw error
 
-    if (error) {
-      const isAlreadyExists =
-        error.message.toLowerCase().includes("already") ||
-        error.message.toLowerCase().includes("registered");
+      const profileUpdates: Record<string, unknown> = { id: userId }
+      if (email) profileUpdates.email = email
+      if (nome) profileUpdates.nome = nome
+      if (role) profileUpdates.role = role
 
-      if (!isAlreadyExists) return err(error.message);
+      const { error: profileError } = await adminClient
+        .from('perfis')
+        .upsert(profileUpdates)
+      if (profileError) throw profileError
 
-      // Usuário já existe no Auth — busca o ID pelo email via GoTrue admin API
-      const listRes = await fetch(
-        `${SUPABASE_URL}/auth/v1/admin/users?per_page=1000&filter=${encodeURIComponent(email)}`,
-        {
-          headers: {
-            apikey: SERVICE_ROLE_KEY,
-            Authorization: `Bearer ${SERVICE_ROLE_KEY}`,
-          },
-        }
-      );
-      const listData: { users?: { id: string; email: string }[] } = await listRes.json();
-      const existingUser = (listData.users ?? []).find(
-        (u) => u.email?.toLowerCase() === email.toLowerCase()
-      );
-
-      if (!existingUser) {
-        return err("Usuário já registrado mas não foi possível localizá-lo pelo email.");
-      }
-
-      userId = existingUser.id;
-    } else {
-      userId = data.user.id;
+      return new Response(JSON.stringify({ user: data.user }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
     }
 
-    await supabaseAdmin.from("user_roles").delete().eq("user_id", userId);
-    const rolesResult = await supabaseAdmin.from("user_roles").insert({ user_id: userId, role });
-    if (rolesResult.error) return err("Erro ao definir role: " + rolesResult.error.message);
+    if (action === 'delete') {
+      const { error } = await adminClient.auth.admin.deleteUser(userId)
+      if (error) throw error
 
-    const profilesResult = await supabaseAdmin.from("profiles").upsert(
-      { id: userId, name: full_name, full_name, email, role, ativo: true },
-      { onConflict: "id" }
-    );
-    if (profilesResult.error) return err("Erro ao criar profile: " + profilesResult.error.message);
-
-    return ok({ ok: true, user_id: userId });
-  }
-
-  // ── atualizar_role ────────────────────────────────────────────────
-  if (acao === "atualizar_role") {
-    const { user_id, role } = body as { user_id: string; role: string };
-    await supabaseAdmin.from("user_roles").delete().eq("user_id", user_id);
-    const { error } = await supabaseAdmin.from("user_roles").insert({ user_id, role });
-    if (error) return err(error.message);
-    return ok({ ok: true });
-  }
-
-  // ── toggle_ativo ──────────────────────────────────────────────────
-  if (acao === "toggle_ativo") {
-    const { user_id, ativo } = body as { user_id: string; ativo: boolean };
-
-    const { error: profErr } = await supabaseAdmin
-      .from("profiles")
-      .update({ ativo })
-      .eq("id", user_id);
-    if (profErr) return err(profErr.message);
-
-    const { error: banErr } = await supabaseAdmin.auth.admin.updateUserById(user_id, {
-      ban_duration: ativo ? "none" : "87600h",
-    });
-    if (banErr) return err(banErr.message);
-
-    return ok({ ok: true });
-  }
-
-  // ── excluir ───────────────────────────────────────────────────────────────
-  if (acao === "excluir") {
-    const { user_id } = body as { user_id: string };
-    if (!user_id) return err("user_id obrigatório");
-
-    const [authErr, profErr, roleErr] = await Promise.all([
-      supabaseAdmin.auth.admin.deleteUser(user_id).then((r) => r.error),
-      supabaseAdmin.from("profiles").delete().eq("id", user_id).then((r) => r.error),
-      supabaseAdmin.from("user_roles").delete().eq("user_id", user_id).then((r) => r.error),
-    ]);
-
-    if (authErr) return err("Erro ao excluir auth: " + authErr.message);
-    if (profErr) return err("Erro ao excluir profile: " + profErr.message);
-    if (roleErr) return err("Erro ao excluir role: " + roleErr.message);
-
-    return ok({ ok: true });
-  }
-
-  // ── atualizar_usuario ─────────────────────────────────────────────────────
-  if (acao === "atualizar_usuario") {
-    const { user_id, full_name, email, role, senha, nome_sankhya } = body as {
-      user_id: string;
-      full_name: string;
-      email: string;
-      role: string;
-      senha?: string;
-      nome_sankhya?: string | null;
-    };
-
-    if (!user_id || !full_name || !email || !role) {
-      return err("Campos obrigatórios: user_id, full_name, email, role");
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
     }
 
-    // Update auth: email + optional password
-    const authUpdate: Record<string, unknown> = { email, user_metadata: { full_name } };
-    if (senha) authUpdate.password = senha;
-    const { error: authErr } = await supabaseAdmin.auth.admin.updateUserById(user_id, authUpdate);
-    if (authErr) return err("Erro ao atualizar autenticação: " + authErr.message);
+    if (action === 'list') {
+      const { data, error } = await adminClient.auth.admin.listUsers()
+      if (error) throw error
 
-    // Update profile
-    const profileUpdate: Record<string, unknown> = { full_name, email };
-    if (nome_sankhya !== undefined) profileUpdate.nome_sankhya = nome_sankhya;
-    const { error: profErr } = await supabaseAdmin
-      .from("profiles")
-      .update(profileUpdate)
-      .eq("id", user_id);
-    if (profErr) return err("Erro ao atualizar profile: " + profErr.message);
-
-    // Update role
-    await supabaseAdmin.from("user_roles").delete().eq("user_id", user_id);
-    const { error: roleErr } = await supabaseAdmin.from("user_roles").insert({ user_id, role });
-    if (roleErr) return err("Erro ao atualizar perfil: " + roleErr.message);
-
-    return ok({ ok: true });
-  }
-
-  // ── corrigir_nomes ────────────────────────────────────────────────────────
-  if (acao === "corrigir_nomes") {
-    const { data: profs, error: fetchErr } = await supabaseAdmin
-      .from("profiles")
-      .select("id, email")
-      .is("full_name", null);
-
-    if (fetchErr) return err(fetchErr.message);
-
-    let updated = 0;
-    for (const p of (profs ?? [])) {
-      if (!p.email) continue;
-      const local = p.email.split("@")[0];
-      const full_name = local
-        .split(/[._-]/)
-        .map((s: string) => s.charAt(0).toUpperCase() + s.slice(1))
-        .join(" ");
-      const { error: upErr } = await supabaseAdmin
-        .from("profiles")
-        .update({ full_name })
-        .eq("id", p.id);
-      if (!upErr) updated++;
+      return new Response(JSON.stringify({ users: data.users }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
     }
 
-    return ok({ ok: true, updated });
+    return new Response(JSON.stringify({ error: 'Ação inválida' }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 400,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Erro interno'
+    return new Response(JSON.stringify({ error: message }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 401,
+    })
   }
-
-  return err("Ação desconhecida: " + String(acao));
-});
+})
