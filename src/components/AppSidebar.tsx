@@ -1,313 +1,349 @@
-﻿import { useEffect, useState } from "react";
-import { NavLink, useLocation } from "react-router-dom";
-import { FileText, Calculator, LayoutTemplate, Eye, ClipboardList } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 import {
   Sidebar,
   SidebarContent,
   SidebarGroup,
-  SidebarGroupContent,
   SidebarGroupLabel,
-  SidebarHeader,
-  SidebarFooter,
+  SidebarGroupContent,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarHeader,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
-import { useAuth } from "@/hooks/useAuth";
-import { useImpersonation } from "@/contexts/ImpersonationContext";
-import { ROLE_LABEL, type AppRole } from "@/lib/roles";
-import { supabase } from "@/integrations/supabase/client";
-import { UserMenu } from "@/components/UserMenu";
 import {
-  ADMIN_SECTIONS,
-  BASE_FATURAMENTO_ITEMS,
-  FLAT_MENU_STATIC,
-  type Item,
-  type Section,
-} from "@/lib/menu";
+  LayoutDashboard,
+  Users,
+  ShoppingCart,
+  ClipboardList,
+  Calculator,
+  FileText,
+  MessageSquare,
+  CheckSquare,
+  GitBranch,
+  BarChart2,
+  TrendingUp,
+  Package,
+  Settings,
+  Trash2,
+  Star,
+  Truck,
+  DollarSign,
+  UserCheck,
+  Target,
+  Megaphone,
+  Bot,
+  FormInput,
+  Upload,
+  Eye,
+  PieChart,
+} from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import UserMenu from "./UserMenu";
+import NotificationsBadge from "./NotificationsBadge";
+import { temAcesso } from "@/lib/roles";
 
-function NavItem({ item, pathname }: { item: Item; pathname: string }) {
-  const active = pathname === item.url;
-  return (
-    <SidebarMenuItem>
-      <SidebarMenuButton
-        asChild
-        isActive={active}
-        className="text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[active=true]:bg-sidebar-accent data-[active=true]:font-semibold"
-      >
-        <NavLink to={item.url} className="flex items-center gap-3">
-          <item.icon className="h-4 w-4 flex-shrink-0" />
-          <span className="flex-1">{item.title}</span>
-          {item.badge != null && item.badge > 0 && (
-            <span className="inline-flex items-center rounded-full bg-red-100 text-red-800 border border-red-300 px-1.5 py-0.5 text-[10px] font-bold leading-none">
-              {item.badge}
-            </span>
-          )}
-        </NavLink>
-      </SidebarMenuButton>
-    </SidebarMenuItem>
-  );
-}
+export default function AppSidebar() {
+  const { perfil } = useAuth();
+  const location = useLocation();
+  const papel = perfil?.papel ?? "";
 
-export function AppSidebar() {
-  const { role: realRole, user } = useAuth();
-  const { active, userId, userRole, setImpersonation, clearImpersonation } = useImpersonation();
-  const { pathname } = useLocation();
-  const [semPerfilCount, setSemPerfilCount] = useState(0);
-  const [leadsNovosCount, setLeadsNovosCount] = useState(0);
-  const [impRole, setImpRole] = useState<AppRole>("vendedor");
-  const [colaboradores, setColaboradores] = useState<{ id: string; nome: string }[]>([]);
+  const isActive = (path: string) => location.pathname === path || location.pathname.startsWith(path + "/");
 
-  useEffect(() => {
-    if (realRole !== "admin") return;
-    supabase
-      .from("user_roles")
-      .select("user_id")
-      .eq("role", impRole)
-      .then(async ({ data: roleData }) => {
-        if (!roleData || roleData.length === 0) {
-          setColaboradores([]);
-          return;
-        }
-        const ids = roleData.map((r: any) => r.user_id);
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("id, full_name, email")
-          .in("id", ids);
-        const lista = (profileData ?? []).map((p: any) => ({
-          id: p.id,
-          nome: p.full_name || p.email || p.id,
-        }));
-        setColaboradores(lista);
-      });
-  }, [impRole, realRole]);
-
-  useEffect(() => {
-    if (realRole !== "faturamento" && realRole !== "admin") return;
-    supabase
-      .from("clientes")
-      .select("id", { count: "exact", head: true })
-      .is("cluster", null)
-      .then(({ count }) => setSemPerfilCount(count ?? 0));
-  }, [realRole]);
-
-  useEffect(() => {
-    if (realRole !== "gestora" && realRole !== "admin") return;
-    (supabase as any)
-      .from("leads_evento")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "novo")
-      .then(({ count }: { count: number | null }) => setLeadsNovosCount(count ?? 0));
-  }, [realRole]);
-
-  const faturamentoItems: Item[] = BASE_FATURAMENTO_ITEMS.map((item) =>
-    item.url === "/faturamento/clientes" && semPerfilCount > 0
-      ? { ...item, badge: semPerfilCount }
-      : item
-  );
-
-  const gestoraItems: Item[] = (FLAT_MENU_STATIC["gestora"] ?? []).map((item) =>
-    item.url === "/gestora/leads-evento" && leadsNovosCount > 0
-      ? { ...item, badge: leadsNovosCount }
-      : item
-  );
-
-  const getFlatMenu = (): Item[] => {
-    const roleParaMenu = (active && userRole ? userRole : realRole) as AppRole;
-    if (roleParaMenu === "faturamento") return faturamentoItems;
-    if (roleParaMenu === "gestora") return gestoraItems;
-    return FLAT_MENU_STATIC[roleParaMenu] ?? [];
-  };
-
-  const adminSections: Section[] = ADMIN_SECTIONS.map((section) => {
-    if (section.label === "Pré-faturamento") {
-      return {
-        ...section,
-        items: section.items.map((item) =>
-          item.url === "/faturamento/clientes" && semPerfilCount > 0
-            ? { ...item, badge: semPerfilCount }
-            : item
-        ),
-      };
-    }
-    if (section.label === "Gestora") {
-      return {
-        ...section,
-        items: section.items.map((item) =>
-          item.url === "/gestora/leads-evento" && leadsNovosCount > 0
-            ? { ...item, badge: leadsNovosCount }
-            : item
-        ),
-      };
-    }
-    return section;
-  });
-
-  const isPedroMenezes = user?.email === "pedro.menezes@bravir.com.br";
-  const extraItems: Item[] = isPedroMenezes
-    ? [
-        { title: "Meu Pipeline", url: "/meu-pipeline", icon: LayoutTemplate },
-        { title: "Propostas", url: "/propostas", icon: FileText },
-        { title: "Calculadora", url: "/calculadora", icon: Calculator },
-        { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
-      ]
-    : [];
+  const itemClass = (path: string) =>
+    isActive(path)
+      ? "bg-primary/10 text-primary font-semibold"
+      : "hover:bg-muted";
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border px-4 py-5">
-        <div className="flex flex-col gap-1">
-          <div className="bg-[#1A5C2A] rounded-md px-2 py-1 self-start">
-            <span className="text-white font-bold text-base tracking-widest">BRAVIR</span>
-          </div>
-          <span className="text-[9px] uppercase tracking-widest text-sidebar-foreground/45">
-            Cosmética e Farmacêutica
-          </span>
-          <span
-            className={
-              "text-[10px] uppercase tracking-wider mt-1 " +
-              (active ? "text-yellow-300/80" : "text-sidebar-foreground/60")
-            }
-          >
-            {active && userRole
-              ? "visualizando: " + userRole
-              : (realRole ? ROLE_LABEL[realRole] : "")}
-          </span>
+    <Sidebar>
+      <SidebarHeader className="px-4 py-3 border-b">
+        <div className="flex items-center justify-between">
+          <span className="font-bold text-lg tracking-tight">Bravir Connect</span>
+          <NotificationsBadge />
         </div>
       </SidebarHeader>
 
       <SidebarContent>
-        {realRole === "admin" ? (
-          <>
-            {!active ? (
-              adminSections.map((section) => (
-                <SidebarGroup key={section.label}>
-                  <SidebarGroupLabel className="text-sidebar-foreground/60">{section.label}</SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <SidebarMenu>
-                      {section.items.map((item) => (
-                        <NavItem key={item.url} item={item} pathname={pathname} />
-                      ))}
-                    </SidebarMenu>
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              ))
-            ) : (
-              <SidebarGroup>
-                <SidebarGroupLabel className="text-yellow-300/70 text-[10px]">
-                  Menu — {userRole}
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <SidebarMenu>
-                    {getFlatMenu().map((item) => (
-                      <NavItem key={item.url} item={item} pathname={pathname} />
-                    ))}
-                  </SidebarMenu>
-                </SidebarGroupContent>
-              </SidebarGroup>
-            )}
-
-            {realRole === "admin" && (
-              <>
-                <div className="mx-3 my-2 border-t border-sidebar-border/40" />
-
-                <SidebarGroup>
-                  <SidebarGroupLabel className="text-yellow-300/80 flex items-center gap-1.5 text-[10px]">
-                    <Eye className="h-3 w-3" />
-                    Visualizar como
-                  </SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    <div className="flex flex-wrap gap-1 px-2 pb-2">
-                      {(["vendedor", "faturamento", "logistica", "trade", "gestora"] as AppRole[]).map((r) => {
-                        const label =
-                          r === "vendedor" ? "Vendedor" :
-                          r === "faturamento" ? "Faturamento" :
-                          r === "logistica" ? "Logística" :
-                          r === "trade" ? "Trade" : "Gestora";
-                        return (
-                          <button
-                            key={r}
-                            onClick={() => setImpRole(r)}
-                            className={
-                              "px-2 py-0.5 rounded text-[11px] font-medium border transition-colors " +
-                              (impRole === r
-                                ? "bg-yellow-300 text-[#1A3A1F] border-yellow-300"
-                                : "border-sidebar-border/40 text-sidebar-foreground/50 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground")
-                            }
-                          >
-                            {label}
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {colaboradores.length === 0 ? (
-                      <p className="px-3 py-1 text-[11px] text-sidebar-foreground/40">Nenhum colaborador</p>
-                    ) : (
-                      <div className="px-2 space-y-0.5">
-                        {colaboradores.map((c) => (
-                          <button
-                            key={c.id}
-                            onClick={() => setImpersonation({ active: true, userId: c.id, userName: c.nome, userRole: impRole })}
-                            className={
-                              "w-full text-left px-2 py-1.5 rounded text-[12px] transition-colors flex items-center gap-2 " +
-                              (active && userId === c.id
-                                ? "bg-yellow-300/20 text-yellow-200 font-medium"
-                                : "text-sidebar-foreground/65 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground")
-                            }
-                          >
-                            <span className="w-5 h-5 rounded-full bg-sidebar-accent/60 flex items-center justify-center text-[9px] font-bold flex-shrink-0">
-                              {c.nome.charAt(0).toUpperCase()}
-                            </span>
-                            <span className="truncate">{c.nome}</span>
-                            {active && userId === c.id && (
-                              <Eye className="h-3 w-3 ml-auto flex-shrink-0 text-yellow-300" />
-                            )}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-
-                    {active && (
-                      <button
-                        onClick={clearImpersonation}
-                        className="mx-2 mt-2 w-[calc(100%-16px)] py-1 rounded text-[11px] border border-yellow-300/30 text-yellow-300/70 hover:bg-yellow-300/10 transition-colors"
-                      >
-                        Sair da visualização
-                      </button>
-                    )}
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              </>
-            )}
-          </>
-        ) : (
+        {/* Vendedor */}
+        {temAcesso(papel, "vendedor") && (
           <SidebarGroup>
-            <SidebarGroupLabel className="text-sidebar-foreground/60">Menu</SidebarGroupLabel>
+            <SidebarGroupLabel>Meu Espaço</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {getFlatMenu().map((item) => (
-                  <NavItem key={item.url} item={item} pathname={pathname} />
-                ))}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/vendedor/painel")}>
+                    <Link to="/vendedor/painel"><LayoutDashboard className="h-4 w-4" /><span>Meu Painel</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/vendedor/clientes")}>
+                    <Link to="/vendedor/clientes"><Users className="h-4 w-4" /><span>Meus Clientes</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/vendedor/pedidos")}>
+                    <Link to="/vendedor/pedidos"><ShoppingCart className="h-4 w-4" /><span>Meus Pedidos</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/vendedor/pipeline")}>
+                    <Link to="/vendedor/pipeline"><GitBranch className="h-4 w-4" /><span>Meu Pipeline</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/vendedor/tarefas")}>
+                    <Link to="/vendedor/tarefas"><CheckSquare className="h-4 w-4" /><span>Minhas Tarefas</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/vendedor/propostas")}>
+                    <Link to="/vendedor/propostas"><FileText className="h-4 w-4" /><span>Minhas Propostas</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/vendedor/solicitacoes")}>
+                    <Link to="/vendedor/solicitacoes"><MessageSquare className="h-4 w-4" /><span>Solicitações</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/vendedor/calculadora")}>
+                    <Link to="/vendedor/calculadora"><Calculator className="h-4 w-4" /><span>Calculadora</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/vendedor/iqvia")}>
+                    <Link to="/vendedor/iqvia"><PieChart className="h-4 w-4" /><span>Dashboard IQVIA</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
-        {extraItems.length > 0 && (
+
+        {/* Gestora */}
+        {temAcesso(papel, "gestora") && (
           <SidebarGroup>
+            <SidebarGroupLabel>Gestora</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {extraItems.map((item) => (
-                  <NavItem key={item.url} item={item} pathname={pathname} />
-                ))}
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/gestora/dashboard")}>
+                    <Link to="/gestora/dashboard"><LayoutDashboard className="h-4 w-4" /><span>Dashboard</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/gestora/clientes")}>
+                    <Link to="/gestora/clientes"><Users className="h-4 w-4" /><span>Clientes</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/gestora/pedidos")}>
+                    <Link to="/gestora/pedidos"><ShoppingCart className="h-4 w-4" /><span>Pedidos</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/gestora/time")}>
+                    <Link to="/gestora/time"><UserCheck className="h-4 w-4" /><span>Meu Time</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/gestora/historico")}>
+                    <Link to="/gestora/historico"><BarChart2 className="h-4 w-4" /><span>Histórico</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/gestora/leads")}>
+                    <Link to="/gestora/leads"><Star className="h-4 w-4" /><span>Leads Evento</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+
+        {/* Trade */}
+        {temAcesso(papel, "trade") && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Trade</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/trade")}>
+                    <Link to="/trade"><TrendingUp className="h-4 w-4" /><span>Dashboard Trade</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/trade/campanhas")}>
+                    <Link to="/trade/campanhas"><Megaphone className="h-4 w-4" /><span>Campanhas</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/trade/importar-faturamento")}>
+                    <Link to="/trade/importar-faturamento"><Upload className="h-4 w-4" /><span>Importar Faturamento</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/trade/importar-metas")}>
+                    <Link to="/trade/importar-metas"><Target className="h-4 w-4" /><span>Importar Metas</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Faturamento */}
+        {temAcesso(papel, "faturamento") && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Faturamento</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/fat/dashboard")}>
+                    <Link to="/fat/dashboard"><LayoutDashboard className="h-4 w-4" /><span>Dashboard</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/fat/fila-cadastros")}>
+                    <Link to="/fat/fila-cadastros"><ClipboardList className="h-4 w-4" /><span>Fila de Cadastros</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/fat/estoque")}>
+                    <Link to="/fat/estoque"><Package className="h-4 w-4" /><span>Estoque</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Logística */}
+        {temAcesso(papel, "logistica") && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Logística</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/logistica/dashboard")}>
+                    <Link to="/logistica/dashboard"><Truck className="h-4 w-4" /><span>Dashboard</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/logistica/fila")}>
+                    <Link to="/logistica/fila"><ClipboardList className="h-4 w-4" /><span>Fila de Entregas</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Financeiro */}
+        {temAcesso(papel, "financeiro") && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Financeiro</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/financeiro/fila")}>
+                    <Link to="/financeiro/fila"><DollarSign className="h-4 w-4" /><span>Fila Financeira</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Admin */}
+        {temAcesso(papel, "admin") && (
+          <SidebarGroup>
+            <SidebarGroupLabel>Administração</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/visao-macro")}>
+                    <Link to="/admin/visao-macro"><Eye className="h-4 w-4" /><span>Visão Macro</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/pedidos")}>
+                    <Link to="/admin/pedidos"><ShoppingCart className="h-4 w-4" /><span>Pedidos</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/clientes")}>
+                    <Link to="/admin/clientes"><Users className="h-4 w-4" /><span>Clientes</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/equipe")}>
+                    <Link to="/admin/equipe"><UserCheck className="h-4 w-4" /><span>Equipe</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/precos")}>
+                    <Link to="/admin/precos"><DollarSign className="h-4 w-4" /><span>Preços</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/metas")}>
+                    <Link to="/admin/metas"><Target className="h-4 w-4" /><span>Metas</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/campanhas")}>
+                    <Link to="/admin/campanhas"><Megaphone className="h-4 w-4" /><span>Campanhas</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/formularios")}>
+                    <Link to="/admin/formularios"><FormInput className="h-4 w-4" /><span>Formulários</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/estoque")}>
+                    <Link to="/admin/estoque"><Package className="h-4 w-4" /><span>Estoque</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/agente-ia")}>
+                    <Link to="/admin/agente-ia"><Bot className="h-4 w-4" /><span>Agente IA</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild className={itemClass("/admin/configuracoes")}>
+                    <Link to="/admin/configuracoes"><Settings className="h-4 w-4" /><span>Configurações</span></Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Utilitários */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Utilitários</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild className={itemClass("/bolsao")}>
+                  <Link to="/bolsao"><Package className="h-4 w-4" /><span>Bolsão</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton asChild className={itemClass("/lixeira")}>
+                  <Link to="/lixeira"><Trash2 className="h-4 w-4" /><span>Lixeira</span></Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-2">
-        <UserMenu variant="full" />
+      <SidebarFooter className="border-t px-4 py-3">
+        <UserMenu />
       </SidebarFooter>
     </Sidebar>
   );
