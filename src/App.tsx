@@ -49,6 +49,7 @@ import TabelasPreco from "./pages/admin/TabelasPreco";
 import GestaoPrecos from "./pages/admin/GestaoPrecos";
 import Configuracoes from "./pages/admin/Configuracoes";
 import Campanhas from "./pages/admin/Campanhas";
+import AgenteIA from "./pages/admin/AgenteIA";
 import DashboardLogistica from "./pages/logistica/DashboardLogistica";
 import FilaLogistica from "./pages/logistica/FilaLogistica";
 import SiteLanding from "./pages/site/SiteLanding";
@@ -133,6 +134,7 @@ const App = () => (
               <Route path="/admin/gestao-precos" element={<GestaoPrecos />} />
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
               <Route path="/admin/campanhas" element={<Campanhas />} />
+              <Route path="/admin/agente-ia" element={<AgenteIA />} />
             </Route>
 
             {/* Gestão de Estoque (mockado — Sankhya) — admin e gestora */}
