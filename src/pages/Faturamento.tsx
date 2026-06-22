@@ -1244,7 +1244,7 @@ export default function Faturamento() {
     const pedido = prodFatDialog;
     const nowIso = new Date().toISOString();
     const itensComFat = pedido.itens.filter((i) => (prodFatQtds[i.id] ?? 0) > 0);
-    const itensSemFat = pedido.itens.filter((i) => (prodFatQtds[i.id] ?? 0) === 0);
+    const itensComSaldo = pedido.itens.filter((i) => i.quantidade - (prodFatQtds[i.id] ?? 0) > 0);
 
     await Promise.all(
       pedido.itens.map((item) =>
@@ -1267,7 +1267,7 @@ export default function Faturamento() {
       return;
     }
 
-    if (itensSemFat.length === 0) {
+    if (itensComSaldo.length === 0) {
       await supabase.from("pedidos").update({
         status: statusPosFaturado(pedido.pagamento_vista),
         status_atualizado_em: nowIso,
@@ -1290,11 +1290,16 @@ export default function Faturamento() {
       return;
     }
 
-    const idsSemFat = itensSemFat.map((i) => i.id);
+    const saldoMap: Record<string, number> = {};
+    itensComSaldo.forEach((i) => {
+      saldoMap[i.id] = i.quantidade - (prodFatQtds[i.id] ?? 0);
+    });
+
+    const idsComSaldo = itensComSaldo.map((i) => i.id);
     const { data: itensOrigem, error: errItens } = await supabase
       .from("itens_pedido")
-      .select("produto_id, quantidade, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_comercial, desconto_trade, total_item")
-      .in("id", idsSemFat);
+      .select("id, produto_id, quantidade, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_comercial, desconto_trade, total_item")
+      .in("id", idsComSaldo);
     if (errItens || !itensOrigem) {
       toast.error("Erro ao buscar itens originais: " + (errItens?.message ?? ""));
       setSalvandoProdFat(false);
@@ -1326,20 +1331,25 @@ export default function Faturamento() {
       return;
     }
 
-    const novosItensPayload = itensOrigem.map((i) => ({
-      pedido_id: novoPedido.id,
-      produto_id: i.produto_id,
-      quantidade: i.quantidade,
-      qtd_faturada: 0,
-      preco_unitario_bruto: i.preco_unitario_bruto,
-      preco_unitario_liquido: i.preco_unitario_liquido,
-      preco_apos_perfil: i.preco_apos_perfil,
-      preco_apos_comercial: i.preco_apos_comercial,
-      preco_final: i.preco_final,
-      desconto_comercial: i.desconto_comercial,
-      desconto_trade: i.desconto_trade,
-      total_item: i.total_item,
-    }));
+    const novosItensPayload = itensOrigem.map((i) => {
+      const saldo = saldoMap[i.id] ?? Number(i.quantidade);
+      return {
+        pedido_id: novoPedido.id,
+        produto_id: i.produto_id,
+        quantidade: saldo,
+        qtd_faturada: 0,
+        preco_unitario_bruto: i.preco_unitario_bruto,
+        preco_unitario_liquido: i.preco_unitario_liquido,
+        preco_apos_perfil: i.preco_apos_perfil,
+        preco_apos_comercial: i.preco_apos_comercial,
+        preco_final: i.preco_final,
+        desconto_comercial: i.desconto_comercial,
+        desconto_trade: i.desconto_trade,
+        total_item: Number(i.quantidade) > 0
+          ? Number(i.total_item) * saldo / Number(i.quantidade)
+          : Number(i.total_item),
+      };
+    });
     const { error: errInsItens } = await supabase.from("itens_pedido").insert(novosItensPayload);
     if (errInsItens) {
       toast.error("Erro ao inserir itens no pedido filho: " + errInsItens.message);
@@ -1352,7 +1362,7 @@ export default function Faturamento() {
       status_atualizado_em: nowIso,
     }).eq("id", pedido.id);
 
-    toast.success("Pedido fracionado: itens sem estoque movidos para novo pedido");
+    toast.success("Pedido fracionado: saldo sem estoque movido para novo pedido");
     setSalvandoProdFat(false);
     setProdFatDialog(null);
     setRefreshKey((k) => k + 1);
