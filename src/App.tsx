@@ -66,6 +66,7 @@ import NovoPedidoGestora from "./pages/gestora/NovoPedidoGestora";
 import PedidosGestora from "./pages/gestora/PedidosGestora";
 import HistoricoFaturamento from "@/pages/gestora/HistoricoFaturamento";
 import FilaFinanceiro from "./pages/financeiro/FilaFinanceiro";
+import DadosIQVIA from "./pages/DadosIQVIA";
 
 const MeuPipeline = lazy(() => import("./pages/vendedor/MeuPipeline"));
 const PropostaPublica = lazy(() => import("./pages/PropostaPublica"));
@@ -165,6 +166,11 @@ const App = () => (
             {/* Lixeira — soft-delete global */}
             <Route element={<ProtectedRoute allow={["admin", "gestora", "vendedor", "faturamento", "logistica", "trade", "gestora_faturamento", "financeiro"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/lixeira" element={<Lixeira />} />
+            </Route>
+
+            {/* Dados IQVIA — visão de mercado por marca (acessível por todos os roles) */}
+            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento", "trade", "financeiro"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/dados-iqvia" element={<DadosIQVIA />} />
             </Route>
 
             {/* Rotas de vendedor — acessíveis por vendedor e admin */}

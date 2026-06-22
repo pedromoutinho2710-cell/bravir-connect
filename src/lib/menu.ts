@@ -24,6 +24,7 @@ import {
   Wallet,
   Trash2,
   Bot,
+  TrendingUp,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -36,6 +37,7 @@ export const ADMIN_SECTIONS: Section[] = [
     items: [
       { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
       { title: "Visão Macro", url: "/admin/visao-macro", icon: BarChart2 },
+      { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     ],
   },
   {
@@ -87,12 +89,14 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Bolsão", url: "/bolsao", icon: Wallet },
     { title: "Minhas Tarefas", url: "/minhas-tarefas", icon: CheckSquare },
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
+    { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
   logistica: [
     { title: "Dashboard", url: "/logistica", icon: LayoutDashboard },
     { title: "Fila de Pedidos", url: "/logistica/fila", icon: ListChecks },
+    { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
@@ -106,6 +110,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Gestão do Time", url: "/gestora/time", icon: UserCog },
     { title: "Gestão de Metas", url: "/admin/gestao-metas", icon: Target },
     { title: "Leads Evento", url: "/gestora/leads-evento", icon: UserCheck },
+    { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
@@ -118,11 +123,13 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Clientes", url: "/faturamento/clientes", icon: Users },
     { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
     { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
+    { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
   financeiro: [
     { title: "Fila Financeiro", url: "/financeiro/fila", icon: Wallet },
+    { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
@@ -131,6 +138,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Campanhas", url: "/trade/campanhas", icon: Megaphone },
     { title: "Importar Faturamento", url: "/trade/importar-faturamento", icon: Upload },
     { title: "Importar Metas", url: "/trade/importar-metas", icon: Target },
+    { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Lixeira", url: "/lixeira", icon: Trash2 },
   ],
