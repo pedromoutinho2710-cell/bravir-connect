@@ -1,280 +1,178 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
-import { formatDate } from "@/lib/format";
-import { Loader2, Plus, Pencil } from "lucide-react";
-import { CampanhasContent } from "@/pages/admin/Campanhas";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Trophy, Target, TrendingUp } from "lucide-react";
 
 type Campanha = {
   id: string;
   nome: string;
   descricao: string | null;
-  tipo: string | null;
-  valor: number | null;
+  ativo: boolean;
   data_inicio: string | null;
   data_fim: string | null;
-  ativa: boolean;
-  created_at: string;
 };
 
-type Aba = "beneficios" | "campanhas";
-
-const TIPO_LABEL: Record<string, string> = {
-  desconto: "Desconto",
-  bonificacao: "Bonificação",
-  outro: "Outro",
+type MetaCampanha = {
+  id: string;
+  campanha_id: string;
+  vendedor_id: string;
+  meta_valor: number;
+  realizado: number | null;
 };
 
-const TIPO_COLOR: Record<string, string> = {
-  desconto: "bg-blue-100 text-blue-800 border-blue-300",
-  bonificacao: "bg-green-100 text-green-800 border-green-300",
-  outro: "bg-gray-100 text-gray-800 border-gray-300",
-};
+function calcularProgresso(meta: number, realizado: number): number {
+  if (meta <= 0) return 0;
+  return Math.min(100, Math.round((realizado / meta) * 100));
+}
 
-const EMPTY = { nome: "", descricao: "", tipo: "desconto", valor: "", data_inicio: "", data_fim: "", ativa: true };
+function formatMoeda(valor: number): string {
+  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
 
 export default function TradeCampanhas() {
-  const [abaTrade, setAbaTrade] = useState<Aba>("beneficios");
-  const [beneficios, setBeneficios] = useState<Campanha[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [dialog, setDialog] = useState<{ open: boolean; editing: Campanha | null }>({ open: false, editing: null });
-  const [form, setForm] = useState(EMPTY);
-  const [salvando, setSalvando] = useState(false);
+  const { data: campanhasAtivas = [], isLoading: loadingCampanhas } = useQuery({
+    queryKey: ["campanhas", "ativas"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("campanhas")
+        .select("id, nome, descricao, ativo, data_inicio, data_fim")
+        .eq("ativo", true)
+        .order("nome");
+      if (error) throw error;
+      return data as Campanha[];
+    },
+  });
 
-  const carregar = async () => {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from("campanhas")
-      .select("*")
-      .eq("categoria", "beneficio")
-      .order("created_at", { ascending: false });
-    if (error) toast.error("Erro ao carregar benefícios");
-    else setBeneficios((data ?? []) as Campanha[]);
-    setLoading(false);
-  };
+  const { data: metas = [], isLoading: loadingMetas } = useQuery({
+    queryKey: ["campanha-metas-vendedor"],
+    queryFn: async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return [];
+      const { data, error } = await supabase
+        .from("campanha_metas")
+        .select("id, campanha_id, vendedor_id, meta_valor, realizado")
+        .eq("vendedor_id", user.id);
+      if (error) throw error;
+      return data as MetaCampanha[];
+    },
+  });
 
-  useEffect(() => { carregar(); }, []);
+  const isLoading = loadingCampanhas || loadingMetas;
 
-  const abrirNova = () => {
-    setForm(EMPTY);
-    setDialog({ open: true, editing: null });
-  };
+  function getMetaDaCampanha(campanhaId: string): MetaCampanha | undefined {
+    return metas.find((m) => m.campanha_id === campanhaId);
+  }
 
-  const abrirEditar = (c: Campanha) => {
-    setForm({
-      nome: c.nome,
-      descricao: c.descricao ?? "",
-      tipo: c.tipo ?? "desconto",
-      valor: c.valor != null ? String(c.valor) : "",
-      data_inicio: c.data_inicio ?? "",
-      data_fim: c.data_fim ?? "",
-      ativa: c.ativa,
-    });
-    setDialog({ open: true, editing: c });
-  };
-
-  const salvar = async () => {
-    if (!form.nome.trim()) { toast.error("Nome é obrigatório"); return; }
-    setSalvando(true);
-    const payload = {
-      nome: form.nome.trim(),
-      descricao: form.descricao.trim() || null,
-      tipo: form.tipo,
-      valor: form.valor ? Number(form.valor) : null,
-      data_inicio: form.data_inicio || null,
-      data_fim: form.data_fim || null,
-      ativa: form.ativa,
-      categoria: "beneficio",
-    };
-
-    const { error } = dialog.editing
-      ? await supabase.from("campanhas").update(payload).eq("id", dialog.editing.id)
-      : await supabase.from("campanhas").insert(payload);
-
-    setSalvando(false);
-    if (error) { toast.error("Erro: " + error.message); return; }
-    toast.success(dialog.editing ? "Benefício atualizado" : "Benefício criado");
-    setDialog({ open: false, editing: null });
-    carregar();
-  };
-
-  const toggleAtiva = async (c: Campanha) => {
-    const { error } = await supabase.from("campanhas").update({ ativa: !c.ativa }).eq("id", c.id);
-    if (error) { toast.error("Erro: " + error.message); return; }
-    toast.success(c.ativa ? "Desativado" : "Ativado");
-    carregar();
-  };
+  if (isLoading) {
+    return (
+      <div className="p-6 space-y-4">
+        <h1 className="text-2xl font-bold">Campanhas Ativas</h1>
+        {[1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-40 w-full rounded-xl" />
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <div className="space-y-6">
-      <Tabs value={abaTrade} onValueChange={(v) => setAbaTrade(v as Aba)}>
-        <TabsList>
-          <TabsTrigger value="beneficios">Benefícios</TabsTrigger>
-          <TabsTrigger value="campanhas">Campanhas</TabsTrigger>
-        </TabsList>
-      </Tabs>
+    <div className="p-6 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold flex items-center gap-2">
+          <Trophy className="h-6 w-6 text-yellow-500" />
+          Campanhas Ativas
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          Acompanhe seu desempenho em todas as campanhas ativas simultaneamente.
+        </p>
+      </div>
 
-      {abaTrade === "campanhas" ? (
-        <CampanhasContent />
+      {campanhasAtivas.length === 0 ? (
+        <Card>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            <Trophy className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p>Nenhuma campanha ativa no momento.</p>
+          </CardContent>
+        </Card>
       ) : (
-        <>
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">Benefícios</h1>
-              <p className="text-sm text-muted-foreground">Gerencie campanhas de desconto e bonificação</p>
-            </div>
-            <Button onClick={abrirNova}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo benefício
-            </Button>
-          </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {campanhasAtivas.map((campanha) => {
+            const meta = getMetaDaCampanha(campanha.id);
+            const realizado = meta?.realizado ?? 0;
+            const metaValor = meta?.meta_valor ?? 0;
+            const progresso = calcularProgresso(metaValor, realizado);
 
-          {loading ? (
-            <div className="flex h-48 items-center justify-center">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-            </div>
-          ) : beneficios.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-muted-foreground">
-                Nenhum benefício cadastrado
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="rounded-md border overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Validade</TableHead>
-                    <TableHead>Ativa</TableHead>
-                    <TableHead className="w-16"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {beneficios.map((c) => (
-                    <TableRow key={c.id}>
-                      <TableCell>
-                        <div className="font-medium">{c.nome}</div>
-                        {c.descricao && (
-                          <div className="text-xs text-muted-foreground">{c.descricao}</div>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {c.tipo && (
-                          <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${TIPO_COLOR[c.tipo] ?? "bg-gray-100 text-gray-800 border-gray-300"}`}>
-                            {TIPO_LABEL[c.tipo] ?? c.tipo}
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {c.valor != null ? `${c.valor}%` : "—"}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {c.data_inicio && c.data_fim
-                          ? `${formatDate(c.data_inicio)} – ${formatDate(c.data_fim)}`
-                          : c.data_fim
-                          ? `até ${formatDate(c.data_fim)}`
-                          : "—"}
-                      </TableCell>
-                      <TableCell>
-                        <Switch checked={c.ativa} onCheckedChange={() => toggleAtiva(c)} />
-                      </TableCell>
-                      <TableCell>
-                        <Button size="sm" variant="outline" onClick={() => abrirEditar(c)}>
-                          <Pencil className="h-3 w-3" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          <Dialog open={dialog.open} onOpenChange={(o) => !o && setDialog({ open: false, editing: null })}>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>{dialog.editing ? "Editar benefício" : "Novo benefício"}</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 py-2">
-                <div className="space-y-1.5">
-                  <Label>Nome *</Label>
-                  <Input value={form.nome}
-                    onChange={(e) => setForm((f) => ({ ...f, nome: e.target.value }))}
-                    placeholder="Ex: Black Friday 2025" />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Descrição</Label>
-                  <Textarea rows={2} value={form.descricao}
-                    onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))}
-                    placeholder="Detalhes…" />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label>Tipo</Label>
-                    <Select value={form.tipo} onValueChange={(v) => setForm((f) => ({ ...f, tipo: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="desconto">Desconto</SelectItem>
-                        <SelectItem value="bonificacao">Bonificação</SelectItem>
-                        <SelectItem value="outro">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
+            return (
+              <Card key={campanha.id} className="relative overflow-hidden">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <CardTitle className="text-base leading-tight">
+                      {campanha.nome}
+                    </CardTitle>
+                    <Badge variant="default" className="shrink-0">
+                      Ativa
+                    </Badge>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Valor (%)</Label>
-                    <Input type="number" min={0} step={0.5}
-                      value={form.valor}
-                      onChange={(e) => setForm((f) => ({ ...f, valor: e.target.value }))}
-                      placeholder="0" />
-                  </div>
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label>Data início</Label>
-                    <Input type="date" value={form.data_inicio}
-                      onChange={(e) => setForm((f) => ({ ...f, data_inicio: e.target.value }))} />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Data fim</Label>
-                    <Input type="date" value={form.data_fim}
-                      onChange={(e) => setForm((f) => ({ ...f, data_fim: e.target.value }))} />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <Switch checked={form.ativa}
-                    onCheckedChange={(c) => setForm((f) => ({ ...f, ativa: c }))} />
-                  <Label className="font-normal">Ativa</Label>
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDialog({ open: false, editing: null })}>
-                  Cancelar
-                </Button>
-                <Button onClick={salvar} disabled={salvando || !form.nome.trim()}>
-                  {salvando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                  {dialog.editing ? "Salvar" : "Criar"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </>
+                  {campanha.descricao && (
+                    <p className="text-sm text-muted-foreground">
+                      {campanha.descricao}
+                    </p>
+                  )}
+                  {(campanha.data_inicio || campanha.data_fim) && (
+                    <p className="text-xs text-muted-foreground">
+                      {campanha.data_inicio &&
+                        `Início: ${new Date(campanha.data_inicio).toLocaleDateString("pt-BR")}`}
+                      {campanha.data_inicio && campanha.data_fim && " — "}
+                      {campanha.data_fim &&
+                        `Fim: ${new Date(campanha.data_fim).toLocaleDateString("pt-BR")}`}
+                    </p>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {meta ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-muted rounded-lg p-3">
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                            <Target className="h-3 w-3" />
+                            Meta
+                          </div>
+                          <p className="font-semibold text-sm">
+                            {formatMoeda(metaValor)}
+                          </p>
+                        </div>
+                        <div className="bg-muted rounded-lg p-3">
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                            <TrendingUp className="h-3 w-3" />
+                            Realizado
+                          </div>
+                          <p className="font-semibold text-sm">
+                            {formatMoeda(realizado)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>Progresso</span>
+                          <span>{progresso}%</span>
+                        </div>
+                        <Progress value={progresso} className="h-2" />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-2">
+                      Nenhuma meta definida para você nesta campanha.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       )}
     </div>
   );
