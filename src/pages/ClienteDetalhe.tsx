@@ -1,1073 +1,191 @@
-import { useEffect, useState, useMemo } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { formatBRL, formatDate, formatCNPJ, formatCEP } from "@/lib/format";
-import {
-  AlertCircle, AlertTriangle, ArrowLeft, CreditCard, Pencil, Plus, Trash2,
-  MapPin, Phone, Mail, User, DollarSign, TrendingUp,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { toast } from "sonner";
-import { CLUSTERS, TABELAS_PRECO } from "@/lib/constants";
-import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
-import { BadgeNegativado } from "@/components/BadgeNegativado";
-import { TabelaPrecos } from "@/components/cliente/TabelaPrecos";
-import { AbaPrecos } from "@/components/cliente/AbaPrecos";
-import { StatusClienteBadge } from "@/components/cliente/StatusClienteBadge";
-import { AbaHistoricoFaturamento } from "@/components/cliente/AbaHistoricoFaturamento";
-import { AbaBolsao } from "@/components/cliente/AbaBolsao";
-
-const STATUS_LABEL: Record<string, string> = {
-  rascunho: "Rascunho",
-  pendente_sankhya: "Pendente Sankhya",
-  no_sankhya: "No Sankhya",
-  faturado: "Pré-faturado",
-  parcialmente_faturado: "Parc. pré-faturado",
-  aguardando_pagamento: "Aguardando pagamento",
-  pagamento_confirmado: "Pagamento confirmado",
-  com_problema: "Com problema",
-  devolvido: "Devolvido",
-  cancelado: "Cancelado",
-  em_faturamento: "Em faturamento",
-  em_cadastro: "Em cadastro",
-  pendente: "Pendente",
-  em_rota: "Em rota",
-  entregue: "Entregue",
-  revisao_necessaria: "Revisão necessária",
-};
-
-const STATUS_COLOR: Record<string, string> = {
-  rascunho: "bg-gray-100 text-gray-600 border-gray-300",
-  pendente_sankhya: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  no_sankhya: "bg-blue-100 text-blue-800 border-blue-300",
-  faturado: "bg-green-100 text-green-800 border-green-300",
-  parcialmente_faturado: "bg-emerald-100 text-emerald-800 border-emerald-300",
-  aguardando_pagamento: "bg-amber-100 text-amber-900 border-amber-400",
-  pagamento_confirmado: "bg-emerald-100 text-emerald-800 border-emerald-300",
-  com_problema: "bg-red-100 text-red-800 border-red-300",
-  devolvido: "bg-orange-100 text-orange-800 border-orange-300",
-  cancelado: "bg-gray-800 text-gray-100 border-gray-700",
-  em_faturamento: "bg-blue-100 text-blue-800 border-blue-300",
-  pendente: "bg-orange-100 text-orange-800 border-orange-300",
-  em_rota: "bg-gray-700 text-gray-100 border-gray-800",
-  entregue: "bg-lime-100 text-lime-800 border-lime-300",
-  revisao_necessaria: "bg-red-100 text-red-800 border-red-300",
-};
-
-function computeAtividade(data: string | null): "ativo" | "em_risco" | "inativo" {
-  if (!data) return "inativo";
-  const dias = Math.floor((Date.now() - new Date(data).getTime()) / 86_400_000);
-  return dias <= 30 ? "ativo" : dias <= 90 ? "em_risco" : "inativo";
-}
-
-const ATIVIDADE = {
-  ativo: { label: "Ativo", cls: "bg-green-100 text-green-800 border-green-300" },
-  em_risco: { label: "Em risco", cls: "bg-yellow-100 text-yellow-800 border-yellow-300" },
-  inativo: { label: "Inativo", cls: "bg-red-100 text-red-800 border-red-300" },
-};
-
-type ClienteInfo = {
-  id: string;
-  razao_social: string;
-  nome_parceiro: string | null;
-  cnpj: string;
-  codigo_parceiro: string | null;
-  cluster: string | null;
-  grupo_cliente: string | null;
-  tabela_preco: string | null;
-  cidade: string | null;
-  uf: string | null;
-  cep: string | null;
-  rua: string | null;
-  numero: string | null;
-  bairro: string | null;
-  telefone: string | null;
-  email: string | null;
-  comprador: string | null;
-  negativado: boolean;
-  aceita_saldo: boolean;
-  suframa: boolean | null;
-  vendedor_id: string | null;
-  observacoes_trade: string | null;
-  desconto_adicional: number | null;
-  status: string | null;
-  aviso_pedido: string | null;
-};
-
-type PedidoLinha = {
-  id: string;
-  numero_pedido: number;
-  tipo: string;
-  data_pedido: string;
-  status: string;
-  total: number;
-};
-
-type Vendedor = { id: string; nome: string };
-
-type MetaTrade = {
-  id: string;
-  campanha_id: string;
-  campanha_nome: string;
-  meta_valor: number;
-  realizado: number;
-  ativa: boolean;
-  data_inicio: string | null;
-  data_fim: string | null;
-};
-
-function InfoItem({ label, value, icon }: { label: string; value: string | null | undefined; icon?: React.ReactNode }) {
-  if (!value) return null;
-  return (
-    <div className="flex flex-col gap-0.5">
-      <span className="text-xs text-muted-foreground flex items-center gap-1">{icon}{label}</span>
-      <span className="text-sm font-medium">{value}</span>
-    </div>
-  );
-}
-
-function StatCard({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border bg-muted/30 p-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="text-lg font-bold mt-0.5">{value}</div>
-    </div>
-  );
-}
+import { useToast } from "@/hooks/use-toast";
+import { ArrowLeft, Power, PowerOff } from "lucide-react";
+import AbaPrecos from "@/components/cliente/AbaPrecos";
+import AbaBolsao from "@/components/cliente/AbaBolsao";
+import AbaHistoricoFaturamento from "@/components/cliente/AbaHistoricoFaturamento";
 
 export default function ClienteDetalhe() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { role, user } = useAuth();
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [showToggleDialog, setShowToggleDialog] = useState(false);
 
-  const [cliente, setCliente] = useState<ClienteInfo | null>(null);
-  const [pedidos, setPedidos] = useState<PedidoLinha[]>([]);
-  const [vendedorNome, setVendedorNome] = useState<string | null>(null);
-  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [metasTrade, setMetasTrade] = useState<MetaTrade[]>([]);
+  const isVendedor = profile?.role === "vendedor";
+  const isAdmin = profile?.role === "admin";
+  const isGestora = profile?.role === "gestora";
+  const podeToggle = isVendedor || isAdmin || isGestora;
 
-  // Edit modal
-  const [editOpen, setEditOpen] = useState(false);
-  const [editNome, setEditNome] = useState("");
-  const [editCnpj, setEditCnpj] = useState("");
-  const [editCluster, setEditCluster] = useState("");
-  const [editTabela, setEditTabela] = useState("");
-  const [editEmail, setEditEmail] = useState("");
-  const [editComprador, setEditComprador] = useState("");
-  const [editTelefone, setEditTelefone] = useState("");
-  const [editRua, setEditRua] = useState("");
-  const [editNumero, setEditNumero] = useState("");
-  const [editBairro, setEditBairro] = useState("");
-  const [editCidade, setEditCidade] = useState("");
-  const [editUf, setEditUf] = useState("");
-  const [editCep, setEditCep] = useState("");
-  const [editVendedorId, setEditVendedorId] = useState("");
-  const [editObs, setEditObs] = useState("");
-  const [salvandoEdit, setSalvandoEdit] = useState(false);
-
-  // Obs tab
-  const [obsLocal, setObsLocal] = useState("");
-  const [salvandoObs, setSalvandoObs] = useState(false);
-
-  // Aviso no pedido (admin/gestora)
-  const [avisoLocal, setAvisoLocal] = useState("");
-  const [salvandoAviso, setSalvandoAviso] = useState(false);
-
-  // Grupo de clientes (admin/gestora)
-  const [grupoLocal, setGrupoLocal] = useState("");
-  const [salvandoGrupo, setSalvandoGrupo] = useState(false);
-
-  // Delete
-  const [excluirOpen, setExcluirOpen] = useState(false);
-  const [excluindo, setExcluindo] = useState(false);
-
-  // Order details
-  const [detalhesId, setDetalhesId] = useState<string | null>(null);
-  const [detalhesOpen, setDetalhesOpen] = useState(false);
-
-  // Análise de crédito
-  const [analiseOpen, setAnaliseOpen] = useState(false);
-  const [analiseObs, setAnaliseObs] = useState("");
-  const [salvandoAnalise, setSalvandoAnalise] = useState(false);
-
-  const canEditFull = role === "admin" || role === "faturamento";
-  const canEditLimitado = role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id;
-  const canEdit = canEditFull || canEditLimitado;
-  const canObs = canEditFull || (role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id);
-  const canPrecos = role === "admin" || role === "gestora";
-  const canAviso = role === "admin" || role === "gestora";
-  const canGrupo = role === "admin" || role === "gestora";
-  const canBolsao = role === "admin" || role === "gestora" || role === "vendedor";
-  const initialTab = (location.state as { tab?: string } | null)?.tab === "bolsao" && canBolsao ? "bolsao" : "dados";
-
-  const enviarAnalise = async () => {
-    if (!cliente) return;
-    setSalvandoAnalise(true);
-    const { error } = await (supabase.from("solicitacoes_analise") as any).insert({
-      cliente_id: cliente.id,
-      observacoes: analiseObs.trim() || null,
-      status: "pendente",
-    });
-    setSalvandoAnalise(false);
-    if (error) { toast.error("Erro: " + error.message); return; }
-    toast.success("Solicitação enviada!");
-    setAnaliseOpen(false);
-    setAnaliseObs("");
-  };
-
-  const carregar = async () => {
-    if (!id) return;
-    setLoading(true);
-    const [cRes, pRes, profRes, roleRes] = await Promise.all([
-      supabase
+  const { data: cliente, isLoading } = useQuery({
+    queryKey: ["cliente", id],
+    queryFn: async () => {
+      if (!id) return null;
+      const { data, error } = await supabase
         .from("clientes")
-        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, grupo_cliente, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional, status, aviso_pedido")
+        .select("*")
         .eq("id", id)
-        .single(),
-      supabase
-        .from("pedidos")
-        .select("id, numero_pedido, tipo, data_pedido, status, itens_pedido(total_item)")
-        .eq("cliente_id", id)
-        .order("data_pedido", { ascending: false })
-        .limit(100),
-      supabase.from("profiles").select("id, full_name, email"),
-      supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
-    ]);
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
 
-    if (cRes.data) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const c = cRes.data as any;
-      const info: ClienteInfo = {
-        id: c.id,
-        razao_social: c.razao_social,
-        nome_parceiro: c.nome_parceiro ?? null,
-        cnpj: c.cnpj,
-        codigo_parceiro: c.codigo_parceiro ?? null,
-        cluster: c.cluster,
-        grupo_cliente: c.grupo_cliente ?? null,
-        tabela_preco: c.tabela_preco,
-        cidade: c.cidade,
-        uf: c.uf,
-        cep: c.cep,
-        rua: c.rua,
-        numero: c.numero,
-        bairro: c.bairro,
-        telefone: c.telefone,
-        email: c.email,
-        comprador: c.comprador,
-        negativado: c.negativado ?? false,
-        aceita_saldo: c.aceita_saldo ?? false,
-        suframa: c.suframa ?? null,
-        vendedor_id: c.vendedor_id,
-        observacoes_trade: c.observacoes_trade,
-        desconto_adicional: c.desconto_adicional ?? null,
-        status: c.status ?? null,
-        aviso_pedido: c.aviso_pedido ?? null,
-      };
-      setCliente(info);
-      setObsLocal(info.observacoes_trade ?? "");
-      setAvisoLocal(info.aviso_pedido ?? "");
-      setGrupoLocal(info.grupo_cliente ?? "");
-    }
-
-    if (pRes.data) {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      setPedidos((pRes.data as any[]).map((p) => ({
-        id: p.id,
-        numero_pedido: p.numero_pedido,
-        tipo: p.tipo,
-        data_pedido: p.data_pedido,
-        status: p.status,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        total: (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0),
-      })));
-    }
-
-    if (profRes.data && roleRes.data) {
-      const profMap: Record<string, string> = {};
-      profRes.data.forEach((p) => { profMap[p.id] = p.full_name || p.email; });
-      const vendedorIds = new Set(roleRes.data.map((r) => r.user_id));
-      setVendedores(profRes.data.filter((p) => vendedorIds.has(p.id)).map((p) => ({ id: p.id, nome: p.full_name || p.email })));
-      if (cRes.data?.vendedor_id) setVendedorNome(profMap[cRes.data.vendedor_id] ?? null);
-    }
-
-    await carregarMetasTrade();
-
-    setLoading(false);
-  };
-
-  const carregarMetasTrade = async () => {
-    if (!id) return;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: mc, error } = await (supabase as any)
-        .from("campanha_metas_clientes")
-        .select("id, meta_valor, campanha_id, campanhas(id, nome, ativa, data_inicio, data_fim)")
-        .eq("cliente_id", id);
-      if (error) { setMetasTrade([]); return; }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rows = (mc ?? []) as any[];
-      if (rows.length === 0) { setMetasTrade([]); return; }
-
-      const campIds = Array.from(new Set(rows.map((r) => r.campanha_id)));
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: prods } = await (supabase as any)
-        .from("campanha_produtos")
-        .select("campanha_id, tipo, marca")
-        .in("campanha_id", campIds);
-      const marcasByCamp: Record<string, Set<string>> = {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ((prods ?? []) as any[]).forEach((p) => {
-        if (p.tipo === "marca" && p.marca) {
-          if (!marcasByCamp[p.campanha_id]) marcasByCamp[p.campanha_id] = new Set();
-          marcasByCamp[p.campanha_id].add(p.marca);
-        }
+  const toggleAtivo = useMutation({
+    mutationFn: async (novoAtivo: boolean) => {
+      const { error } = await supabase
+        .from("clientes")
+        .update({ ativo: novoAtivo })
+        .eq("id", id!);
+      if (error) throw error;
+    },
+    onSuccess: (_, novoAtivo) => {
+      queryClient.invalidateQueries({ queryKey: ["cliente", id] });
+      queryClient.invalidateQueries({ queryKey: ["meus-clientes"] });
+      queryClient.invalidateQueries({ queryKey: ["clientes"] });
+      toast({
+        title: novoAtivo ? "Cliente ativado com sucesso" : "Cliente inativado com sucesso",
       });
+      setShowToggleDialog(false);
+    },
+    onError: () => {
+      toast({
+        title: "Erro ao atualizar status do cliente",
+        variant: "destructive",
+      });
+      setShowToggleDialog(false);
+    },
+  });
 
-      const items: MetaTrade[] = await Promise.all(rows.map(async (m) => {
-        const camp = m.campanhas ?? {};
-        const marcas = marcasByCamp[m.campanha_id] ?? new Set<string>();
-        let realizado = 0;
-        if (camp.data_inicio && camp.data_fim && marcas.size > 0) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: peds } = await (supabase as any)
-            .from("pedidos")
-            .select("itens_pedido(total_item, produto:produtos(marca))")
-            .eq("cliente_id", id)
-            .gte("data_pedido", camp.data_inicio)
-            .lte("data_pedido", camp.data_fim)
-            .not("status", "in", '("rascunho","cancelado","devolvido")');
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ((peds ?? []) as any[]).forEach((p) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (p.itens_pedido ?? []).forEach((i: any) => {
-              if (i.produto?.marca && marcas.has(i.produto.marca)) {
-                realizado += Number(i.total_item);
-              }
-            });
-          });
-        }
-        return {
-          id: m.id,
-          campanha_id: m.campanha_id,
-          campanha_nome: camp.nome ?? "—",
-          meta_valor: Number(m.meta_valor),
-          realizado,
-          ativa: !!camp.ativa,
-          data_inicio: camp.data_inicio ?? null,
-          data_fim: camp.data_fim ?? null,
-        };
-      }));
-      setMetasTrade(items);
-    } catch {
-      setMetasTrade([]);
-    }
-  };
-
-  useEffect(() => { carregar(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Financial calculations
-  const agora = new Date();
-  const mesAtual = agora.getMonth();
-  const anoAtual = agora.getFullYear();
-
-  const { totalMes, totalAno, ticketMedio, maiorPedido, pedidosAno, ultimaData } = useMemo(() => {
-    const faturados = pedidos.filter((p) => p.status === "faturado");
-    const desteAno = (p: PedidoLinha) => new Date(p.data_pedido).getFullYear() === anoAtual;
-    const desteMes = (p: PedidoLinha) => {
-      const d = new Date(p.data_pedido);
-      return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
-    };
-    const totalMes = faturados.filter(desteMes).reduce((s, p) => s + p.total, 0);
-    const totalAno = faturados.filter(desteAno).reduce((s, p) => s + p.total, 0);
-    const totalGeral = faturados.reduce((s, p) => s + p.total, 0);
-    const ticketMedio = faturados.length > 0 ? totalGeral / faturados.length : 0;
-    const maiorPedido = pedidos.length > 0 ? Math.max(...pedidos.map((p) => p.total)) : 0;
-    const pedidosAno = pedidos.filter((p) => p.status !== "rascunho" && desteAno(p)).length;
-    const ultimaData = pedidos.find((p) => p.status !== "rascunho")?.data_pedido ?? null;
-    return { totalMes, totalAno, ticketMedio, maiorPedido, pedidosAno, ultimaData };
-  }, [pedidos, mesAtual, anoAtual]);
-
-  const atividade = computeAtividade(ultimaData);
-  const atividadeConf = ATIVIDADE[atividade];
-
-  const abrirEdicao = () => {
-    if (!cliente) return;
-    setEditNome(cliente.razao_social);
-    setEditCnpj(formatCNPJ(cliente.cnpj));
-    setEditCluster(cliente.cluster ?? "");
-    setEditTabela(cliente.tabela_preco ?? "");
-    setEditEmail(cliente.email ?? "");
-    setEditComprador(cliente.comprador ?? "");
-    setEditTelefone(cliente.telefone ?? "");
-    setEditRua(cliente.rua ?? "");
-    setEditNumero(cliente.numero ?? "");
-    setEditBairro(cliente.bairro ?? "");
-    setEditCidade(cliente.cidade ?? "");
-    setEditUf(cliente.uf ?? "");
-    setEditCep(cliente.cep ?? "");
-    setEditVendedorId(cliente.vendedor_id ?? "");
-    setEditObs(cliente.observacoes_trade ?? "");
-    setEditOpen(true);
-  };
-
-  const salvarEdicao = async () => {
-    if (!cliente || !editNome.trim()) return;
-    setSalvandoEdit(true);
-    const { error } = await supabase
-      .from("clientes")
-      .update({
-        razao_social: editNome.trim(),
-        cnpj: editCnpj.replace(/\D/g, ""),
-        cluster: editCluster || null,
-        tabela_preco: editTabela || null,
-        email: editEmail.trim() || null,
-        comprador: editComprador.trim() || null,
-        telefone: editTelefone.trim() || null,
-        rua: editRua.trim() || null,
-        numero: editNumero.trim() || null,
-        bairro: editBairro.trim() || null,
-        cidade: editCidade.trim() || null,
-        uf: editUf.trim() || null,
-        cep: editCep.replace(/\D/g, "") || null,
-        vendedor_id: editVendedorId || null,
-        observacoes_trade: editObs.trim() || null,
-      })
-      .eq("id", cliente.id);
-    setSalvandoEdit(false);
-    if (error) { toast.error("Erro ao salvar: " + error.message); return; }
-    toast.success("Cliente atualizado");
-    setEditOpen(false);
-    carregar();
-  };
-
-  const salvarObs = async () => {
-    if (!cliente) return;
-    setSalvandoObs(true);
-    const { error } = await supabase
-      .from("clientes")
-      .update({ observacoes_trade: obsLocal.trim() || null })
-      .eq("id", cliente.id);
-    setSalvandoObs(false);
-    if (error) { toast.error("Erro ao salvar: " + error.message); return; }
-    setCliente((c) => c ? { ...c, observacoes_trade: obsLocal } : c);
-    toast.success("Observações salvas");
-  };
-
-  const salvarAviso = async () => {
-    if (!cliente) return;
-    setSalvandoAviso(true);
-    const novoAviso = avisoLocal.trim() || null;
-    const { error } = await supabase
-      .from("clientes")
-      .update({ aviso_pedido: novoAviso })
-      .eq("id", cliente.id);
-    setSalvandoAviso(false);
-    if (error) { toast.error("Erro ao salvar: " + error.message); return; }
-    setCliente((c) => c ? { ...c, aviso_pedido: novoAviso } : c);
-    toast.success("Aviso salvo");
-  };
-
-  const salvarGrupo = async () => {
-    if (!cliente) return;
-    setSalvandoGrupo(true);
-    const novoGrupo = grupoLocal.trim() || null;
-    const { error } = await supabase
-      .from("clientes")
-      .update({ grupo_cliente: novoGrupo })
-      .eq("id", cliente.id);
-    setSalvandoGrupo(false);
-    if (error) { toast.error("Erro ao salvar: " + error.message); return; }
-    setCliente((c) => c ? { ...c, grupo_cliente: novoGrupo } : c);
-    toast.success("Grupo de clientes salvo");
-  };
-
-  const excluir = async () => {
-    if (!cliente) return;
-    setExcluindo(true);
-    const { error } = await supabase.from("clientes").update({ deleted_at: new Date().toISOString(), deleted_by: user?.id ?? null }).eq("id", cliente.id);
-    setExcluindo(false);
-    if (error) { toast.error("Erro ao excluir: " + error.message); return; }
-    toast.success(`${cliente.nome_parceiro || cliente.razao_social} excluído`);
-    navigate(-1);
-  };
-
-  const solicitarCredito = async () => {
-    if (!cliente) return;
-    const { data: adminRoles } = await supabase.from("user_roles").select("user_id").eq("role", "admin");
-    const adminIds = (adminRoles ?? []).map((r) => r.user_id);
-    if (adminIds.length > 0) {
-      const { error } = await supabase.from("notificacoes").insert(
-        adminIds.map((uid) => ({
-          destinatario_id: uid,
-          destinatario_role: "admin",
-          tipo: "analise_credito",
-          mensagem: `Solicitação de análise de crédito: ${cliente.nome_parceiro || cliente.razao_social}`,
-        }))
-      );
-      if (error) { toast.error("Erro ao enviar solicitação"); return; }
-    }
-    toast.success("Solicitação de análise de crédito enviada ao administrativo");
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      <div className="p-6">
+        <p className="text-muted-foreground">Carregando cliente...</p>
       </div>
     );
   }
 
   if (!cliente) {
     return (
-      <div className="space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
-        </Button>
+      <div className="p-6">
         <p className="text-muted-foreground">Cliente não encontrado.</p>
       </div>
     );
   }
 
-  const enderecoPartes = [cliente.rua, cliente.numero ? `nº ${cliente.numero}` : null, cliente.bairro].filter(Boolean);
-  const enderecoLinha = enderecoPartes.join(", ");
+  const ativo = cliente.ativo ?? true;
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="p-4 md:p-6 space-y-4">
       {/* Cabeçalho */}
-      <div className="space-y-4">
+      <div className="flex flex-wrap items-start gap-3">
         <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4 mr-1" /> Voltar
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Voltar
         </Button>
-
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold leading-tight">{cliente.nome_parceiro || cliente.razao_social}</h1>
-              <StatusClienteBadge status={cliente.status} />
-              <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${atividadeConf.cls}`}>
-                {atividadeConf.label}
-              </span>
-              {cliente.negativado && <BadgeNegativado />}
-              {cliente.aviso_pedido && (
-                <span className="inline-flex items-center gap-1 rounded-full border border-orange-400 bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-800">
-                  <AlertTriangle className="h-3 w-3" /> Aviso ativo
-                </span>
-              )}
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-              <span className="font-mono">{formatCNPJ(cliente.cnpj)}</span>
-              {(cliente.cidade || cliente.uf) && (
-                <span className="flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {[cliente.cidade, cliente.uf].filter(Boolean).join(" / ")}
-                </span>
-              )}
-              {cliente.cluster && <Badge variant="outline">{cliente.cluster}</Badge>}
-              {vendedorNome && <span className="flex items-center gap-1"><User className="h-3 w-3" />{vendedorNome}</span>}
-              {cliente.tabela_preco && <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" />Tabela {cliente.tabela_preco}</span>}
-            </div>
-          </div>
-
-          {/* Ações */}
-          <div className="flex flex-wrap gap-2 shrink-0">
-            <Button
-              size="sm"
-              onClick={() => navigate(role === "gestora" ? "/gestora/novo-pedido" : "/novo-pedido", { state: { fromCliente: { cliente_id: cliente.id, cnpj: cliente.cnpj, razao_social: cliente.razao_social, cidade: cliente.cidade, uf: cliente.uf, cep: cliente.cep, comprador: cliente.comprador, cluster: cliente.cluster, tabela_preco: cliente.tabela_preco } } })}
-            >
-              <Plus className="h-4 w-4" />
-              Novo Pedido
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => { setAnaliseObs(""); setAnaliseOpen(true); }}>
-              <CreditCard className="h-4 w-4" />
-              Solicitar análise de crédito
-            </Button>
-            {canEdit && (
-              <Button size="sm" variant="outline" onClick={abrirEdicao}>
-                <Pencil className="h-4 w-4" />
-                Editar
-              </Button>
-            )}
-            {canEditFull && (
-              <Button size="sm" variant="destructive" onClick={() => setExcluirOpen(true)}>
-                <Trash2 className="h-4 w-4" />
-                Excluir
-              </Button>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-bold truncate">{cliente.nome}</h1>
+            <Badge variant={ativo ? "default" : "secondary"}>
+              {ativo ? "Ativo" : "Inativo"}
+            </Badge>
+            {cliente.negativado && (
+              <Badge variant="destructive">Negativado</Badge>
             )}
           </div>
+          {cliente.cnpj && (
+            <p className="text-sm text-muted-foreground mt-0.5">
+              CNPJ: {cliente.cnpj}
+            </p>
+          )}
+          {(cliente.cidade || cliente.uf) && (
+            <p className="text-sm text-muted-foreground">
+              {[cliente.cidade, cliente.uf].filter(Boolean).join(" / ")}
+            </p>
+          )}
         </div>
 
-        {/* Cards financeiros */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Total no mês" value={formatBRL(totalMes)} />
-          <StatCard label="Total no ano" value={formatBRL(totalAno)} />
-          <StatCard label="Pedidos no ano" value={String(pedidosAno)} />
-          <StatCard label="Último pedido" value={ultimaData ? formatDate(ultimaData) : "—"} />
-        </div>
+        {podeToggle && (
+          <Button
+            variant={ativo ? "destructive" : "default"}
+            size="sm"
+            onClick={() => setShowToggleDialog(true)}
+          >
+            {ativo ? (
+              <>
+                <PowerOff className="h-4 w-4 mr-1" />
+                Inativar
+              </>
+            ) : (
+              <>
+                <Power className="h-4 w-4 mr-1" />
+                Ativar
+              </>
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Abas */}
-      <Tabs defaultValue={initialTab}>
-        <TabsList className="w-full sm:w-auto">
-          <TabsTrigger value="dados">Dados cadastrais</TabsTrigger>
-          <TabsTrigger value="pedidos">Histórico de pedidos</TabsTrigger>
-          <TabsTrigger value="financeiro">Financeiro</TabsTrigger>
-          <TabsTrigger value="metas">Metas</TabsTrigger>
-          <TabsTrigger value="obs">Observações</TabsTrigger>
-          <TabsTrigger value="tabela">Tabela de Preços</TabsTrigger>
-          {canPrecos && <TabsTrigger value="precos">Preços</TabsTrigger>}
-          {canBolsao && <TabsTrigger value="bolsao">Bolsão</TabsTrigger>}
-          <TabsTrigger value="faturamento">Histórico de Faturamento</TabsTrigger>
+      <Tabs defaultValue="precos">
+        <TabsList>
+          <TabsTrigger value="precos">Preços</TabsTrigger>
+          <TabsTrigger value="bolsao">Bolsão</TabsTrigger>
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
-
-        {/* ABA 1 — Dados cadastrais */}
-        <TabsContent value="dados" className="mt-4">
-          <Card>
-            <CardContent className="pt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              <InfoItem label="Nome Fantasia" value={cliente.nome_parceiro} />
-              <InfoItem label="Razão Social" value={cliente.razao_social} />
-              <InfoItem label="CNPJ" value={formatCNPJ(cliente.cnpj)} />
-              {cliente.codigo_parceiro && <InfoItem label="Código Sankhya" value={cliente.codigo_parceiro} />}
-              <InfoItem label="Comprador" value={cliente.comprador} icon={<User className="h-3 w-3" />} />
-              <InfoItem label="Telefone" value={cliente.telefone} icon={<Phone className="h-3 w-3" />} />
-              <InfoItem label="Email XML/Boleto" value={cliente.email} icon={<Mail className="h-3 w-3" />} />
-              <InfoItem label="Cluster" value={cliente.cluster} />
-              <InfoItem label="Grupo de Clientes" value={cliente.grupo_cliente} />
-              <InfoItem label="Tabela de preço" value={cliente.tabela_preco} />
-              <InfoItem label="Vendedor" value={vendedorNome} icon={<User className="h-3 w-3" />} />
-
-              {(cliente.cidade || cliente.uf || cliente.cep || enderecoLinha) && (
-                <div className="flex flex-col gap-0.5 sm:col-span-2">
-                  <span className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="h-3 w-3" /> Endereço
-                  </span>
-                  {enderecoLinha && <span className="text-sm font-medium">{enderecoLinha}</span>}
-                  <span className="text-sm font-medium">
-                    {[cliente.cidade, cliente.uf].filter(Boolean).join(" / ")}
-                    {cliente.cep ? ` — CEP ${formatCEP(cliente.cep)}` : ""}
-                  </span>
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-3 pt-1">
-                {cliente.negativado && <BadgeNegativado />}
-                {cliente.aceita_saldo && (
-                  <span className="inline-flex items-center rounded-full border border-green-300 bg-green-50 px-2.5 py-0.5 text-xs font-medium text-green-700">
-                    Aceita saldo de bolsão
-                  </span>
-                )}
-                {cliente.suframa && (
-                  <span className="inline-flex items-center rounded-full border border-purple-300 bg-purple-50 px-2.5 py-0.5 text-xs font-medium text-purple-700">
-                    Suframa
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Grupo de clientes (admin e gestora) */}
-          {canGrupo && (
-            <Card className="mt-4">
-              <CardContent className="pt-6 space-y-3">
-                <h3 className="text-sm font-semibold">Grupo de Clientes</h3>
-                <p className="text-xs text-muted-foreground">
-                  Agrupa clientes que pertencem ao mesmo grupo econômico/comercial.
-                </p>
-                <Input
-                  value={grupoLocal}
-                  onChange={(e) => setGrupoLocal(e.target.value)}
-                  placeholder="Ex.: Grupo Bravir"
-                />
-                <div className="flex justify-end">
-                  <Button onClick={salvarGrupo} disabled={salvandoGrupo} size="sm">
-                    {salvandoGrupo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    Salvar grupo
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Aviso no pedido (admin e gestora) */}
-          {canAviso && (
-            <Card className="mt-4">
-              <CardContent className="pt-6 space-y-3">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-orange-600" />
-                  <h3 className="text-sm font-semibold">Aviso no pedido</h3>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Aparece como alerta para o vendedor ao selecionar este cliente em um novo pedido.
-                </p>
-                <Textarea
-                  value={avisoLocal}
-                  onChange={(e) => setAvisoLocal(e.target.value)}
-                  placeholder="Ex.: Cliente exige nota fiscal separada por filial..."
-                  rows={4}
-                />
-                <div className="flex justify-end">
-                  <Button onClick={salvarAviso} disabled={salvandoAviso} size="sm">
-                    {salvandoAviso && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    Salvar aviso
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+        <TabsContent value="precos">
+          <AbaPrecos clienteId={cliente.id} />
         </TabsContent>
-
-        {/* ABA 2 — Histórico de pedidos */}
-        <TabsContent value="pedidos" className="mt-4 space-y-2">
-          {pedidos.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">Nenhum pedido registrado</p>
-          ) : (
-            pedidos.slice(0, 10).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className="w-full text-left rounded-md border bg-background p-4 hover:bg-muted/50 transition-colors"
-                onClick={() => { setDetalhesId(p.id); setDetalhesOpen(true); }}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono font-semibold text-sm">#{p.numero_pedido}</span>
-                        <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${STATUS_COLOR[p.status] ?? "bg-gray-100 text-gray-700 border-gray-300"}`}>
-                          {STATUS_LABEL[p.status] ?? p.status}
-                        </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
-                        {formatDate(p.data_pedido)} · {p.tipo}
-                      </div>
-                    </div>
-                  </div>
-                  <span className="font-semibold text-sm text-green-700 whitespace-nowrap">{formatBRL(p.total)}</span>
-                </div>
-              </button>
-            ))
-          )}
+        <TabsContent value="bolsao">
+          <AbaBolsao clienteId={cliente.id} />
         </TabsContent>
-
-        {/* ABA 3 — Financeiro */}
-        <TabsContent value="financeiro" className="mt-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <StatCard label={`Total faturado em ${agora.toLocaleString("pt-BR", { month: "long", year: "numeric" })}`} value={formatBRL(totalMes)} />
-            <StatCard label={`Total faturado em ${anoAtual}`} value={formatBRL(totalAno)} />
-            <StatCard label="Ticket médio (faturado)" value={formatBRL(ticketMedio)} />
-            <StatCard label="Maior pedido" value={formatBRL(maiorPedido)} />
-            <StatCard label={`Pedidos em ${anoAtual}`} value={String(pedidosAno)} />
-            <StatCard label="Total de pedidos" value={String(pedidos.filter((p) => p.status !== "rascunho").length)} />
-          </div>
-
-          {ultimaData && (
-            <p className="mt-4 text-sm text-muted-foreground flex items-center gap-1">
-              <TrendingUp className="h-3.5 w-3.5" />
-              Último pedido em {formatDate(ultimaData)} — status: <strong>{atividadeConf.label}</strong>
-            </p>
-          )}
+        <TabsContent value="historico">
+          <AbaHistoricoFaturamento clienteId={cliente.id} />
         </TabsContent>
-
-        {/* ABA — Metas (definidas pelo trade) */}
-        <TabsContent value="metas" className="mt-4">
-          {metasTrade.length === 0 ? (
-            <Card>
-              <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                Nenhuma meta definida pelo trade para este cliente.
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              {metasTrade.map((m) => {
-                const pct = m.meta_valor > 0 ? Math.min((m.realizado / m.meta_valor) * 100, 100) : 0;
-                const pctReal = m.meta_valor > 0 ? (m.realizado / m.meta_valor) * 100 : 0;
-                const barColor = pctReal >= 100 ? "#22c55e" : pctReal >= 70 ? "#f59e0b" : "#ef4444";
-                return (
-                  <Card key={m.id}>
-                    <CardContent className="pt-6 space-y-3">
-                      <div className="flex items-start justify-between gap-3 flex-wrap">
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-semibold">{m.campanha_nome}</h3>
-                            {m.ativa ? (
-                              <Badge className="bg-green-100 text-green-800 border-green-300">Ativa</Badge>
-                            ) : (
-                              <Badge variant="outline">Inativa</Badge>
-                            )}
-                          </div>
-                          {(m.data_inicio || m.data_fim) && (
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {m.data_inicio ? formatDate(m.data_inicio) : "—"} a {m.data_fim ? formatDate(m.data_fim) : "—"}
-                            </p>
-                          )}
-                        </div>
-                        <div className="text-right">
-                          <div className="text-xs text-muted-foreground">Atingimento</div>
-                          <div className="text-lg font-bold">{pctReal.toFixed(0)}%{pctReal >= 100 ? " ✓" : ""}</div>
-                        </div>
-                      </div>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <StatCard label="Meta" value={formatBRL(m.meta_valor)} />
-                        <StatCard label="Realizado" value={formatBRL(m.realizado)} />
-                      </div>
-                      <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* ABA 4 — Observações internas */}
-        <TabsContent value="obs" className="mt-4">
-          <Card>
-            <CardContent className="pt-6 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Visível apenas internamente (admin, faturamento e vendedor do cliente). Não aparece no PDF.
-              </p>
-              <Textarea
-                value={obsLocal}
-                onChange={(e) => setObsLocal(e.target.value)}
-                placeholder="Observações internas sobre o cliente..."
-                rows={6}
-                disabled={!canObs}
-              />
-              {canObs && (
-                <div className="flex justify-end">
-                  <Button onClick={salvarObs} disabled={salvandoObs} size="sm">
-                    {salvandoObs && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                    Salvar observações
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ABA — Histórico de Faturamento */}
-        <TabsContent value="faturamento" className="mt-4">
-          <AbaHistoricoFaturamento
-            clienteId={cliente.id}
-            codigoParceiro={cliente.codigo_parceiro ?? null}
-          />
-        </TabsContent>
-
-        {/* ABA — Bolsão (vendedor, gestora e admin) */}
-        {canBolsao && (
-          <TabsContent value="bolsao" className="mt-4">
-            <AbaBolsao clienteId={cliente.id} />
-          </TabsContent>
-        )}
-
-        {/* ABA — Tabela de Preços */}
-        <TabsContent value="tabela" className="mt-4">
-          {cliente && (
-            <TabelaPrecos
-              clienteId={cliente.id}
-              clienteRazaoSocial={cliente.razao_social}
-              clienteCnpj={cliente.cnpj}
-              clienteCidade={cliente.cidade}
-              clienteUf={cliente.uf}
-              clienteTabela={cliente.tabela_preco}
-              clienteCluster={cliente.cluster}
-              clienteDescontoAdicional={cliente.desconto_adicional ?? null}
-              clienteCodigoParceiro={cliente.codigo_parceiro ?? null}
-              suframa={cliente.suframa ?? null}
-            />
-          )}
-        </TabsContent>
-
-        {/* ABA — Preços (admin e gestora) */}
-        {canPrecos && (
-          <TabsContent value="precos" className="mt-4">
-            <AbaPrecos
-              clienteId={cliente.id}
-              clienteCodigoParceiro={cliente.codigo_parceiro ?? cliente.codigo_cliente ?? null}
-              clienteTabela={cliente.tabela_preco ?? null}
-              clienteCluster={cliente.cluster ?? null}
-            />
-          </TabsContent>
-        )}
       </Tabs>
 
-      {/* Modal: editar cliente */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Editar cliente</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid gap-4 sm:grid-cols-2">
-              {canEditFull && (
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Razão Social *</Label>
-                  <Input value={editNome} onChange={(e) => setEditNome(e.target.value)} />
-                </div>
-              )}
-              {canEditFull && (
-                <div className="space-y-1.5">
-                  <Label>CNPJ</Label>
-                  <Input value={editCnpj} onChange={(e) => setEditCnpj(e.target.value)} placeholder="00.000.000/0000-00" />
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Label>Email XML/Boleto</Label>
-                <Input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
-              </div>
-              {canEditFull && (
-                <div className="space-y-1.5">
-                  <Label>Cluster</Label>
-                  <Select value={editCluster} onValueChange={setEditCluster}>
-                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">— Nenhum —</SelectItem>
-                      {CLUSTERS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {canEditFull && (
-                <div className="space-y-1.5">
-                  <Label>Tabela de preço</Label>
-                  <Select value={editTabela} onValueChange={setEditTabela}>
-                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">— Nenhuma —</SelectItem>
-                      {TABELAS_PRECO.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              <div className="space-y-1.5">
-                <Label>Comprador</Label>
-                <Input value={editComprador} onChange={(e) => setEditComprador(e.target.value)} />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Telefone</Label>
-                <Input value={editTelefone} onChange={(e) => setEditTelefone(e.target.value)} />
-              </div>
-              {canEditFull && (
-                <div className="space-y-1.5">
-                  <Label>Vendedor (encarteiramento)</Label>
-                  <Select value={editVendedorId} onValueChange={setEditVendedorId}>
-                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">— Nenhum —</SelectItem>
-                      {vendedores.map((v) => <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-              {canEditFull && (
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Observações internas</Label>
-                  <Textarea value={editObs} onChange={(e) => setEditObs(e.target.value)} rows={3} />
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <h4 className="text-sm font-semibold">Endereço</h4>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>Rua</Label>
-                  <Input value={editRua} onChange={(e) => setEditRua(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Número</Label>
-                  <Input value={editNumero} onChange={(e) => setEditNumero(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Bairro</Label>
-                  <Input value={editBairro} onChange={(e) => setEditBairro(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Cidade</Label>
-                  <Input value={editCidade} onChange={(e) => setEditCidade(e.target.value)} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>UF</Label>
-                  <Input value={editUf} onChange={(e) => setEditUf(e.target.value)} maxLength={2} />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>CEP</Label>
-                  <Input value={editCep} onChange={(e) => setEditCep(e.target.value)} placeholder="00000-000" />
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
-            <Button onClick={salvarEdicao} disabled={salvandoEdit}>
-              {salvandoEdit && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* AlertDialog: excluir cliente */}
-      <AlertDialog open={excluirOpen} onOpenChange={setExcluirOpen}>
+      {/* Dialog de confirmação */}
+      <AlertDialog open={showToggleDialog} onOpenChange={setShowToggleDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir cliente permanentemente?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {ativo ? "Inativar cliente" : "Ativar cliente"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação é irreversível. <strong>{cliente.nome_parceiro || cliente.razao_social}</strong> e todos os seus dados serão removidos.
+              Tem certeza que deseja {ativo ? "inativar" : "ativar"} o cliente{" "}
+              <strong>{cliente.nome}</strong>?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={excluir} disabled={excluindo} className="bg-red-600 hover:bg-red-700">
-              {excluindo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Excluir permanentemente
+            <AlertDialogAction
+              onClick={() => toggleAtivo.mutate(!ativo)}
+              className={ativo ? "bg-destructive hover:bg-destructive/90" : ""}
+            >
+              {ativo ? "Inativar" : "Ativar"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <PedidoDetalhesDialog pedidoId={detalhesId} open={detalhesOpen} onOpenChange={setDetalhesOpen} />
-
-      {/* Dialog: análise de crédito */}
-      <Dialog open={analiseOpen} onOpenChange={setAnaliseOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Solicitar análise de crédito — {cliente.nome_parceiro || cliente.razao_social}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Label>Observações</Label>
-            <Textarea
-              rows={4}
-              value={analiseObs}
-              onChange={(e) => setAnaliseObs(e.target.value)}
-              placeholder="Informe o motivo, histórico relevante, urgência..."
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAnaliseOpen(false)}>Cancelar</Button>
-            <Button onClick={enviarAnalise} disabled={salvandoAnalise}>
-              {salvandoAnalise && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Enviar solicitação
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
