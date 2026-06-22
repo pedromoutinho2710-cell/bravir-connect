@@ -46,6 +46,7 @@ import Lixeira from "./pages/Lixeira";
 import ImportarClientes from "./pages/admin/ImportarClientes";
 import BolsaoPage from "./pages/BolsaoPage";
 import TabelasPreco from "./pages/admin/TabelasPreco";
+import GestaoPrecos from "./pages/admin/GestaoPrecos";
 import Configuracoes from "./pages/admin/Configuracoes";
 import Campanhas from "./pages/admin/Campanhas";
 import DashboardLogistica from "./pages/logistica/DashboardLogistica";
@@ -129,6 +130,7 @@ const App = () => (
               <Route path="/admin/clientes-lista" element={<ClientesAdminLista />} />
               <Route path="/admin/importar-clientes" element={<ImportarClientes />} />
               <Route path="/admin/tabelas-preco" element={<TabelasPreco />} />
+              <Route path="/admin/gestao-precos" element={<GestaoPrecos />} />
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
               <Route path="/admin/campanhas" element={<Campanhas />} />
             </Route>

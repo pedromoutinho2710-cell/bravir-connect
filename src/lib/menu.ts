@@ -48,6 +48,7 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Formulários", url: "/admin/formularios", icon: FileStack },
       { title: "Importar Clientes", url: "/admin/importar-clientes", icon: Upload },
       { title: "Tabelas de Preço", url: "/admin/tabelas-preco", icon: Tag },
+      { title: "Gestão de Preços", url: "/admin/gestao-precos", icon: Tag },
       { title: "Configurações", url: "/admin/configuracoes", icon: Settings },
       { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
       { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
