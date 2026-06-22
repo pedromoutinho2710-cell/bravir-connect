@@ -16,6 +16,17 @@ const GITHUB_OWNER = Deno.env.get("GITHUB_OWNER") ?? "pedromoutinho2710-cell";
 const GITHUB_REPO = Deno.env.get("GITHUB_REPO") ?? "bravir-connect";
 const GITHUB_API = "https://api.github.com";
 
+// Vercel — usado no modo "aprovar" para aguardar o deploy e testar a produção.
+// Configure com: npx supabase secrets set VERCEL_TOKEN=...
+const VERCEL_TOKEN = Deno.env.get("VERCEL_TOKEN") ?? "";
+const VERCEL_PROJECT = Deno.env.get("VERCEL_PROJECT") ?? "bravir-connect";
+const VERCEL_TEAM_ID = Deno.env.get("VERCEL_TEAM_ID") ?? "";
+const PROD_URL = (Deno.env.get("PROD_URL") ?? "https://bravir-connect.vercel.app").replace(/\/$/, "");
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 const corsHeaders = buildCors();
 
 // Cliente com service role: a função grava o resultado na solicitação ignorando RLS.
@@ -200,6 +211,181 @@ async function abrirPullRequest(
   return { pr_url: pr.html_url, pr_number: pr.number, branch };
 }
 
+// Faz o merge (squash) de um PR e devolve o SHA do commit gerado no branch base.
+async function mergearPullRequest(prNumber: number): Promise<string> {
+  let ultimoErro = "";
+  // O GitHub pode levar um instante para calcular a "mergeability" de um PR
+  // recém-criado; 405/409 indicam "ainda não mergeável" — tentamos algumas vezes.
+  for (let tentativa = 0; tentativa < 4; tentativa++) {
+    const res = await ghFetch(
+      `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/pulls/${prNumber}/merge`,
+      { method: "PUT", body: JSON.stringify({ merge_method: "squash" }) },
+    );
+    if (res.ok) {
+      const data = (await res.json()) as { merged?: boolean; sha?: string };
+      if (data.merged && data.sha) return data.sha;
+      ultimoErro = "GitHub respondeu sem confirmar o merge.";
+    } else {
+      ultimoErro = `GitHub merge (${res.status}): ${(await res.text()).slice(0, 200)}`;
+      if (res.status !== 405 && res.status !== 409) break;
+    }
+    await sleep(3000);
+  }
+  throw new Error(ultimoErro || "Falha ao mergear o PR.");
+}
+
+// Abre um PR que reverte um commit de merge (squash) já aplicado no branch base.
+// Para um squash, o commit tem um único pai (o estado anterior do main); recriar
+// a tree desse pai reverte exatamente o que o merge introduziu.
+async function abrirRevertPr(mergeSha: string, tituloOriginal: string): Promise<string> {
+  const repo = (await ghJson(`/repos/${GITHUB_OWNER}/${GITHUB_REPO}`, {}, "repo")) as {
+    default_branch?: string;
+  };
+  const base = repo.default_branch ?? "main";
+
+  const mergeCommit = (await ghJson(
+    `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/git/commits/${mergeSha}`,
+    {},
+    "commit de merge",
+  )) as { parents?: Array<{ sha?: string }> };
+  const parentSha = mergeCommit.parents?.[0]?.sha;
+  if (!parentSha) throw new Error("Commit de merge sem pai — não é possível reverter.");
+
+  const parentCommit = (await ghJson(
+    `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/git/commits/${parentSha}`,
+    {},
+    "commit pai",
+  )) as { tree?: { sha?: string } };
+  const parentTreeSha = parentCommit.tree?.sha;
+  if (!parentTreeSha) throw new Error("Não foi possível obter a tree anterior ao merge.");
+
+  const revertCommit = (await ghJson(
+    `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/git/commits`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        message: `revert: ${tituloOriginal}\n\nReverte o merge ${mergeSha.slice(0, 7)} (deploy/testes falharam).`,
+        tree: parentTreeSha,
+        parents: [mergeSha],
+      }),
+    },
+    "commit de revert",
+  )) as { sha?: string };
+  if (!revertCommit.sha) throw new Error("Falha ao criar o commit de revert.");
+
+  const branch = `revert/agente-${Date.now()}`;
+  await ghJson(
+    `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/git/refs`,
+    { method: "POST", body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: revertCommit.sha }) },
+    "branch de revert",
+  );
+
+  const pr = (await ghJson(
+    `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/pulls`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        title: `revert: ${tituloOriginal}`,
+        head: branch,
+        base,
+        body: [
+          "## Revert automático",
+          "",
+          `O merge \`${mergeSha.slice(0, 7)}\` foi revertido automaticamente porque o deploy no Vercel falhou ou os testes de produção não passaram.`,
+          "",
+          "_PR gerado automaticamente pelo Agente de IA do Bravir Connect._",
+        ].join("\n"),
+      }),
+    },
+    "pull request de revert",
+  )) as { html_url?: string };
+  if (!pr.html_url) throw new Error("PR de revert criado, mas a resposta do GitHub veio incompleta.");
+  return pr.html_url;
+}
+
+// Tenta abrir o PR de revert sem propagar erro (a falha no revert não deve
+// mascarar o erro original de deploy/teste). Devolve a URL do PR ou null.
+async function tentarReverter(mergeSha: string, tituloOriginal: string): Promise<string | null> {
+  try {
+    return await abrirRevertPr(mergeSha, tituloOriginal);
+  } catch (e) {
+    console.error("Falha ao reverter:", e);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Vercel
+// ---------------------------------------------------------------------------
+
+type VercelDeployment = {
+  uid?: string;
+  url?: string;
+  state?: string;
+  readyState?: string;
+  meta?: { githubCommitSha?: string };
+};
+
+function vercelUrl(path: string): string {
+  if (!VERCEL_TEAM_ID) return `https://api.vercel.com${path}`;
+  const sep = path.includes("?") ? "&" : "?";
+  return `https://api.vercel.com${path}${sep}teamId=${encodeURIComponent(VERCEL_TEAM_ID)}`;
+}
+
+// Aguarda (polling a cada 10s, por até 3 min) o deploy de produção correspondente
+// ao commit de merge ficar READY. Persiste status READY/ERROR/CANCELED.
+async function esperarDeployVercel(mergeSha: string): Promise<{ ok: boolean; state: string; url: string }> {
+  const inicio = Date.now();
+  const LIMITE_MS = 3 * 60 * 1000;
+  const INTERVALO_MS = 10_000;
+  let ultimoEstado = "desconhecido";
+  let url = "";
+
+  while (Date.now() - inicio < LIMITE_MS) {
+    try {
+      const res = await fetch(
+        vercelUrl(`/v6/deployments?app=${encodeURIComponent(VERCEL_PROJECT)}&target=production&limit=20`),
+        { headers: { Authorization: `Bearer ${VERCEL_TOKEN}` } },
+      );
+      if (res.ok) {
+        const data = (await res.json()) as { deployments?: VercelDeployment[] };
+        const lista = data.deployments ?? [];
+        // Prioriza o deployment do nosso commit; se ainda não apareceu, usa o mais recente.
+        const alvo = lista.find((d) => d.meta?.githubCommitSha === mergeSha) ?? lista[0];
+        if (alvo) {
+          ultimoEstado = alvo.readyState ?? alvo.state ?? "desconhecido";
+          if (alvo.url) url = alvo.url;
+          if (ultimoEstado === "READY") return { ok: true, state: ultimoEstado, url };
+          if (ultimoEstado === "ERROR" || ultimoEstado === "CANCELED") {
+            return { ok: false, state: ultimoEstado, url };
+          }
+        }
+      } else {
+        ultimoEstado = `vercel ${res.status}`;
+      }
+    } catch (e) {
+      ultimoEstado = e instanceof Error ? e.message : String(e);
+    }
+    await sleep(INTERVALO_MS);
+  }
+  return { ok: false, state: `timeout (último: ${ultimoEstado})`, url };
+}
+
+// Testa a URL de produção: a home e a rota de login devem responder 200.
+async function testarProducao(): Promise<{ ok: boolean; detail: string }> {
+  for (const rota of ["/", "/login"]) {
+    try {
+      const res = await fetch(`${PROD_URL}${rota}`, { redirect: "follow" });
+      if (res.status !== 200) {
+        return { ok: false, detail: `${rota} retornou ${res.status}` };
+      }
+    } catch (e) {
+      return { ok: false, detail: `${rota} falhou: ${e instanceof Error ? e.message : String(e)}` };
+    }
+  }
+  return { ok: true, detail: "200 em / e /login" };
+}
+
 // ---------------------------------------------------------------------------
 // Claude
 // ---------------------------------------------------------------------------
@@ -366,6 +552,64 @@ async function persistir(id: string, campos: Record<string, unknown>): Promise<v
   if (error) console.error("Falha ao persistir resultado do agente:", error.message);
 }
 
+// Extrai o número do PR a partir da URL (https://github.com/owner/repo/pull/123).
+function prNumberFromUrl(url: string | null | undefined): number | null {
+  if (!url) return null;
+  const m = url.match(/\/pull\/(\d+)/);
+  return m ? Number(m[1]) : null;
+}
+
+// Gera (ou reaproveita) a análise e abre o Pull Request, persistindo o resultado.
+// Compartilhado pelos modos "implementar" e "aprovar".
+async function gerarEAbrirPr(
+  solicitacaoId: string,
+  titulo: string,
+  descricao: string,
+  arquivosRelevantes: unknown,
+): Promise<{ pr_url: string; pr_number: number; branch: string; resultado: Resultado }> {
+  let resultado: Resultado | null = null;
+  const { data: row } = await supabase
+    .from("solicitacoes_gestor")
+    .select("agente_mudancas")
+    .eq("id", solicitacaoId)
+    .maybeSingle();
+  const persistido = (row as { agente_mudancas?: Resultado } | null)?.agente_mudancas;
+  if (persistido && Array.isArray(persistido.arquivos) && persistido.arquivos.length > 0) {
+    resultado = persistido;
+  } else {
+    const [mapa, contexto] = await Promise.all([
+      listarArquivos(),
+      lerContexto(arquivosRelevantes),
+    ]);
+    resultado = await analisarComIA(titulo, descricao, contexto, mapa);
+  }
+
+  if (!resultado.arquivos.length) {
+    await persistir(solicitacaoId, {
+      agente_status: "erro",
+      agente_resumo: resultado.resumo || "A IA não propôs alterações de arquivos.",
+    });
+    throw new Error("A IA não propôs alterações de arquivos.");
+  }
+
+  const corpoPr = montarCorpoPr(titulo, descricao, resultado);
+  const pr = await abrirPullRequest(
+    resultado.arquivos,
+    resultado.titulo_pr || titulo,
+    resultado.mensagem_commit || `fix: ${titulo}`,
+    corpoPr,
+  );
+
+  await persistir(solicitacaoId, {
+    agente_status: "pr_criado",
+    agente_resumo: resultado.resumo,
+    agente_pr_url: pr.pr_url,
+    agente_mudancas: resultado,
+  });
+
+  return { ...pr, resultado };
+}
+
 // ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
@@ -396,6 +640,7 @@ serve(async (req) => {
     descricao?: string;
     arquivos_relevantes?: unknown;
     modo?: string;
+    pr_number?: number;
   };
   try {
     body = await req.json();
@@ -410,7 +655,12 @@ serve(async (req) => {
       400,
     );
   }
-  const modo = body.modo === "implementar" ? "implementar" : "analisar";
+  const modo =
+    body.modo === "implementar"
+      ? "implementar"
+      : body.modo === "aprovar"
+        ? "aprovar"
+        : "analisar";
 
   try {
     if (modo === "analisar") {
@@ -435,54 +685,94 @@ serve(async (req) => {
       });
     }
 
-    // modo === "implementar": reaproveita a análise revisada, ou re-analisa se não houver.
-    let resultado: Resultado | null = null;
+    if (modo === "implementar") {
+      // Reaproveita a análise revisada (ou re-analisa) e abre o PR.
+      const pr = await gerarEAbrirPr(solicitacao_id, titulo, descricao, arquivos_relevantes);
+      return json({
+        ok: true,
+        status: "pr_criado",
+        pr_url: pr.pr_url,
+        pr_number: pr.pr_number,
+        branch: pr.branch,
+        resumo: pr.resultado.resumo,
+      });
+    }
+
+    // modo === "aprovar": abre o PR (se ainda não existir), faz merge squash,
+    // aguarda o deploy no Vercel, testa a produção e reverte em caso de falha.
+    if (!VERCEL_TOKEN) {
+      return json({ error: "Agente indisponível: VERCEL_TOKEN não configurado." }, 500);
+    }
+
     const { data: row } = await supabase
       .from("solicitacoes_gestor")
-      .select("agente_mudancas")
+      .select("agente_pr_url")
       .eq("id", solicitacao_id)
       .maybeSingle();
-    const persistido = (row as { agente_mudancas?: Resultado } | null)?.agente_mudancas;
-    if (persistido && Array.isArray(persistido.arquivos) && persistido.arquivos.length > 0) {
-      resultado = persistido;
-    } else {
-      const [mapa, contexto] = await Promise.all([
-        listarArquivos(),
-        lerContexto(arquivos_relevantes),
-      ]);
-      resultado = await analisarComIA(titulo, descricao, contexto, mapa);
+    let prUrl = (row as { agente_pr_url?: string } | null)?.agente_pr_url ?? null;
+    let prNumber = (typeof body.pr_number === "number" ? body.pr_number : null) ?? prNumberFromUrl(prUrl);
+
+    if (!prNumber) {
+      const pr = await gerarEAbrirPr(solicitacao_id, titulo, descricao, arquivos_relevantes);
+      prUrl = pr.pr_url;
+      prNumber = pr.pr_number;
     }
 
-    if (!resultado.arquivos.length) {
-      await persistir(solicitacao_id, {
-        agente_status: "erro",
-        agente_resumo: resultado.resumo || "A IA não propôs alterações de arquivos.",
-      });
-      return json({ error: "A IA não propôs alterações de arquivos." }, 422);
-    }
-
-    const corpoPr = montarCorpoPr(titulo, descricao, resultado);
-    const pr = await abrirPullRequest(
-      resultado.arquivos,
-      resultado.titulo_pr || titulo,
-      resultado.mensagem_commit || `fix: ${titulo}`,
-      corpoPr,
-    );
-
+    // 1. Merge (squash).
+    await persistir(solicitacao_id, { agente_status: "mergeando", agente_pr_url: prUrl });
+    const mergeSha = await mergearPullRequest(prNumber);
     await persistir(solicitacao_id, {
-      agente_status: "pr_criado",
-      agente_resumo: resultado.resumo,
-      agente_pr_url: pr.pr_url,
-      agente_mudancas: resultado,
+      agente_status: "mergeado",
+      agente_resumo: `PR mergeado (${mergeSha.slice(0, 7)}). Aguardando deploy no Vercel…`,
     });
 
+    // 2. Aguarda o deploy de produção.
+    const deploy = await esperarDeployVercel(mergeSha);
+    if (!deploy.ok) {
+      const revertUrl = await tentarReverter(mergeSha, titulo);
+      await persistir(solicitacao_id, {
+        agente_status: revertUrl ? "revertido" : "erro",
+        agente_resumo: `Deploy falhou (${deploy.state}).${revertUrl ? " Revert aberto: " + revertUrl : ""}`,
+      });
+      return json({
+        ok: false,
+        error: `Deploy falhou: ${deploy.state}`,
+        deployed: false,
+        tests_passed: false,
+        reverted: !!revertUrl,
+        revert_url: revertUrl,
+      });
+    }
+
+    // 3. Testa a produção.
+    const testes = await testarProducao();
+    if (!testes.ok) {
+      const revertUrl = await tentarReverter(mergeSha, titulo);
+      await persistir(solicitacao_id, {
+        agente_status: revertUrl ? "revertido" : "erro",
+        agente_resumo: `Testes de produção falharam (${testes.detail}).${revertUrl ? " Revert aberto: " + revertUrl : ""}`,
+      });
+      return json({
+        ok: false,
+        error: `Testes falharam: ${testes.detail}`,
+        deployed: true,
+        tests_passed: false,
+        reverted: !!revertUrl,
+        revert_url: revertUrl,
+      });
+    }
+
+    // 4. Sucesso: merge feito, deploy concluído e testes ok.
+    await persistir(solicitacao_id, {
+      agente_status: "implementado",
+      agente_resumo: `Merge feito (${mergeSha.slice(0, 7)}), deploy concluído e testes de produção ok (${testes.detail}).`,
+    });
     return json({
       ok: true,
-      status: "pr_criado",
-      pr_url: pr.pr_url,
-      pr_number: pr.pr_number,
-      branch: pr.branch,
-      resumo: resultado.resumo,
+      deployed: true,
+      tests_passed: true,
+      pr_url: prUrl,
+      merge_sha: mergeSha,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

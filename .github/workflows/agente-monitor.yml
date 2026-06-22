@@ -1,0 +1,41 @@
+name: Agente Monitor
+
+# Roda o agente-monitor a cada 6 horas para auditar a plataforma e abrir
+# solicitações automáticas para os problemas encontrados.
+on:
+  schedule:
+    - cron: "0 */6 * * *"
+  # Permite disparar manualmente pela aba Actions do GitHub.
+  workflow_dispatch:
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar edge function agente-monitor
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+            echo "Secrets SUPABASE_URL e SUPABASE_ANON_KEY são obrigatórios." >&2
+            exit 1
+          fi
+
+          resposta=$(curl -sS -w "\n%{http_code}" -X POST \
+            "${SUPABASE_URL%/}/functions/v1/agente-monitor" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -H "Content-Type: application/json" \
+            -d '{}')
+
+          corpo=$(echo "$resposta" | sed '$d')
+          status=$(echo "$resposta" | tail -n1)
+
+          echo "HTTP $status"
+          echo "$corpo"
+
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "agente-monitor falhou (HTTP $status)." >&2
+            exit 1
+          fi
