@@ -1,171 +1,141 @@
-import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { useToast } from '@/hooks/use-toast';
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 export interface ItemPedido {
   produto_id: string;
   sku: string;
-  descricao: string;
+  nome_produto: string;
   quantidade: number;
   preco_unitario: number;
-  desconto_percentual: number;
-  preco_final: number;
+  preco_unitario_original?: number;
+  desconto_percentual?: number;
+  desconto_percentual_original?: number;
+  subtotal: number;
 }
 
-export interface NovoPedidoForm {
+export interface DadosPedido {
   cliente_id: string;
-  cliente_nome: string;
-  tipo_entrega: string; // 'normal' | 'agendada'
-  observacoes: string;
-  telefone_contato: string;
-  email_contato: string;
+  observacoes?: string;
+  condicao_pagamento?: string;
+  desconto_vista?: number;
   itens: ItemPedido[];
 }
 
-export interface NovoPedidoErrors {
-  cliente_id?: string;
-  tipo_entrega?: string;
-  telefone_contato?: string;
-  email_contato?: string;
-  itens?: string;
-}
-
-const INITIAL_FORM: NovoPedidoForm = {
-  cliente_id: '',
-  cliente_nome: '',
-  tipo_entrega: 'normal',
-  observacoes: '',
-  telefone_contato: '',
-  email_contato: '',
-  itens: [],
-};
-
 export function useNovoPedido() {
+  const [salvando, setSalvando] = useState(false);
+  const navigate = useNavigate();
   const { toast } = useToast();
-  const [form, setForm] = useState<NovoPedidoForm>(INITIAL_FORM);
-  const [errors, setErrors] = useState<NovoPedidoErrors>({});
-  const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
 
-  const entregaAgendada = form.tipo_entrega === 'agendada';
-
-  const setField = useCallback(
-    <K extends keyof NovoPedidoForm>(field: K, value: NovoPedidoForm[K]) => {
-      setForm((prev) => ({ ...prev, [field]: value }));
-      // Limpa erro do campo ao editar
-      setErrors((prev) => {
-        if (prev[field as keyof NovoPedidoErrors]) {
-          const next = { ...prev };
-          delete next[field as keyof NovoPedidoErrors];
-          return next;
-        }
-        return prev;
+  async function salvarPedido(
+    dados: DadosPedido,
+    pedidoId?: string
+  ): Promise<string | null> {
+    if (!dados.cliente_id) {
+      toast({
+        title: "Cliente obrigatório",
+        description: "Selecione um cliente antes de salvar.",
+        variant: "destructive",
       });
-    },
-    [],
-  );
-
-  const validate = useCallback((): boolean => {
-    const next: NovoPedidoErrors = {};
-
-    if (!form.cliente_id) {
-      next.cliente_id = 'Selecione um cliente.';
+      return null;
     }
 
-    if (!form.tipo_entrega) {
-      next.tipo_entrega = 'Selecione o tipo de entrega.';
+    if (!dados.itens || dados.itens.length === 0) {
+      toast({
+        title: "Itens obrigatórios",
+        description: "Adicione ao menos um produto ao pedido.",
+        variant: "destructive",
+      });
+      return null;
     }
 
-    if (entregaAgendada) {
-      if (!form.telefone_contato.trim()) {
-        next.telefone_contato =
-          'Telefone é obrigatório para entrega agendada.';
-      }
-      if (!form.email_contato.trim()) {
-        next.email_contato = 'E-mail é obrigatório para entrega agendada.';
-      }
-    }
-
-    if (form.itens.length === 0) {
-      next.itens = 'Adicione ao menos um produto.';
-    }
-
-    setErrors(next);
-    return Object.keys(next).length === 0;
-  }, [form, entregaAgendada]);
-
-  const resetForm = useCallback(() => {
-    setForm(INITIAL_FORM);
-    setErrors({});
-  }, []);
-
-  const salvarPedido = useCallback(async (): Promise<boolean> => {
-    if (!validate()) return false;
-
-    setLoading(true);
+    setSalvando(true);
     try {
-      const payload = {
-        cliente_id: form.cliente_id,
-        tipo_entrega: form.tipo_entrega,
-        observacoes: form.observacoes || null,
-        telefone_contato: entregaAgendada ? form.telefone_contato.trim() : null,
-        email_contato: entregaAgendada ? form.email_contato.trim() : null,
-        status: 'rascunho',
-      };
+      const valorTotal = dados.itens.reduce((acc, item) => acc + item.subtotal, 0);
 
-      const { data: pedido, error: pedidoError } = await supabase
-        .from('pedidos')
-        .insert(payload)
-        .select('id')
-        .single();
+      let idPedido = pedidoId ?? null;
 
-      if (pedidoError) throw pedidoError;
+      if (idPedido) {
+        // Atualizar pedido existente
+        const { error: erroPedido } = await supabase
+          .from("pedidos")
+          .update({
+            cliente_id: dados.cliente_id,
+            observacoes: dados.observacoes ?? null,
+            condicao_pagamento: dados.condicao_pagamento ?? null,
+            desconto_vista: dados.desconto_vista ?? null,
+            valor_total: valorTotal,
+            atualizado_em: new Date().toISOString(),
+          })
+          .eq("id", idPedido);
 
-      if (form.itens.length > 0) {
-        const itens = form.itens.map((item) => ({
-          pedido_id: pedido.id,
-          produto_id: item.produto_id,
-          quantidade: item.quantidade,
-          preco_unitario: item.preco_unitario,
-          desconto_percentual: item.desconto_percentual,
-          preco_final: item.preco_final,
-        }));
+        if (erroPedido) throw erroPedido;
+      } else {
+        // Criar novo pedido
+        const { data: pedidoCriado, error: erroPedido } = await supabase
+          .from("pedidos")
+          .insert({
+            cliente_id: dados.cliente_id,
+            observacoes: dados.observacoes ?? null,
+            condicao_pagamento: dados.condicao_pagamento ?? null,
+            desconto_vista: dados.desconto_vista ?? null,
+            valor_total: valorTotal,
+            status: "rascunho",
+          })
+          .select("id")
+          .single();
 
-        const { error: itensError } = await supabase
-          .from('itens_pedido')
-          .insert(itens);
-
-        if (itensError) throw itensError;
+        if (erroPedido) throw erroPedido;
+        idPedido = pedidoCriado.id;
       }
 
-      toast({
-        title: 'Pedido salvo com sucesso!',
-        description: `Pedido criado.`,
+      // Substituir itens atomicamente via RPC (DELETE + INSERT em transação Postgres)
+      const itensPayload = dados.itens.map((item) => ({
+        produto_id: item.produto_id,
+        sku: item.sku,
+        nome_produto: item.nome_produto,
+        quantidade: item.quantidade,
+        preco_unitario: item.preco_unitario,
+        preco_unitario_original: item.preco_unitario_original ?? null,
+        desconto_percentual: item.desconto_percentual ?? null,
+        desconto_percentual_original: item.desconto_percentual_original ?? null,
+        subtotal: item.subtotal,
+      }));
+
+      const { error: erroItens } = await supabase.rpc("upsert_itens_pedido", {
+        p_pedido_id: idPedido,
+        p_itens: itensPayload,
       });
 
-      resetForm();
-      return true;
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Erro desconhecido.';
+      if (erroItens) throw erroItens;
+
+      await queryClient.invalidateQueries({ queryKey: ["pedidos"] });
+      await queryClient.invalidateQueries({ queryKey: ["pedido", idPedido] });
+
       toast({
-        title: 'Erro ao salvar pedido',
-        description: message,
-        variant: 'destructive',
+        title: pedidoId ? "Pedido atualizado" : "Pedido criado",
+        description: pedidoId
+          ? "As alterações foram salvas com sucesso."
+          : "Pedido criado com sucesso.",
       });
-      return false;
+
+      return idPedido;
+    } catch (erro: unknown) {
+      const mensagem =
+        erro instanceof Error ? erro.message : "Erro desconhecido ao salvar pedido.";
+      toast({
+        title: "Erro ao salvar pedido",
+        description: mensagem,
+        variant: "destructive",
+      });
+      return null;
     } finally {
-      setLoading(false);
+      setSalvando(false);
     }
-  }, [form, entregaAgendada, validate, resetForm, toast]);
+  }
 
-  return {
-    form,
-    errors,
-    loading,
-    entregaAgendada,
-    setField,
-    validate,
-    resetForm,
-    salvarPedido,
-  };
+  return { salvarPedido, salvando };
 }
