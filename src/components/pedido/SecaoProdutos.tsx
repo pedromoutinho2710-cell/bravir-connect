@@ -1,259 +1,695 @@
-import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Trash2, Plus } from "lucide-react";
-import { formatCurrency } from "@/lib/format";
+import { Button } from "@/components/ui/button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Plus, Trash2, Search, AlertTriangle, Upload } from "lucide-react";
+import { formatBRL } from "@/lib/format";
+import { calcularPrecoItem } from "@/lib/preco";
+import { MARCAS } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { ExtrairPedidoDialog } from "@/components/pedido/ExtrairPedidoDialog";
 
-export interface ItemPedido {
+export type Produto = {
   id: string;
-  sku: string;
-  descricao: string;
+  codigo_jiva: string;
+  nome: string;
+  marca: string;
+  cx_embarque: number;
+  peso_unitario: number;
+  disponivel: boolean;
+};
+
+export type ItemPedido = {
+  produto_id: string;
+  codigo: string;
+  nome: string;
+  marca: string;
+  cx_embarque: number;
+  peso_unitario: number;
   quantidade: number;
-  preco_unitario: number;
-  desconto: number;
-}
+  preco_bruto: number;
+  desconto_perfil: number;
+  desconto_comercial: number;
+  desconto_trade: number;
+  preco_apos_perfil: number;
+  preco_apos_comercial: number;
+  preco_final: number;
+  total: number;
+  bolsao: number;
+};
 
-interface SecaoProdutosProps {
-  itens: ItemPedido[];
-  onChange: (itens: ItemPedido[]) => void;
-  readonly?: boolean;
-}
-
-export default function SecaoProdutos({
-  itens,
-  onChange,
-  readonly = false,
-}: SecaoProdutosProps) {
-  // Mantém sempre a referência mais recente de onChange sem adicioná-la
-  // como dependência do effect de comparação, evitando loop de renders.
-  const onChangeRef = useRef(onChange);
-  useEffect(() => {
-    onChangeRef.current = onChange;
+/**
+ * Calcula precos com cascata de descontos (nunca soma)
+ * Fluxo: bruto -> aplica desconto perfil -> aplica desc comercial -> aplica desc trade
+ *
+ * Wrapper posicional sobre calcularPrecoItem (@/lib/preco) que mantém o
+ * formato de retorno snake_case usado pelos itens de pedido.
+ */
+export function calcularPrecos(
+  bruto: number,
+  dPerfil: number = 0,
+  dCom: number = 0,
+  dTrade: number = 0,
+  qtd: number = 1
+) {
+  const r = calcularPrecoItem({
+    precoBruto: bruto,
+    descontoPerfil: dPerfil,
+    descontoComercial: dCom,
+    descontoTrade: dTrade,
+    quantidade: qtd,
   });
 
-  const [itensLocais, setItensLocais] = useState<ItemPedido[]>(itens);
+  return {
+    preco_apos_perfil: r.precoAposPerfil,
+    preco_apos_comercial: r.precoAposComercial,
+    preco_final: r.precoFinal,
+    total: r.totalItem,
+  };
+}
 
-  // Sincroniza itens externos → estado local (quando o pai substitui tudo)
-  const assinaturaExterna = JSON.stringify(itens);
-  const assinaturaInterna = JSON.stringify(itensLocais);
+type Props = {
+  produtos: Produto[];
+  descontos: Record<string, Record<string, number>>; // produto_id -> perfil -> pct
+  tabelaPreco: string;
+  perfilCliente: string;
+  itens: ItemPedido[];
+  onChange: (itens: ItemPedido[]) => void;
+  vigenciaId: string;
+  /** true → quantidade em unidades (modo livre); false → quantidade em caixas (padrão) */
+  quantidadeLivre?: boolean;
+  descontoLivre?: boolean;
+  bloqueado?: boolean;
+  codigoParceiro?: string;
+  preservarDescontos?: boolean;
+  tipoPedido?: string;
+};
 
-  useEffect(() => {
-    const externos = JSON.parse(assinaturaExterna) as ItemPedido[];
-    const internos = JSON.parse(assinaturaInterna) as ItemPedido[];
+// Marcas que não podem ser usadas em pedidos de bonificação
+const MARCAS_BLOQUEADAS_BONIFICACAO = ["Laby", "Bendita Cânfora"];
 
-    const igual =
-      externos.length === internos.length &&
-      externos.every((ext, i) => {
-        const int = internos[i];
-        return (
-          ext.id === int.id &&
-          ext.sku === int.sku &&
-          ext.quantidade === int.quantidade &&
-          ext.preco_unitario === int.preco_unitario &&
-          ext.desconto === int.desconto
-        );
-      });
+export function SecaoProdutos({
+  produtos,
+  descontos,
+  tabelaPreco,
+  perfilCliente,
+  itens,
+  onChange,
+  vigenciaId,
+  quantidadeLivre = false,
+  descontoLivre = false,
+  bloqueado = false,
+  codigoParceiro = "",
+  preservarDescontos = false,
+  tipoPedido,
+}: Props) {
+  const [busca, setBusca] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [precos, setPrecos] = useState<Record<string, Record<string, number>>>({});
+  const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, { preco: number; desconto_perfil: number | null; origem: string }>>({});
+  // Valor "em digitação" do campo de quantidade (string), por produto.
+  // Permite que o campo fique vazio enquanto o usuário edita; a conversão/validação ocorre no onBlur.
+  const [qtdDraft, setQtdDraft] = useState<Record<string, string>>({});
 
-    if (!igual) {
-      setItensLocais(externos);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assinaturaExterna]);
-
-  // Propaga mudanças locais → pai usando a ref, sem depender da identidade de onChange
-  useEffect(() => {
-    onChangeRef.current(itensLocais);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [assinaturaInterna]);
-
-  function atualizar(index: number, campo: keyof ItemPedido, valor: string | number) {
-    setItensLocais((prev) => {
-      const copia = prev.map((it, i) =>
-        i === index ? { ...it, [campo]: valor } : it
-      );
-      return copia;
+  const limparQtdDraft = (produto_id: string) =>
+    setQtdDraft((d) => {
+      const next = { ...d };
+      delete next[produto_id];
+      return next;
     });
-  }
 
-  function remover(index: number) {
-    setItensLocais((prev) => prev.filter((_, i) => i !== index));
-  }
+  // Recarrega preços quando vigência muda
+  useEffect(() => {
+    if (!vigenciaId) { setPrecos({}); return; }
+    supabase
+      .from("precos")
+      .select("produto_id, tabela, preco_bruto")
+      .eq("vigencia_id", vigenciaId)
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, Record<string, number>> = {};
+        data.forEach((p) => { (map[p.produto_id] ||= {})[p.tabela] = Number(p.preco_bruto); });
+        setPrecos(map);
+      });
+  }, [vigenciaId]);
 
-  function adicionarLinha() {
-    const novo: ItemPedido = {
-      id: crypto.randomUUID(),
-      sku: "",
-      descricao: "",
-      quantidade: 1,
-      preco_unitario: 0,
-      desconto: 0,
+  // Carrega preços especiais por cliente
+  useEffect(() => {
+    if (!codigoParceiro) { setPrecosEspeciais({}); return; }
+    supabase
+      .from("precos_cliente_produto")
+      .select("codigo_produto, preco_unitario, desconto_perfil, origem")
+      .eq("codigo_parceiro", codigoParceiro)
+      .then(({ data }) => {
+        const map: Record<string, { preco: number; desconto_perfil: number | null; origem: string }> = {};
+        data?.forEach((p) => { map[p.codigo_produto] = { preco: Number(p.preco_unitario), desconto_perfil: p.desconto_perfil != null ? Number(p.desconto_perfil) : null, origem: p.origem }; });
+        setPrecosEspeciais(map);
+      });
+  }, [codigoParceiro]);
+  const [filtroMarca, setFiltroMarca] = useState<string>("Todas");
+
+  const calcItem = (p: Produto, qtd: number): ItemPedido => {
+    const bruto = precos[p.id]?.[tabelaPreco] ?? 0;
+    const dPerfil = descontoLivre ? 0 : (descontos[p.id]?.[perfilCliente] ?? 0);
+    const precos_calc = calcularPrecos(bruto, dPerfil, 0, 0, qtd);
+    
+    return {
+      produto_id: p.id,
+      codigo: p.codigo_jiva,
+      nome: p.nome,
+      marca: p.marca,
+      cx_embarque: p.cx_embarque,
+      peso_unitario: Number(p.peso_unitario),
+      quantidade: qtd,
+      preco_bruto: bruto,
+      desconto_perfil: dPerfil,
+      desconto_comercial: 0,
+      desconto_trade: 0,
+      preco_apos_perfil: precos_calc.preco_apos_perfil,
+      preco_apos_comercial: precos_calc.preco_apos_comercial,
+      preco_final: precos_calc.preco_final,
+      total: precos_calc.total,
+      bolsao: 0,
     };
-    setItensLocais((prev) => [...prev, novo]);
-  }
+  };
 
-  const total = itensLocais.reduce(
-    (acc, it) =>
-      acc + it.quantidade * it.preco_unitario * (1 - it.desconto / 100),
-    0
-  );
+  const adicionar = (p: Produto) => {
+    if (bloqueado) {
+      toast.error("Preencha todos os campos obrigatórios do cliente antes de adicionar produtos");
+      return;
+    }
+    if (!tabelaPreco || !perfilCliente) {
+      toast.error("Selecione perfil do cliente e tabela de preço primeiro");
+      return;
+    }
+    if (itens.some((i) => i.produto_id === p.id)) {
+      toast.warning("Produto já adicionado");
+      return;
+    }
+    if (tipoPedido === "Bonificação" && MARCAS_BLOQUEADAS_BONIFICACAO.includes(p.marca)) {
+      toast.error(`Produtos ${p.marca} não podem ser usados em bonificação`);
+      return;
+    }
+    onChange([...itens, calcItem(p, p.cx_embarque)]);
+  };
+
+  // Adiciona em lote itens vindos da importação de arquivo (foto/PDF/Excel).
+  // Aplica as mesmas validações de adicionar(): cliente preenchido, dedup e bonificação.
+  const adicionarImportados = (novos: { produto: Produto; quantidade: number }[]) => {
+    if (bloqueado) {
+      toast.error("Preencha todos os campos obrigatórios do cliente antes de adicionar produtos");
+      return;
+    }
+    if (!tabelaPreco || !perfilCliente) {
+      toast.error("Selecione perfil do cliente e tabela de preço primeiro");
+      return;
+    }
+    const atuais = [...itens];
+    const idsExistentes = new Set(itens.map((i) => i.produto_id));
+    let ignorados = 0;
+    for (const { produto, quantidade } of novos) {
+      if (idsExistentes.has(produto.id)) { ignorados++; continue; }
+      if (tipoPedido === "Bonificação" && MARCAS_BLOQUEADAS_BONIFICACAO.includes(produto.marca)) { ignorados++; continue; }
+      atuais.push(calcItem(produto, Math.max(1, Math.floor(quantidade) || 1)));
+      idsExistentes.add(produto.id);
+    }
+    if (atuais.length > itens.length) onChange(atuais);
+    if (ignorados > 0) toast.info(`${ignorados} item(ns) ignorado(s) (já no pedido ou marca bloqueada na bonificação).`);
+  };
+
+  const atualizarQtd = (produto_id: string, qtd: number) => {
+    onChange(
+      itens.map((i) => {
+        if (i.produto_id !== produto_id) return i;
+        const precos_calc = calcularPrecos(
+          i.preco_bruto,
+          i.desconto_perfil,
+          i.desconto_comercial,
+          i.desconto_trade,
+          qtd
+        );
+        return {
+          ...i,
+          quantidade: qtd,
+          preco_final: precos_calc.preco_final,
+          total: precos_calc.total,
+        };
+      }),
+    );
+  };
+
+  const atualizarDescontoPerfil = (produto_id: string, valor: number) => {
+    onChange(
+      itens.map((i) => {
+        if (i.produto_id !== produto_id) return i;
+        const precos_calc = calcularPrecos(i.preco_bruto, valor, 0, i.desconto_trade, i.quantidade);
+        return {
+          ...i,
+          desconto_perfil: valor,
+          preco_apos_perfil: precos_calc.preco_apos_perfil,
+          preco_apos_comercial: precos_calc.preco_apos_comercial,
+          preco_final: precos_calc.preco_final,
+          total: precos_calc.total,
+        };
+      }),
+    );
+  };
+
+  const atualizarDesconto = (produto_id: string, tipo: "comercial" | "trade", valor: number) => {
+    onChange(
+      itens.map((i) => {
+        if (i.produto_id !== produto_id) return i;
+        
+        const novo_desc_com = tipo === "comercial" ? valor : i.desconto_comercial;
+        const novo_desc_trade = tipo === "trade" ? valor : i.desconto_trade;
+        
+        const precos_calc = calcularPrecos(
+          i.preco_bruto,
+          i.desconto_perfil,
+          novo_desc_com,
+          novo_desc_trade,
+          i.quantidade
+        );
+        
+        return {
+          ...i,
+          desconto_comercial: novo_desc_com,
+          desconto_trade: novo_desc_trade,
+          preco_apos_perfil: precos_calc.preco_apos_perfil,
+          preco_apos_comercial: precos_calc.preco_apos_comercial,
+          preco_final: precos_calc.preco_final,
+          total: precos_calc.total,
+        };
+      }),
+    );
+  };
+
+  const atualizarBolsao = (produto_id: string, bolsao: number) => {
+    onChange(itens.map((i) => i.produto_id !== produto_id ? i : { ...i, bolsao }));
+  };
+
+  const remover = (produto_id: string) =>
+    onChange(itens.filter((i) => i.produto_id !== produto_id));
+
+  // Recalcula tudo se mudar tabela/perfil
+  const itensRecalculados = useMemo(() => {
+    return itens.map((i) => {
+      const bruto = precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto;
+      const dPerfil = (descontoLivre || preservarDescontos)
+        ? i.desconto_perfil
+        : (descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_perfil);
+      const dCom = (descontoLivre || preservarDescontos) ? i.desconto_comercial : i.desconto_comercial;
+      const precos_calc = calcularPrecos(bruto, dPerfil, dCom, i.desconto_trade, i.quantidade);
+
+      const produto = produtos.find((p) => p.id === i.produto_id);
+      const precoEspecial = produto?.codigo_jiva ? precosEspeciais[produto.codigo_jiva] : undefined;
+      const naVigenciaEspecial = !preservarDescontos
+        && precoEspecial !== undefined;
+
+      if (naVigenciaEspecial && precoEspecial) {
+        // 'acordo' sempre prevalece; 'historico' funciona como piso de preço
+        // (só vence se for maior que o preço líquido calculado pelo cluster).
+        const liquidoCluster = precos_calc.preco_apos_perfil;
+        const precoEfetivo = precoEspecial.origem === "acordo"
+          ? precoEspecial.preco
+          : Math.max(precoEspecial.preco, liquidoCluster);
+        const aplicarEspecial = precoEspecial.origem === "acordo" || precoEfetivo > liquidoCluster;
+
+        if (aplicarEspecial) {
+          if (precoEspecial.origem === "acordo") {
+            // 'acordo': o preço acordado é o líquido-base, independente do bruto.
+            // Se o registro do cliente tem desconto_perfil (percentual 0–100), ele é
+            // aplicado sobre o preço acordado no lugar do desconto do cluster; caso
+            // contrário não há desconto de perfil. Comercial e trade são aplicados
+            // POR CIMA, evitando desconto de perfil negativo quando o acordo > bruto.
+            const dPerfilCliente = precoEspecial.desconto_perfil != null
+              ? precoEspecial.desconto_perfil / 100
+              : 0;
+            const precos_acordo = calcularPrecos(precoEfetivo, dPerfilCliente, i.desconto_comercial, i.desconto_trade, i.quantidade);
+            return {
+              ...i,
+              // P. Bruto passa a ser o próprio preço acordado e o desconto de perfil
+              // vem do registro do cliente (ou 0%), evitando exibir bruto da tabela
+              // com desconto negativo (ágio).
+              preco_bruto: precoEfetivo,
+              desconto_perfil: dPerfilCliente,
+              preco_apos_perfil: precos_acordo.preco_apos_perfil,
+              preco_apos_comercial: precos_acordo.preco_apos_comercial,
+              preco_final: precos_acordo.preco_final,
+              total: precos_acordo.total,
+            };
+          }
+          // origem 'historico': preço funciona como piso; desconto de perfil clampado em 0.
+          const dPerfilEspecial = bruto > 0 ? Math.max(0, 1 - precoEfetivo / bruto) : 0;
+          const precos_especial_com = calcularPrecos(bruto, dPerfilEspecial, i.desconto_comercial, i.desconto_trade, i.quantidade);
+          return {
+            ...i,
+            preco_bruto: bruto,
+            desconto_perfil: dPerfilEspecial,
+            preco_apos_perfil: precos_especial_com.preco_apos_perfil,
+            preco_apos_comercial: precos_especial_com.preco_apos_comercial,
+            preco_final: precos_especial_com.preco_final,
+            total: precos_especial_com.total,
+          };
+        }
+        // origem 'historico' com preço <= cluster: cai para o cálculo normal do cluster abaixo.
+      }
+
+      return {
+        ...i,
+        preco_bruto: bruto,
+        desconto_perfil: dPerfil,
+        desconto_comercial: dCom,
+        preco_apos_perfil: precos_calc.preco_apos_perfil,
+        preco_apos_comercial: precos_calc.preco_apos_comercial,
+        preco_final: precos_calc.preco_final,
+        total: precos_calc.total,
+      };
+    });
+  }, [itens, precos, descontos, tabelaPreco, perfilCliente, descontoLivre, precosEspeciais, preservarDescontos]);
+
+  // Sincroniza recálculo (apenas quando os números efetivamente mudam)
+  useMemoEffect(itensRecalculados, itens, onChange);
+
+  const produtosFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return produtos.filter((p) => {
+      if (filtroMarca !== "Todas" && p.marca !== filtroMarca) return false;
+      if (!q) return true;
+      return (
+        p.codigo_jiva.toLowerCase().includes(q) ||
+        p.nome.toLowerCase().includes(q)
+      );
+    });
+  }, [produtos, busca, filtroMarca]);
+
+  const porMarca = useMemo(() => {
+    return produtosFiltrados.reduce<Record<string, Produto[]>>((acc, p) => {
+      (acc[p.marca] ||= []).push(p);
+      return acc;
+    }, {});
+  }, [produtosFiltrados]);
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-md border overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-28">SKU</TableHead>
-              <TableHead>Descrição</TableHead>
-              <TableHead className="w-24 text-right">Qtd.</TableHead>
-              <TableHead className="w-32 text-right">Preço unit.</TableHead>
-              <TableHead className="w-24 text-right">Desc. %</TableHead>
-              <TableHead className="w-32 text-right">Total</TableHead>
-              {!readonly && <TableHead className="w-10" />}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {itensLocais.length === 0 && (
-              <TableRow>
-                <TableCell
-                  colSpan={readonly ? 6 : 7}
-                  className="text-center text-muted-foreground py-6"
-                >
-                  Nenhum produto adicionado.
-                </TableCell>
-              </TableRow>
-            )}
-            {itensLocais.map((item, index) => (
-              <TableRow key={item.id}>
-                <TableCell>
-                  {readonly ? (
-                    item.sku
-                  ) : (
-                    <Input
-                      value={item.sku}
-                      onChange={(e) => atualizar(index, "sku", e.target.value)}
-                      className="h-8 text-sm"
-                    />
-                  )}
-                </TableCell>
-                <TableCell>
-                  {readonly ? (
-                    item.descricao
-                  ) : (
-                    <Input
-                      value={item.descricao}
-                      onChange={(e) =>
-                        atualizar(index, "descricao", e.target.value)
-                      }
-                      className="h-8 text-sm"
-                    />
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {readonly ? (
-                    item.quantidade
-                  ) : (
-                    <Input
-                      type="number"
-                      min={1}
-                      value={item.quantidade}
-                      onChange={(e) =>
-                        atualizar(index, "quantidade", Number(e.target.value))
-                      }
-                      className="h-8 text-sm text-right w-20 ml-auto"
-                    />
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {readonly ? (
-                    formatCurrency(item.preco_unitario)
-                  ) : (
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={item.preco_unitario}
-                      onChange={(e) =>
-                        atualizar(
-                          index,
-                          "preco_unitario",
-                          Number(e.target.value)
-                        )
-                      }
-                      className="h-8 text-sm text-right w-28 ml-auto"
-                    />
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {readonly ? (
-                    `${item.desconto}%`
-                  ) : (
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      step={0.1}
-                      value={item.desconto}
-                      onChange={(e) =>
-                        atualizar(index, "desconto", Number(e.target.value))
-                      }
-                      className="h-8 text-sm text-right w-20 ml-auto"
-                    />
-                  )}
-                </TableCell>
-                <TableCell className="text-right font-medium">
-                  {formatCurrency(
-                    item.quantidade *
-                      item.preco_unitario *
-                      (1 - item.desconto / 100)
-                  )}
-                </TableCell>
-                {!readonly && (
-                  <TableCell>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => remover(index)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+    <Card className="bg-[#F0FDF4] border-green-200">
+      <CardHeader>
+        <CardTitle>Produtos</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {bloqueado && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 flex items-start gap-2">
+            <span className="shrink-0 mt-0.5">⚠️</span>
+            <span>
+              Preencha todos os campos obrigatórios do cliente antes de adicionar produtos:{" "}
+              <strong>Comprador</strong>, <strong>Condição de pagamento</strong>{" "}
+              e <strong>Código do cliente</strong>.
+            </span>
+          </div>
+        )}
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por SKU ou nome…"
+              className="pl-9"
+              disabled={bloqueado}
+            />
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setImportOpen(true)}
+            disabled={bloqueado}
+            className="shrink-0"
+          >
+            <Upload className="h-4 w-4" />
+            Importar pedido
+          </Button>
+          <div className="flex flex-wrap gap-2">
+            {(["Todas", ...MARCAS] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setFiltroMarca(m)}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  filtroMarca === m
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background hover:bg-muted",
                 )}
-              </TableRow>
+              >
+                {m}
+              </button>
             ))}
-          </TableBody>
-        </Table>
-      </div>
+          </div>
+        </div>
 
-      {!readonly && (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={adicionarLinha}
-          className="gap-2"
-        >
-          <Plus className="h-4 w-4" />
-          Adicionar produto
-        </Button>
-      )}
+        <div className="space-y-4 max-h-96 overflow-y-auto rounded-md border p-3 bg-muted/20">
+          {Object.keys(porMarca).length === 0 && (
+            <div className="text-center text-sm text-muted-foreground py-6">Nenhum produto encontrado</div>
+          )}
+          {Object.entries(porMarca).map(([marca, lista]) => (
+            <div key={marca}>
+              <div className="mb-2 text-xs font-bold uppercase tracking-wider text-primary">{marca}</div>
+              <div className="grid gap-2 md:grid-cols-2">
+                {lista.map((p) => {
+                  const ja = itens.some((i) => i.produto_id === p.id);
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between gap-2 rounded-md border bg-card p-2 text-sm"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-mono text-xs text-muted-foreground">{p.codigo_jiva}</div>
+                        <div className="truncate">{p.nome}</div>
+                        <div className="text-[10px] text-muted-foreground">CX {p.cx_embarque}</div>
+                      </div>
+                      {!p.disponivel && (
+                        <div className="text-[10px] font-medium text-amber-600 flex items-center gap-1 mt-0.5">
+                          <span>⚠</span> Sem estoque
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={ja ? "secondary" : "default"}
+                        disabled={bloqueado || ja}
+                        onClick={() => adicionar(p)}
+                      >
+                        <Plus className="h-3 w-3" />
+                        {ja ? "Adicionado" : "Adicionar"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
 
-      <div className="flex justify-end">
-        <p className="text-sm font-semibold">
-          Total:{" "}
-          <span className="text-base">{formatCurrency(total)}</span>
-        </p>
-      </div>
-    </div>
+        {itensRecalculados.length > 0 && (
+          <div className="rounded-lg border overflow-x-auto shadow-sm">
+            <Table>
+              <TableHeader>
+                <TableRow style={{ backgroundColor: '#1a5c38' }} className="hover:bg-[#1a5c38]">
+                  <TableHead className="text-white text-[11px] font-semibold py-2">Produto</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-28">{quantidadeLivre ? "Qtd unidades" : "Qtd caixas"}</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">{quantidadeLivre ? "Qtd caixas" : "Qtd unidades"}</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Bruto</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right" style={{ minWidth: 110 }}>Desc. %</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Líquido</TableHead>
+                  {!descontoLivre && <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Com. %</TableHead>}
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right w-24">Trade %</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">P. Final</TableHead>
+                  <TableHead className="text-white text-[11px] font-semibold py-2 text-right">Total</TableHead>
+                  <TableHead className="text-white w-8 py-2"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {itensRecalculados.map((i, idx) => {
+                  const itemOriginal = itens.find(it => it.produto_id === i.produto_id) ?? i;
+                  return (
+                  <TableRow
+                    key={i.produto_id}
+                    style={{ backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8faf9' }}
+                    className="hover:bg-green-50/70 transition-colors"
+                  >
+                    {/* Produto */}
+                    <TableCell className="py-2 align-top">
+                      <div className="font-mono text-[10px] text-muted-foreground leading-none mb-0.5">{i.codigo}</div>
+                      <div className="text-xs font-medium leading-snug">{i.nome}</div>
+                    </TableCell>
+
+                    {/* Quantidade */}
+                    <TableCell className="text-right py-2 align-top">
+                      {quantidadeLivre ? (
+                        <div className="space-y-0.5">
+                          <Input
+                            key={i.produto_id + "-qtd-livre"}
+                            type="number" min={1}
+                            value={qtdDraft[i.produto_id] ?? String(i.quantidade)}
+                            onChange={(e) => setQtdDraft((d) => ({ ...d, [i.produto_id]: e.target.value }))}
+                            onBlur={(e) => {
+                              const qtd = Math.max(1, Number(e.target.value) || 1);
+                              atualizarQtd(i.produto_id, qtd);
+                              limparQtdDraft(i.produto_id);
+                            }}
+                            className={cn("w-20 ml-auto h-7 text-xs")}
+                          />
+                          {i.cx_embarque > 0 && i.quantidade % i.cx_embarque !== 0 && (
+                            <div className="flex items-start justify-end gap-1 text-[10px] leading-tight text-amber-600">
+                              <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
+                              <span className="text-left">
+                                Não é múltiplo de caixa ({i.cx_embarque} un). Sugestão:{" "}
+                                {Math.round(i.quantidade / i.cx_embarque) * i.cx_embarque} ou{" "}
+                                {(Math.round(i.quantidade / i.cx_embarque) + 1) * i.cx_embarque} un
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-0.5">
+                          <Input
+                            key={i.produto_id + "-qtd-cx"}
+                            type="number" min={1} step={1}
+                            value={qtdDraft[i.produto_id] ?? String(Math.round(i.quantidade / i.cx_embarque))}
+                            onChange={(e) => setQtdDraft((d) => ({ ...d, [i.produto_id]: e.target.value }))}
+                            onBlur={(e) => {
+                              const caixas = Math.max(1, Math.floor(Number(e.target.value) || 1));
+                              atualizarQtd(i.produto_id, caixas * i.cx_embarque);
+                              limparQtdDraft(i.produto_id);
+                            }}
+                            className={cn("w-20 ml-auto h-7 text-xs")}
+                          />
+                          <div className="text-[10px] text-muted-foreground text-right leading-none">
+                            Cx:{i.cx_embarque} · {i.quantidade}un
+                          </div>
+                        </div>
+                      )}
+                    </TableCell>
+
+                    {/* Conversão Qtd (somente exibição) */}
+                    <TableCell className="text-right py-2 align-top">
+                      <span className="text-xs font-semibold text-green-700">
+                        {quantidadeLivre
+                          ? `${Math.round(i.quantidade / i.cx_embarque)} cx`
+                          : `${i.quantidade} un`}
+                      </span>
+                    </TableCell>
+
+                    {/* P. Bruto */}
+                    <TableCell className="text-right py-2 align-top">
+                      <div className="text-xs font-medium">{formatBRL(i.preco_bruto)}</div>
+                    </TableCell>
+
+                    {/* Desc. % */}
+                    <TableCell className="text-right py-2 align-top">
+                      {descontoLivre ? (
+                        <Input
+                          type="number" min={0} max={100} step={0.01}
+                          value={parseFloat((i.desconto_perfil * 100).toFixed(2))}
+                          onChange={(e) => atualizarDescontoPerfil(i.produto_id, Math.min(1, Math.max(0, (parseFloat(e.target.value) || 0) / 100)))}
+                          onFocus={(e) => e.target.select()}
+                          className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
+                          placeholder="0"
+                        />
+                      ) : (
+                        <span className="text-[10px] text-muted-foreground">{(i.desconto_perfil * 100).toFixed(2)}%</span>
+                      )}
+                    </TableCell>
+
+                    {/* P. Líquido */}
+                    <TableCell className="text-right text-xs py-2 align-top">{formatBRL(i.preco_apos_perfil)}</TableCell>
+
+                    {/* Desc. Comercial */}
+                    {!descontoLivre && (
+                      <TableCell className="text-right py-2 align-top">
+                        <Input
+                          type="number" min={0} max={3} step={0.01}
+                          value={itemOriginal.desconto_comercial}
+                          onChange={(e) => atualizarDesconto(i.produto_id, "comercial", Math.min(3, Math.max(0, parseFloat(e.target.value) || 0)))}
+                          onFocus={(e) => e.target.select()}
+                          className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
+                          placeholder="0"
+                        />
+                        <div className="text-[9px] text-muted-foreground mt-0.5 text-right">máx 3%</div>
+                      </TableCell>
+                    )}
+
+                    {/* Desc. Trade */}
+                    <TableCell className="text-right py-2 align-top">
+                      <Input
+                        type="number" min={0} max={100} step={0.01}
+                        value={itemOriginal.desconto_trade}
+                        onChange={(e) => atualizarDesconto(i.produto_id, "trade", Math.max(0, parseFloat(e.target.value) || 0))}
+                        onFocus={(e) => e.target.select()}
+                        className={cn("w-24 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none")}
+                        placeholder="0"
+                      />
+                    </TableCell>
+
+                    {/* P. Final */}
+                    <TableCell className="text-right py-2 align-top">
+                      <span className="text-sm font-bold" style={{ color: '#1a5c38' }}>
+                        {formatBRL(i.preco_final)}
+                      </span>
+                    </TableCell>
+
+                    {/* Total */}
+                    <TableCell className="text-right py-2 align-top">
+                      <span className="text-sm font-bold" style={{ color: '#1a5c38' }}>
+                        {formatBRL(i.total)}
+                      </span>
+                    </TableCell>
+
+                    {/* Remover */}
+                    <TableCell className="py-2 align-top">
+                      <button
+                        type="button"
+                        onClick={() => remover(i.produto_id)}
+                        className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+
+      <ExtrairPedidoDialog
+        produtos={produtos}
+        onAdicionarItens={adicionarImportados}
+        open={importOpen}
+        onOpenChange={setImportOpen}
+      />
+    </Card>
   );
+}
+
+// helper: aplica recálculo apenas se houve mudança real
+function useMemoEffect(novos: ItemPedido[], atuais: ItemPedido[], onChange: (i: ItemPedido[]) => void) {
+  const ref = useRef<string>("");
+  useEffect(() => {
+    const sig = novos
+      .map((i) => `${i.produto_id}:${Number(i.preco_bruto).toFixed(6)}:${i.desconto_perfil}:${i.desconto_comercial}:${i.desconto_trade}:${i.quantidade}`)
+      .join("|");
+    const sigAtual = atuais
+      .map((i) => `${i.produto_id}:${Number(i.preco_bruto).toFixed(6)}:${i.desconto_perfil}:${i.desconto_comercial}:${i.desconto_trade}:${i.quantidade}`)
+      .join("|");
+    if (sig !== sigAtual && sig !== ref.current) {
+      ref.current = sig;
+      onChange(novos);
+    }
+  }, [novos, atuais, onChange]);
 }
