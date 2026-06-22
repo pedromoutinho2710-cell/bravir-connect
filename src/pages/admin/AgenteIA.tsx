@@ -88,9 +88,10 @@ type Modo = "analisar" | "implementar" | "aprovar";
 
 type TesteResultado = { passou: boolean; detalhe: string };
 
-type ResumoExecucao = {
-  processadas: number;
-  comPr: number;
+// Resumo genérico de um processamento em lote ("Executar todas" / "Aprovar todas").
+type ResumoLote = {
+  titulo: string;
+  stats: Array<{ label: string; valor: number; tone?: "ok" | "erro" }>;
   falhas: Array<{ titulo: string; motivo: string }>;
 };
 
@@ -156,6 +157,18 @@ function resumoCurto(texto: string | null, max = 220): string {
   return t.length > max ? t.slice(0, max).trimEnd() + "…" : t;
 }
 
+// Data + horário no formato DD/MM/YYYY HH:mm.
+function formatDataHora(iso: string | null): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 // Frase "como fica para o usuário" derivada da prioridade + arquivo afetado.
 function impactoDe(s: Solicitacao): string {
   const arquivo = arquivoDe(s);
@@ -171,8 +184,9 @@ export default function AgenteIA() {
   // status transitório por linha enquanto a edge function processa.
   const [emProcesso, setEmProcesso] = useState<Record<string, Modo>>({});
   const [executandoTodas, setExecutandoTodas] = useState(false);
+  const [aprovandoTodas, setAprovandoTodas] = useState(false);
   const [progresso, setProgresso] = useState<{ feito: number; total: number } | null>(null);
-  const [resumoExecucao, setResumoExecucao] = useState<ResumoExecucao | null>(null);
+  const [resumoLote, setResumoLote] = useState<ResumoLote | null>(null);
   // Resultado do agente-monitor (plano de ação inline, antes de criar as solicitações).
   const [monitorLoading, setMonitorLoading] = useState(false);
   const [problemasMonitor, setProblemasMonitor] = useState<ProblemaMonitor[] | null>(null);
@@ -211,6 +225,11 @@ export default function AgenteIA() {
   });
 
   const comPr = solicitacoes.filter((s) => s.agente_pr_url);
+
+  // Número sequencial por solicitação: a lista vem ordenada por created_at desc,
+  // então a mais recente é #1. Usado na lista, na seção de PRs e no painel lateral.
+  const numeroPorId = new Map(solicitacoes.map((s, i) => [s.id, i + 1]));
+  const numeroDe = (s: Solicitacao): number | null => numeroPorId.get(s.id) ?? null;
 
   // --- Métricas e agregações do dashboard -----------------------------------
   const prsCriados = dashboard.filter((s) => s.agente_pr_url);
@@ -330,7 +349,7 @@ export default function AgenteIA() {
     const lista = [...solicitacoes];
     if (!lista.length) return;
     setExecutandoTodas(true);
-    setResumoExecucao(null);
+    setResumoLote(null);
     setProgresso({ feito: 0, total: lista.length });
     const falhas: Array<{ titulo: string; motivo: string }> = [];
     let comPrOk = 0;
@@ -348,20 +367,64 @@ export default function AgenteIA() {
     }
     setExecutandoTodas(false);
     setProgresso(null);
-    setResumoExecucao({ processadas: lista.length, comPr: comPrOk, falhas });
+    setResumoLote({
+      titulo: "Resumo da execução",
+      stats: [
+        { label: "Processadas", valor: lista.length },
+        { label: "PRs criados", valor: comPrOk, tone: "ok" },
+        { label: "Falhas", valor: falhas.length, tone: "erro" },
+      ],
+      falhas,
+    });
     await invalidarTudo();
     toast.success("Processamento de todas as solicitações concluído");
   };
 
-  const exportarResumoExecucao = async () => {
-    if (!resumoExecucao) return;
-    const { processadas, comPr: comPrOk, falhas } = resumoExecucao;
+  // Aprova (merge + deploy + testes) em sequência todas as solicitações com PR.
+  const aprovarTodas = async () => {
+    const lista = solicitacoes.filter((s) => s.agente_pr_url);
+    if (!lista.length) {
+      toast.info("Nenhuma solicitação com PR para aprovar.");
+      return;
+    }
+    setAprovandoTodas(true);
+    setResumoLote(null);
+    setProgresso({ feito: 0, total: lista.length });
+    const falhas: Array<{ titulo: string; motivo: string }> = [];
+    let aprovadasOk = 0;
+    for (let i = 0; i < lista.length; i++) {
+      try {
+        await invocar(lista[i], "aprovar");
+        aprovadasOk++;
+      } catch (e) {
+        falhas.push({
+          titulo: tituloDe(lista[i]),
+          motivo: e instanceof Error ? e.message : String(e),
+        });
+      }
+      setProgresso({ feito: i + 1, total: lista.length });
+    }
+    setAprovandoTodas(false);
+    setProgresso(null);
+    setResumoLote({
+      titulo: "Resumo da aprovação",
+      stats: [
+        { label: "Aprovadas", valor: aprovadasOk, tone: "ok" },
+        { label: "Falhas", valor: falhas.length, tone: "erro" },
+      ],
+      falhas,
+    });
+    await invalidarTudo();
+    toast.success("Aprovação de todas as solicitações concluída");
+  };
+
+  const exportarResumo = async () => {
+    if (!resumoLote) return;
+    const { titulo, stats, falhas } = resumoLote;
     const txt = [
-      `# Resumo da execução — Bravir Connect · ${new Date().toLocaleDateString("pt-BR")}`,
+      `# ${titulo} — Bravir Connect · ${new Date().toLocaleDateString("pt-BR")}`,
       "",
-      `Processadas: ${processadas}`,
-      `PRs criados com sucesso: ${comPrOk}`,
-      `Falhas: ${falhas.length}`,
+      ...stats.map((s) => `${s.label}: ${s.valor}`),
       ...(falhas.length ? ["", "## Falhas", ...falhas.map((f) => `- ${f.titulo}: ${f.motivo}`)] : []),
     ].join("\n");
     await navigator.clipboard.writeText(txt);
@@ -524,7 +587,8 @@ export default function AgenteIA() {
     }
   };
 
-  const ocupado = executandoTodas || monitorLoading || aprovandoPlano || testando;
+  const ocupado =
+    executandoTodas || aprovandoTodas || monitorLoading || aprovandoPlano || testando;
 
   return (
     <div className="space-y-6">
@@ -567,18 +631,27 @@ export default function AgenteIA() {
             )}
             Executar todas
           </Button>
+          <Button onClick={aprovarTodas} disabled={ocupado || comPr.length === 0}>
+            {aprovandoTodas ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <GitMerge className="mr-1 h-4 w-4" />
+            )}
+            Aprovar todas
+          </Button>
         </div>
       </div>
 
-      {executandoTodas && progresso && (
+      {(executandoTodas || aprovandoTodas) && progresso && (
         <Card>
           <CardContent className="space-y-2 py-4">
             <div className="flex items-center justify-between text-sm">
               <span className="flex items-center gap-2 font-medium">
-                <Loader2 className="h-4 w-4 animate-spin" /> Processando solicitações…
+                <Loader2 className="h-4 w-4 animate-spin" />
+                {aprovandoTodas ? "Aprovando solicitações…" : "Processando solicitações…"}
               </span>
               <span className="text-muted-foreground">
-                {progresso.feito} de {progresso.total} concluídas
+                {progresso.feito} de {progresso.total} {aprovandoTodas ? "aprovadas" : "concluídas"}
               </span>
             </div>
             <Progress value={progresso.total ? (progresso.feito / progresso.total) * 100 : 0} />
@@ -586,21 +659,21 @@ export default function AgenteIA() {
         </Card>
       )}
 
-      {resumoExecucao && (
+      {resumoLote && (
         <Card>
           <CardContent className="space-y-3 py-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-sm font-semibold">
-                <ClipboardCheck className="h-4 w-4" /> Resumo da execução
+                <ClipboardCheck className="h-4 w-4" /> {resumoLote.titulo}
               </h2>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={exportarResumoExecucao}>
+                <Button size="sm" variant="outline" onClick={exportarResumo}>
                   <Download className="mr-1 h-4 w-4" /> Exportar resumo
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
-                  onClick={() => setResumoExecucao(null)}
+                  onClick={() => setResumoLote(null)}
                   aria-label="Fechar resumo"
                 >
                   <X className="h-4 w-4" />
@@ -608,22 +681,27 @@ export default function AgenteIA() {
               </div>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-muted-foreground">Processadas</p>
-                <p className="text-xl font-bold">{resumoExecucao.processadas}</p>
-              </div>
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-muted-foreground">PRs criados</p>
-                <p className="text-xl font-bold text-emerald-700">{resumoExecucao.comPr}</p>
-              </div>
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-muted-foreground">Falhas</p>
-                <p className="text-xl font-bold text-red-700">{resumoExecucao.falhas.length}</p>
-              </div>
+              {resumoLote.stats.map((s) => (
+                <div key={s.label} className="rounded-md border p-3">
+                  <p className="text-xs text-muted-foreground">{s.label}</p>
+                  <p
+                    className={
+                      "text-xl font-bold" +
+                      (s.tone === "ok"
+                        ? " text-emerald-700"
+                        : s.tone === "erro"
+                          ? " text-red-700"
+                          : "")
+                    }
+                  >
+                    {s.valor}
+                  </p>
+                </div>
+              ))}
             </div>
-            {resumoExecucao.falhas.length > 0 && (
+            {resumoLote.falhas.length > 0 && (
               <div className="space-y-1">
-                {resumoExecucao.falhas.map((f, i) => (
+                {resumoLote.falhas.map((f, i) => (
                   <p key={i} className="text-sm text-muted-foreground">
                     <span className="font-medium text-foreground">{f.titulo}:</span> {f.motivo}
                   </p>
@@ -779,11 +857,16 @@ export default function AgenteIA() {
                 <CardContent className="divide-y p-0">
                   {comPr.map((s) => (
                     <div key={s.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium">{tituloDe(s)}</p>
-                        <Badge variant="outline" className={metaDe(s.agente_status).className}>
-                          {metaDe(s.agente_status).label}
-                        </Badge>
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="shrink-0 text-sm font-semibold text-muted-foreground">
+                          #{numeroDe(s) ?? "?"}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{tituloDe(s)}</p>
+                          <Badge variant="outline" className={metaDe(s.agente_status).className}>
+                            {metaDe(s.agente_status).label}
+                          </Badge>
+                        </div>
                       </div>
                       <a
                         href={s.agente_pr_url ?? "#"}
@@ -830,17 +913,22 @@ export default function AgenteIA() {
                     onClick={() => setSelecionada(s)}
                   >
                     <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0 space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="truncate font-medium">{tituloDe(s)}</span>
-                          <Badge variant="outline" className={meta.className}>
-                            {meta.label}
-                          </Badge>
+                      <div className="flex min-w-0 gap-3">
+                        <span className="mt-0.5 inline-flex h-6 shrink-0 items-center rounded-md bg-primary/10 px-2 text-sm font-semibold text-primary">
+                          #{numeroDe(s) ?? "?"}
+                        </span>
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate font-medium">{tituloDe(s)}</span>
+                            <Badge variant="outline" className={meta.className}>
+                              {meta.label}
+                            </Badge>
+                          </div>
+                          <p className="line-clamp-2 text-sm text-muted-foreground">{s.descricao}</p>
+                          {s.criado_por_nome && (
+                            <p className="text-xs text-muted-foreground">Por {s.criado_por_nome}</p>
+                          )}
                         </div>
-                        <p className="line-clamp-2 text-sm text-muted-foreground">{s.descricao}</p>
-                        {s.criado_por_nome && (
-                          <p className="text-xs text-muted-foreground">Por {s.criado_por_nome}</p>
-                        )}
                       </div>
                       <div
                         className="flex flex-shrink-0 items-center gap-2"
@@ -986,81 +1074,195 @@ export default function AgenteIA() {
 
       <Sheet open={!!selecionada} onOpenChange={(aberto) => !aberto && setSelecionada(null)}>
         <SheetContent className="flex w-full flex-col sm:max-w-lg">
-          {selecionada && (
-            <>
-              <SheetHeader>
-                <SheetTitle>{tituloDe(selecionada)}</SheetTitle>
-                <SheetDescription>{selecionada.descricao}</SheetDescription>
-              </SheetHeader>
+          {selecionada &&
+            (() => {
+              const sel = selecionada;
+              const procSel = emProcesso[sel.id];
+              const statusSel =
+                procSel === "analisar"
+                  ? "analisando"
+                  : procSel === "implementar"
+                    ? "implementando"
+                    : procSel === "aprovar"
+                      ? "mergeando"
+                      : sel.agente_status;
+              const catSel = categoriaDe(sel);
+              const temPr = !!sel.agente_pr_url;
+              const mudancas = sel.agente_mudancas;
+              const prNum = prNumberFromUrl(sel.agente_pr_url);
+              const ocupadoSel = !!procSel;
+              return (
+                <>
+                  <SheetHeader>
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex h-6 shrink-0 items-center rounded-md bg-primary/10 px-2 text-sm font-semibold text-primary">
+                        #{numeroDe(sel) ?? "?"}
+                      </span>
+                      <SheetTitle className="text-left">{tituloDe(sel)}</SheetTitle>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <Badge variant="outline" className={metaDe(statusSel).className}>
+                        {metaDe(statusSel).label}
+                      </Badge>
+                      <Badge variant="outline" className={CATEGORIA_META[catSel] ?? CATEGORIA_META.bug}>
+                        {catSel}
+                      </Badge>
+                    </div>
+                    <SheetDescription className="sr-only">
+                      Detalhes completos da solicitação.
+                    </SheetDescription>
+                  </SheetHeader>
 
-              <div className="flex-1 space-y-4 overflow-y-auto py-4">
-                <div>
-                  <h3 className="mb-1 text-sm font-semibold">Resumo gerado pela IA</h3>
-                  {selecionada.agente_resumo ? (
-                    <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-                      {selecionada.agente_resumo}
-                    </p>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">
-                      Ainda não analisado. Clique em “Analisar com IA” para gerar um resumo.
-                    </p>
-                  )}
-                </div>
+                  <div className="flex-1 space-y-5 overflow-y-auto py-4 text-sm">
+                    <section className="space-y-1">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Origem
+                      </h3>
+                      <div className="space-y-1">
+                        <div className="flex gap-2">
+                          <span className="w-28 shrink-0 text-muted-foreground">Criado por</span>
+                          <span>{sel.criado_por_nome || "—"}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="w-28 shrink-0 text-muted-foreground">Data e hora</span>
+                          <span>{formatDataHora(sel.created_at)}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <span className="w-28 shrink-0 text-muted-foreground">Tela/arquivo</span>
+                          <span className="break-all font-mono text-xs">{arquivoDe(sel) || "—"}</span>
+                        </div>
+                      </div>
+                    </section>
 
-                {selecionada.agente_pr_url && (
-                  <a
-                    href={selecionada.agente_pr_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                  >
-                    Abrir Pull Request <ExternalLink className="h-3.5 w-3.5" />
-                  </a>
-                )}
-              </div>
+                    <section className="space-y-1">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Descrição original
+                      </h3>
+                      <p className="whitespace-pre-wrap text-muted-foreground">{sel.descricao}</p>
+                    </section>
 
-              <SheetFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
-                <Button
-                  className="w-full"
-                  disabled={!!emProcesso[selecionada.id]}
-                  onClick={() => invocar(selecionada, "aprovar")}
-                >
-                  {emProcesso[selecionada.id] === "aprovar" ? (
-                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                  ) : (
-                    <GitMerge className="mr-1 h-4 w-4" />
-                  )}
-                  Aprovar e fazer merge
-                </Button>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    disabled={!!emProcesso[selecionada.id]}
-                    onClick={() => invocar(selecionada, "implementar")}
-                  >
-                    {emProcesso[selecionada.id] === "implementar" ? (
-                      <Loader2 className="mr-1 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Check className="mr-1 h-4 w-4" />
+                    <section className="space-y-2">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Análise da IA
+                      </h3>
+                      {sel.agente_resumo ? (
+                        <p className="whitespace-pre-wrap text-muted-foreground">{sel.agente_resumo}</p>
+                      ) : (
+                        <p className="text-muted-foreground">
+                          Ainda não analisado. Clique em “Analisar com IA” para gerar um resumo.
+                        </p>
+                      )}
+                      {!!mudancas?.arquivos?.length && (
+                        <div className="space-y-1">
+                          <p className="font-medium">Arquivos que serão alterados</p>
+                          <ul className="space-y-1">
+                            {mudancas.arquivos.map((a, i) => (
+                              <li key={i} className="flex items-center gap-2">
+                                {a.acao && (
+                                  <Badge variant="outline" className="shrink-0 text-[10px] uppercase">
+                                    {a.acao}
+                                  </Badge>
+                                )}
+                                <span className="break-all font-mono text-xs text-muted-foreground">
+                                  {a.path}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {!!mudancas?.plano?.length && (
+                        <div className="space-y-1">
+                          <p className="font-medium">Plano de ação</p>
+                          <ol className="list-decimal space-y-0.5 pl-5 text-muted-foreground">
+                            {mudancas.plano.map((p, i) => (
+                              <li key={i}>{p}</li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                    </section>
+
+                    {temPr && (
+                      <section className="space-y-1">
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Pull Request
+                        </h3>
+                        <a
+                          href={sel.agente_pr_url ?? "#"}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 text-primary hover:underline"
+                        >
+                          Abrir PR{prNum ? ` #${prNum}` : ""} <ExternalLink className="h-3.5 w-3.5" />
+                        </a>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted-foreground">Status:</span>
+                          <Badge variant="outline" className={metaDe(statusSel).className}>
+                            {metaDe(statusSel).label}
+                          </Badge>
+                        </div>
+                      </section>
                     )}
-                    Só criar PR
-                  </Button>
-                  <Button
-                    variant="outline"
-                    disabled={!!emProcesso[selecionada.id]}
-                    onClick={() => reprovar(selecionada)}
-                  >
-                    <X className="mr-1 h-4 w-4" /> Reprovar
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  “Aprovar e fazer merge” mescla o PR, aguarda o deploy no Vercel e testa a produção —
-                  pode levar alguns minutos. Em caso de falha, reverte automaticamente.
-                </p>
-              </SheetFooter>
-            </>
-          )}
+                  </div>
+
+                  <SheetFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+                    {temPr ? (
+                      <Button
+                        className="w-full"
+                        disabled={ocupadoSel}
+                        onClick={() => invocar(sel, "aprovar")}
+                      >
+                        {procSel === "aprovar" ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : (
+                          <GitMerge className="mr-1 h-4 w-4" />
+                        )}
+                        Aprovar e fazer merge
+                      </Button>
+                    ) : (
+                      <Button
+                        className="w-full"
+                        disabled={ocupadoSel}
+                        onClick={() => invocar(sel, "implementar")}
+                      >
+                        {procSel === "implementar" ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="mr-1 h-4 w-4" />
+                        )}
+                        Só criar PR
+                      </Button>
+                    )}
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        disabled={ocupadoSel}
+                        onClick={() => invocar(sel, "analisar")}
+                      >
+                        {procSel === "analisar" ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Sparkles className="mr-1 h-4 w-4" />
+                        )}
+                        Analisar com IA
+                      </Button>
+                      <Button variant="outline" disabled={ocupadoSel} onClick={() => reprovar(sel)}>
+                        <X className="mr-1 h-4 w-4" /> Reprovar
+                      </Button>
+                    </div>
+                    {temPr && (
+                      <p className="text-xs text-muted-foreground">
+                        “Aprovar e fazer merge” mescla o PR, aguarda o deploy no Vercel e testa a
+                        produção — pode levar alguns minutos. Em caso de falha, reverte
+                        automaticamente.
+                      </p>
+                    )}
+                  </SheetFooter>
+                </>
+              );
+            })()}
         </SheetContent>
       </Sheet>
     </div>
