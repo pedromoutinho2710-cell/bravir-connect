@@ -88,8 +88,8 @@ type Props = {
   tipoPedido?: string;
 };
 
-// Marcas que não podem ser usadas em pedidos de bonificação
-const MARCAS_BLOQUEADAS_BONIFICACAO = ["Laby", "Bendita Cânfora"];
+// SKUs (codigo_jiva) que não podem ser usados em pedidos de bonificação
+const SKUS_BLOQUEADOS_BONIFICACAO = ["33", "6226", "35", "16", "4046", "17"];
 
 export function SecaoProdutos({
   produtos,
@@ -189,8 +189,8 @@ export function SecaoProdutos({
       toast.warning("Produto já adicionado");
       return;
     }
-    if (tipoPedido === "Bonificação" && MARCAS_BLOQUEADAS_BONIFICACAO.includes(p.marca)) {
-      toast.error(`Produtos ${p.marca} não podem ser usados em bonificação`);
+    if (tipoPedido === "Bonificação" && SKUS_BLOQUEADOS_BONIFICACAO.includes(p.codigo_jiva)) {
+      toast.error(`Produto ${p.nome} não pode ser usado em bonificação`);
       return;
     }
     onChange([...itens, calcItem(p, p.cx_embarque)]);
@@ -212,7 +212,7 @@ export function SecaoProdutos({
     let ignorados = 0;
     for (const { produto, quantidade } of novos) {
       if (idsExistentes.has(produto.id)) { ignorados++; continue; }
-      if (tipoPedido === "Bonificação" && MARCAS_BLOQUEADAS_BONIFICACAO.includes(produto.marca)) { ignorados++; continue; }
+      if (tipoPedido === "Bonificação" && SKUS_BLOQUEADOS_BONIFICACAO.includes(produto.codigo_jiva)) { ignorados++; continue; }
       atuais.push(calcItem(produto, Math.max(1, Math.floor(quantidade) || 1)));
       idsExistentes.add(produto.id);
     }
