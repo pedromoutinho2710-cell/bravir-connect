@@ -597,10 +597,11 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
                 onChange({
                   ...valueRef.current,
                   tipo: v,
-                  // Bonificação não tem pagamento à vista
-                  ...(v === "Bonificação" && valueRef.current.pagamento_vista
-                    ? { pagamento_vista: false, cond_pagamento: "" }
-                    : {}),
+                  // Bonificação não tem pagamento à vista; já preenche cond_pagamento
+                  // automaticamente para dispensar digitação do vendedor.
+                  ...(v === "Bonificação"
+                    ? { pagamento_vista: false, cond_pagamento: "Bonificação" }
+                    : { cond_pagamento: "" }),
                 })
               }
             >

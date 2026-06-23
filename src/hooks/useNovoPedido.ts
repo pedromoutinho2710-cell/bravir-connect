@@ -196,7 +196,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
   const camposObrigatoriosOk = isGestora
     ? !!cliente.cond_pagamento.trim()
     : !!(
-        cliente.cond_pagamento.trim() &&
+        (cliente.tipo === "Bonificação" || cliente.cond_pagamento.trim()) &&
         cliente.codigo_cliente.trim() &&
         cliente.comprador.trim()
       );
