@@ -546,9 +546,9 @@ export function SecaoProdutos({
                             <div className="flex items-start justify-end gap-1 text-[10px] leading-tight text-amber-600">
                               <AlertTriangle className="h-3 w-3 shrink-0 mt-px" />
                               <span className="text-left">
-                                Não é múltiplo de caixa ({i.cx_embarque} un). Sugestão:{" "}
-                                {Math.round(i.quantidade / i.cx_embarque) * i.cx_embarque} ou{" "}
-                                {(Math.round(i.quantidade / i.cx_embarque) + 1) * i.cx_embarque} un
+                                {tipoPedido === "Bonificação"
+                                  ? `Quantidade fracionada (caixa: ${i.cx_embarque} un). Considere oferecer esse item como bonificação ao cliente.`
+                                  : `Não é múltiplo de caixa (${i.cx_embarque} un). Sugestão: ${Math.round(i.quantidade / i.cx_embarque) * i.cx_embarque} ou ${(Math.round(i.quantidade / i.cx_embarque) + 1) * i.cx_embarque} un`}
                               </span>
                             </div>
                           )}

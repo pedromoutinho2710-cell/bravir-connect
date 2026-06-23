@@ -234,7 +234,7 @@ export default function NovoPedido() {
         perfilCliente={cliente.cluster}
         itens={itens}
         onChange={setItens}
-        quantidadeLivre={/pedro|julia|tamiris/i.test(user?.email ?? "")}
+        quantidadeLivre={/pedro|julia|tamiris/i.test(user?.email ?? "") || cliente.tipo === "Bonificação"}
         vigenciaId={vigenciaId}
         descontoLivre={descontoLivre}
         bloqueado={!camposObrigatoriosOk}
