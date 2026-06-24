@@ -13,6 +13,7 @@ type Etapa = "upload" | "preview" | "importando" | "concluido";
 
 type LinhaSankhya = {
   numero_nota: string;
+  numero_pedido_crm: string | null;
   tipo_operacao: string | null;
   data_faturamento: string | null;
   codigo_parceiro: string | null;
@@ -81,7 +82,7 @@ function parseData(raw: unknown): string | null {
 }
 
 type ColunaKey =
-  | "numero_nota" | "tipo_operacao" | "data_faturamento"
+  | "numero_nota" | "numero_pedido_crm" | "tipo_operacao" | "data_faturamento"
   | "codigo_parceiro" | "nome_parceiro" | "grupo_segmento" | "grupo_cliente" | "segmento"
   | "cidade_uf" | "cidade" | "uf"
   | "codigo_produto" | "descricao_produto" | "quantidade"
@@ -95,6 +96,7 @@ function detectarColuna(header: string): ColunaKey | null {
   if (!n) return null;
   if (n.includes("numero") && n.includes("nota")) return "numero_nota";
   if (n === "nota" || n.includes("nº nota") || n.includes("n nota")) return "numero_nota";
+  if (n.includes("pedido") && n.includes("crm")) return "numero_pedido_crm";
   if (n.includes("tipo") && n.includes("operacao")) return "tipo_operacao";
   if (n.includes("data") && n.includes("faturamento")) return "data_faturamento";
   if (n.includes("recebimento") && n.includes("pedido")) return "recebimento_pedido";
@@ -140,6 +142,10 @@ function mapearLinha(
   const numero_nota = String(get("numero_nota") ?? "").trim();
   if (!numero_nota) return null;
 
+  // "Número Pedido CRM" pode vir como inteiro, "-" ou vazio → trata "-"/vazio como null
+  const crmRaw = String(get("numero_pedido_crm") ?? "").trim();
+  const numero_pedido_crm = crmRaw && crmRaw !== "-" ? crmRaw : null;
+
   let grupo_cliente: string | null = (String(get("grupo_cliente") ?? "").trim() || null);
   let segmento: string | null = (String(get("segmento") ?? "").trim() || null);
   const gs = String(get("grupo_segmento") ?? "").trim();
@@ -160,6 +166,7 @@ function mapearLinha(
 
   return {
     numero_nota,
+    numero_pedido_crm,
     tipo_operacao: String(get("tipo_operacao") ?? "").trim() || null,
     data_faturamento: parseData(get("data_faturamento")),
     codigo_parceiro: String(get("codigo_parceiro") ?? "").trim() || null,
@@ -199,13 +206,19 @@ export default function ImportarFaturamento() {
   const [totalLinhas, setTotalLinhas] = useState(0);
   const [processando, setProcessando] = useState(false);
   const [progresso, setProgresso] = useState({ feitos: 0, total: 0 });
-  const [resultado, setResultado] = useState({ inseridos: 0, duplicados: 0 });
+  const [vinculando, setVinculando] = useState(false);
+  const [resultado, setResultado] = useState({
+    inseridos: 0,
+    duplicados: 0,
+    pedidosAtualizados: 0,
+    pedidosNaoEncontrados: 0,
+  });
 
   const baixarModelo = async () => {
     const XLSX = await import("xlsx");
     const ws = XLSX.utils.aoa_to_sheet([
       [
-        "Número da Nota", "Tipo de Operação", "Data do Faturamento",
+        "Número da Nota", "Número Pedido CRM", "Tipo de Operação", "Data do Faturamento",
         "Código do Parceiro", "Nome do Parceiro",
         "Grupo Cliente / Segmento", "Cidade / UF",
         "Código do Produto", "Descrição do Produto",
@@ -281,9 +294,11 @@ export default function ImportarFaturamento() {
     if (rows.length === 0) return;
 
     setEtapa("importando");
+    setVinculando(false);
     setProgresso({ feitos: 0, total: rows.length });
     let inseridos = 0;
     let processadosTotal = 0;
+    const todasLinhas: LinhaSankhya[] = [];
 
     const lote = 200;
     for (let i = 0; i < rows.length; i += lote) {
@@ -291,7 +306,10 @@ export default function ImportarFaturamento() {
       const payload: (LinhaSankhya & { importado_por: string | null })[] = [];
       for (const r of sliceRows) {
         const linha = mapearLinha(r, mapeamento);
-        if (linha) payload.push({ ...linha, importado_por: user?.id ?? null });
+        if (linha) {
+          todasLinhas.push(linha);
+          payload.push({ ...linha, importado_por: user?.id ?? null });
+        }
       }
 
       if (payload.length > 0) {
@@ -315,9 +333,128 @@ export default function ImportarFaturamento() {
     }
 
     const duplicados = processadosTotal - inseridos;
-    setResultado({ inseridos, duplicados });
+    if (!Array.from(mapeamento.values()).includes("numero_pedido_crm")) {
+      toast.info("Coluna 'Número Pedido CRM' não encontrada — pedidos não foram vinculados.");
+    }
+    const { pedidosAtualizados, pedidosNaoEncontrados } = await vincularPedidos(todasLinhas);
+
+    setResultado({ inseridos, duplicados, pedidosAtualizados, pedidosNaoEncontrados });
     setEtapa("concluido");
-    toast.success(`${inseridos} registros importados, ${duplicados} já existiam`);
+    toast.success(`${inseridos} registros importados, ${pedidosAtualizados} pedidos faturados`);
+  };
+
+  // Após importar o staging, vincula os registros aos pedidos do CRM:
+  // agrupa por numero_pedido_crm, marca o pedido como faturado e registra a NF.
+  const vincularPedidos = async (
+    linhas: LinhaSankhya[],
+  ): Promise<{ pedidosAtualizados: number; pedidosNaoEncontrados: number }> => {
+    setVinculando(true);
+
+    // Agrupa por numero_pedido_crm (já vem null para "-"/vazio). A chave é o
+    // numero_pedido inteiro usado na tabela pedidos.
+    type GrupoCrm = { notas: Set<string>; dataMax: string | null };
+    const grupos = new Map<number, GrupoCrm>();
+    for (const l of linhas) {
+      if (!l.numero_pedido_crm) continue;
+      const num = parseInt(l.numero_pedido_crm, 10);
+      // numero_pedido é integer (int4) no banco: descarta NaN, não-positivos e
+      // valores fora do range para não derrubar o lote inteiro do .in() abaixo.
+      if (!Number.isInteger(num) || num < 1 || num > 2147483647) continue;
+      let g = grupos.get(num);
+      if (!g) {
+        g = { notas: new Set(), dataMax: null };
+        grupos.set(num, g);
+      }
+      if (l.numero_nota) g.notas.add(l.numero_nota);
+      if (l.data_faturamento && (!g.dataMax || l.data_faturamento > g.dataMax)) {
+        g.dataMax = l.data_faturamento;
+      }
+    }
+
+    if (grupos.size === 0) return { pedidosAtualizados: 0, pedidosNaoEncontrados: 0 };
+
+    const buscaLote = 200;
+    const numeros = Array.from(grupos.keys());
+
+    // Localiza os pedidos correspondentes (numero_pedido = numero_pedido_crm).
+    const pedidoPorNumero = new Map<number, string>();
+    for (let i = 0; i < numeros.length; i += buscaLote) {
+      const fatia = numeros.slice(i, i + buscaLote);
+      const { data, error } = await supabase
+        .from("pedidos")
+        .select("id, numero_pedido")
+        .in("numero_pedido", fatia);
+      if (error) {
+        console.error(error);
+        toast.error(`Erro ao buscar pedidos: ${error.message}`);
+        continue;
+      }
+      for (const p of data ?? []) {
+        if (p.numero_pedido != null) pedidoPorNumero.set(p.numero_pedido, p.id);
+      }
+    }
+
+    // Pré-carrega faturamentos existentes (pedido_id + nota_fiscal) para ignorar
+    // duplicatas sem depender de constraint única no banco.
+    const fatExistentes = new Set<string>();
+    const pedidoIds = Array.from(pedidoPorNumero.values());
+    for (let i = 0; i < pedidoIds.length; i += buscaLote) {
+      const fatia = pedidoIds.slice(i, i + buscaLote);
+      const { data, error } = await supabase
+        .from("faturamentos")
+        .select("pedido_id, nota_fiscal")
+        .in("pedido_id", fatia);
+      if (error) {
+        console.error(error);
+        continue;
+      }
+      for (const f of data ?? []) fatExistentes.add(`${f.pedido_id}::${f.nota_fiscal ?? ""}`);
+    }
+
+    let pedidosAtualizados = 0;
+    let pedidosNaoEncontrados = 0;
+    const novosFaturamentos: { pedido_id: string; nota_fiscal: string; usuario_id: string | null }[] = [];
+
+    for (const [num, g] of grupos) {
+      const pedidoId = pedidoPorNumero.get(num);
+      if (!pedidoId) {
+        pedidosNaoEncontrados++;
+        continue;
+      }
+
+      const update: { status: string; faturado_em?: string } = { status: "faturado" };
+      if (g.dataMax) update.faturado_em = g.dataMax;
+      const { data: upd, error: updErr } = await supabase
+        .from("pedidos")
+        .update(update)
+        .eq("id", pedidoId)
+        .neq("status", "faturado") // só conta/atualiza transições reais (idempotente em reimport)
+        .select("id");
+      if (updErr) {
+        console.error(updErr);
+        toast.error(`Erro ao atualizar pedido ${num}: ${updErr.message}`);
+        continue;
+      }
+      if ((upd ?? []).length > 0) pedidosAtualizados++;
+
+      for (const nota of g.notas) {
+        const chave = `${pedidoId}::${nota}`;
+        if (fatExistentes.has(chave)) continue;
+        fatExistentes.add(chave);
+        novosFaturamentos.push({ pedido_id: pedidoId, nota_fiscal: nota, usuario_id: user?.id ?? null });
+      }
+    }
+
+    for (let i = 0; i < novosFaturamentos.length; i += buscaLote) {
+      const fatia = novosFaturamentos.slice(i, i + buscaLote);
+      const { error } = await supabase.from("faturamentos").insert(fatia);
+      if (error) {
+        console.error(error);
+        toast.error(`Erro ao registrar notas fiscais: ${error.message}`);
+      }
+    }
+
+    return { pedidosAtualizados, pedidosNaoEncontrados };
   };
 
   const reiniciar = () => {
@@ -325,8 +462,9 @@ export default function ImportarFaturamento() {
     mapeamentoRef.current = new Map();
     setPrevia([]);
     setTotalLinhas(0);
-    setResultado({ inseridos: 0, duplicados: 0 });
+    setResultado({ inseridos: 0, duplicados: 0, pedidosAtualizados: 0, pedidosNaoEncontrados: 0 });
     setProgresso({ feitos: 0, total: 0 });
+    setVinculando(false);
     setEtapa("upload");
     if (inputRef.current) inputRef.current.value = "";
   };
@@ -429,12 +567,14 @@ export default function ImportarFaturamento() {
           <CardContent className="flex flex-col items-center justify-center gap-4 p-12">
             <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
-              Importando {progresso.feitos.toLocaleString("pt-BR")} de {progresso.total.toLocaleString("pt-BR")}...
+              {vinculando
+                ? "Vinculando pedidos do CRM e registrando notas fiscais..."
+                : `Importando ${progresso.feitos.toLocaleString("pt-BR")} de ${progresso.total.toLocaleString("pt-BR")}...`}
             </p>
             <div className="h-2 w-full max-w-md overflow-hidden rounded bg-muted">
               <div
                 className="h-full bg-primary transition-all"
-                style={{ width: `${progresso.total > 0 ? (progresso.feitos / progresso.total) * 100 : 0}%` }}
+                style={{ width: `${vinculando ? 100 : progresso.total > 0 ? (progresso.feitos / progresso.total) * 100 : 0}%` }}
               />
             </div>
           </CardContent>
@@ -447,9 +587,24 @@ export default function ImportarFaturamento() {
             <CheckCircle2 className="h-10 w-10 text-green-600" />
             <div className="text-center">
               <p className="text-lg font-semibold">Importação concluída</p>
-              <p className="text-sm text-muted-foreground">
-                {resultado.inseridos} registros importados, {resultado.duplicados} já existiam e foram ignorados
-              </p>
+            </div>
+            <div className="grid w-full max-w-md grid-cols-2 gap-3">
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-2xl font-bold">{resultado.inseridos.toLocaleString("pt-BR")}</p>
+                <p className="text-xs text-muted-foreground">registros importados</p>
+              </div>
+              <div className="rounded-lg border p-3 text-center">
+                <p className="text-2xl font-bold">{resultado.duplicados.toLocaleString("pt-BR")}</p>
+                <p className="text-xs text-muted-foreground">já existiam (ignorados)</p>
+              </div>
+              <div className="rounded-lg border border-green-300 bg-green-50 p-3 text-center">
+                <p className="text-2xl font-bold text-green-700">{resultado.pedidosAtualizados.toLocaleString("pt-BR")}</p>
+                <p className="text-xs text-green-700">pedidos faturados</p>
+              </div>
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-center">
+                <p className="text-2xl font-bold text-amber-700">{resultado.pedidosNaoEncontrados.toLocaleString("pt-BR")}</p>
+                <p className="text-xs text-amber-700">não encontrados no CRM</p>
+              </div>
             </div>
             <Button onClick={reiniciar}>Nova importação</Button>
           </CardContent>
