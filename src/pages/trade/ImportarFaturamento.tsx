@@ -411,7 +411,6 @@ export default function ImportarFaturamento() {
       for (const f of data ?? []) fatExistentes.add(`${f.pedido_id}::${f.nota_fiscal ?? ""}`);
     }
 
-    let pedidosAtualizados = 0;
     let pedidosNaoEncontrados = 0;
     const novosFaturamentos: { pedido_id: string; nota_fiscal: string; usuario_id: string | null }[] = [];
 
@@ -422,21 +421,7 @@ export default function ImportarFaturamento() {
         continue;
       }
 
-      const update: { status: string; faturado_em?: string } = { status: "faturado" };
-      if (g.dataMax) update.faturado_em = g.dataMax;
-      const { data: upd, error: updErr } = await supabase
-        .from("pedidos")
-        .update(update)
-        .eq("id", pedidoId)
-        .neq("status", "faturado") // só conta/atualiza transições reais (idempotente em reimport)
-        .select("id");
-      if (updErr) {
-        console.error(updErr);
-        toast.error(`Erro ao atualizar pedido ${num}: ${updErr.message}`);
-        continue;
-      }
-      if ((upd ?? []).length > 0) pedidosAtualizados++;
-
+      // De-dup: só envia notas que ainda não existem para o pedido.
       for (const nota of g.notas) {
         const chave = `${pedidoId}::${nota}`;
         if (fatExistentes.has(chave)) continue;
@@ -445,14 +430,26 @@ export default function ImportarFaturamento() {
       }
     }
 
-    for (let i = 0; i < novosFaturamentos.length; i += buscaLote) {
-      const fatia = novosFaturamentos.slice(i, i + buscaLote);
-      const { error } = await supabase.from("faturamentos").insert(fatia);
-      if (error) {
-        console.error(error);
-        toast.error(`Erro ao registrar notas fiscais: ${error.message}`);
-      }
+    // O UPDATE de pedidos e o INSERT de faturamentos são bloqueados por RLS para o
+    // role trade; ambos rodam de uma vez via função SECURITY DEFINER vincular_pedidos_sankhya.
+    // types.ts ainda não conhece a função — cast igual ao usado em faturamentos_sankhya.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: rpcResult, error: rpcError } = await (supabase as any).rpc("vincular_pedidos_sankhya", {
+      p_pedido_ids: pedidoIds,
+      p_status: "faturado",
+      p_faturamentos: novosFaturamentos,
+    });
+    if (rpcError) {
+      console.error(rpcError);
+      toast.error(`Erro ao vincular pedidos: ${rpcError.message}`);
+      return { pedidosAtualizados: 0, pedidosNaoEncontrados };
     }
+
+    const pedidosAtualizados = Number(rpcResult?.pedidos_atualizados ?? 0);
+    const faturamentosInseridos = Number(rpcResult?.faturamentos_inseridos ?? 0);
+    console.info(
+      `Vinculação Sankhya: ${pedidosAtualizados} pedidos atualizados, ${faturamentosInseridos} faturamentos inseridos.`,
+    );
 
     return { pedidosAtualizados, pedidosNaoEncontrados };
   };
