@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { FileText, Calculator, LayoutTemplate, Eye, ClipboardList } from "lucide-react";
+import { FileText, Calculator, LayoutTemplate, Eye, ClipboardList, Bot } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -150,6 +150,7 @@ export function AppSidebar() {
         { title: "Propostas", url: "/propostas", icon: FileText },
         { title: "Calculadora", url: "/calculadora", icon: Calculator },
         { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
+        { title: "Meu Agente", url: "/meu-agente", icon: Bot },
       ]
     : [];
 

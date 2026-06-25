@@ -53,7 +53,6 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Tabelas de Preço", url: "/admin/tabelas-preco", icon: Tag },
       { title: "Gestão de Preços", url: "/admin/gestao-precos", icon: Tag },
       { title: "Configurações", url: "/admin/configuracoes", icon: Settings },
-      { title: "Agente IA", url: "/admin/agente-ia", icon: Bot },
       { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
       { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
       { title: "Lixeira", url: "/lixeira", icon: Trash2 },
