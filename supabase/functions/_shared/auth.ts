@@ -8,13 +8,20 @@ const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 export const allowedOrigin =
   Deno.env.get("CORS_ORIGIN") ?? "https://bravir-connect.vercel.app";
 
-/** Monta os headers de CORS restritos à origem do app. */
-export function corsHeaders(extraAllowHeaders = ""): Record<string, string> {
+/** Monta os headers de CORS aceitando a origem do request se for localhost ou a URL de produção. */
+export function corsHeaders(reqOrExtra?: Request | null | string, extraAllowHeaders = ""): Record<string, string> {
+  const req = reqOrExtra instanceof Request ? reqOrExtra : null;
+  const extra = typeof reqOrExtra === "string" ? reqOrExtra : extraAllowHeaders;
+
+  const requestOrigin = req?.headers.get("origin") ?? "";
+  const isLocalhost = /^https?:\/\/localhost(:\d+)?$/.test(requestOrigin);
+  const origin = isLocalhost || requestOrigin === allowedOrigin ? requestOrigin : allowedOrigin;
+
   const allow =
     "authorization, x-client-info, apikey, content-type" +
-    (extraAllowHeaders ? ", " + extraAllowHeaders : "");
+    (extra ? ", " + extra : "");
   return {
-    "Access-Control-Allow-Origin": allowedOrigin,
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Headers": allow,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
   };

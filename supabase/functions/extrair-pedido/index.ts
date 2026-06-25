@@ -5,8 +5,6 @@ import { authenticate, corsHeaders as buildCors } from "../_shared/auth.ts";
 // Configure com: npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 
-const corsHeaders = buildCors();
-
 type ItemCatalogo = { id: string; codigo_jiva: string; nome: string };
 
 function montarPrompt(catalogo: ItemCatalogo[]): string {
@@ -33,16 +31,18 @@ function montarPrompt(catalogo: ItemCatalogo[]): string {
   );
 }
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
 serve(async (req) => {
+  const ch = buildCors(req);
+
+  function json(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...ch, "Content-Type": "application/json" },
+    });
+  }
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: ch });
   }
 
   const auth = await authenticate(req, ["vendedor", "gestora", "faturamento", "admin"]);

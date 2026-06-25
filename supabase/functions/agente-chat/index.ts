@@ -5,8 +5,6 @@ import { authenticate, corsHeaders as buildCors } from "../_shared/auth.ts";
 // Configure com: npx supabase secrets set ANTHROPIC_API_KEY=sk-ant-...
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 
-const corsHeaders = buildCors();
-
 const SYSTEM_PROMPT = `Você é o assistente interno do Bravir CRM, plataforma B2B da Bravir Industrial (marcas: Bravir, Alivik, Bendita Cânfora, Laby, Tattoo do Bem). Ajude colaboradores com dúvidas sobre o sistema, colete bugs e sugestões.
 
 CLASSIFICAÇÃO:
@@ -21,16 +19,18 @@ REGISTRO:{"tipo":"bug"|"nova"|"altera","titulo":"título curto em até 8 palavra
 Módulos do CRM: Novo Pedido, Meus Pedidos, Faturamento, Logística, Clientes, Meu Pipeline, Relatórios, Gestão do Time, Solicitações.
 Seja direto, amigável, em português brasileiro.`;
 
-function json(body: unknown, status = 200) {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
-  });
-}
-
 serve(async (req) => {
+  const ch = buildCors(req);
+
+  function json(body: unknown, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...ch, "Content-Type": "application/json" },
+    });
+  }
+
   if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
+    return new Response("ok", { headers: ch });
   }
 
   // Qualquer usuário autenticado pode usar o assistente, mas exige JWT válido.
