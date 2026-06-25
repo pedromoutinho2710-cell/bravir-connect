@@ -1010,7 +1010,7 @@ export default function Faturamento() {
         const idsSaldo = itensSaldo.map((i) => i.id);
         const { data: itensOrigem, error: errItens } = await supabase
           .from("itens_pedido")
-          .select("produto_id, quantidade, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_comercial, desconto_trade, total_item")
+          .select("produto_id, quantidade, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_perfil, desconto_comercial, desconto_trade, total_item")
           .in("id", idsSaldo);
         if (errItens || !itensOrigem) throw new Error(errItens?.message ?? "falha ao buscar itens originais");
 
@@ -1024,6 +1024,7 @@ export default function Faturamento() {
           preco_apos_perfil: i.preco_apos_perfil,
           preco_apos_comercial: i.preco_apos_comercial,
           preco_final: i.preco_final,
+          desconto_perfil: i.desconto_perfil,
           desconto_comercial: i.desconto_comercial,
           desconto_trade: i.desconto_trade,
           total_item: i.total_item,
@@ -1298,7 +1299,7 @@ export default function Faturamento() {
     const idsComSaldo = itensComSaldo.map((i) => i.id);
     const { data: itensOrigem, error: errItens } = await supabase
       .from("itens_pedido")
-      .select("id, produto_id, quantidade, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_comercial, desconto_trade, total_item")
+      .select("id, produto_id, quantidade, preco_unitario_bruto, preco_unitario_liquido, preco_apos_perfil, preco_apos_comercial, preco_final, desconto_perfil, desconto_comercial, desconto_trade, total_item")
       .in("id", idsComSaldo);
     if (errItens || !itensOrigem) {
       toast.error("Erro ao buscar itens originais: " + (errItens?.message ?? ""));
@@ -1343,6 +1344,7 @@ export default function Faturamento() {
         preco_apos_perfil: i.preco_apos_perfil,
         preco_apos_comercial: i.preco_apos_comercial,
         preco_final: i.preco_final,
+        desconto_perfil: i.desconto_perfil,
         desconto_comercial: i.desconto_comercial,
         desconto_trade: i.desconto_trade,
         total_item: Number(i.quantidade) > 0

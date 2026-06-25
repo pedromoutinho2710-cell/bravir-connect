@@ -1,5 +1,4 @@
-import { useMemo, useRef, useState } from "react";
-import * as XLSX from "xlsx";
+import { useEffect, useMemo, useState } from "react";
 import {
   ResponsiveContainer,
   BarChart,
@@ -32,9 +31,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { toast } from "sonner";
 import { MESES, MESES_ABREV, formatBRL } from "@/lib/format";
-import { Upload, TrendingUp } from "lucide-react";
+import { TrendingUp } from "lucide-react";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Tipos e utilitários
@@ -75,30 +73,11 @@ const norm = (s: unknown) =>
     .toUpperCase()
     .trim();
 
-// Converte célula em número, tolerando strings pt-BR ("1.234,56") e "R$".
-const toNum = (v: unknown): number => {
-  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-  if (v == null) return 0;
-  let s = String(v).trim();
-  if (!s) return 0;
-  s = s.replace(/[R$\s]/g, "");
-  if (s.includes(",") && s.includes(".")) s = s.replace(/\./g, "").replace(",", ".");
-  else if (s.includes(",")) s = s.replace(",", ".");
-  const n = parseFloat(s);
-  return Number.isFinite(n) ? n : 0;
-};
-
-// Índice do mês (0-11) a partir do nome em pt-BR; -1 se não reconhecido.
+// Índice do mês (0-11) a partir do nome em pt-BR.
 const MES_INDEX: Record<string, number> = {};
 MESES.forEach((m, i) => {
   MES_INDEX[norm(m)] = i;
 });
-const mesIdxDe = (s: unknown): number => {
-  const n = norm(s);
-  if (n in MES_INDEX) return MES_INDEX[n];
-  const i = MESES_ABREV.findIndex((a) => norm(a) === n.slice(0, 3));
-  return i;
-};
 
 const fmtInt = (n: number) => Math.round(Number.isFinite(n) ? n : 0).toLocaleString("pt-BR");
 
@@ -183,35 +162,6 @@ const BRAND_ORDER: BrandKey[] = ["alivik", "laby", "bendita"];
 // ──────────────────────────────────────────────────────────────────────────
 // Parsing e agregação
 // ──────────────────────────────────────────────────────────────────────────
-
-// Acessa uma coluna tolerando variações de acento/caixa/espaços no cabeçalho.
-function pick(row: Record<string, unknown>, ...candidates: string[]): unknown {
-  for (const c of candidates) if (c in row) return row[c];
-  const wanted = candidates.map((c) => norm(c).replace(/\s+/g, " "));
-  for (const k of Object.keys(row)) {
-    if (wanted.includes(norm(k).replace(/\s+/g, " "))) return row[k];
-  }
-  return undefined;
-}
-
-function parseRows(raw: Record<string, unknown>[]): Row[] {
-  return raw.map((r) => {
-    const marca = String(pick(r, "Marca") ?? "").trim();
-    return {
-      marca,
-      marcaNorm: norm(marca),
-      categoria: String(pick(r, "Categoria") ?? "").trim(),
-      tipo: String(pick(r, "Tipo produto", "Tipo Produto") ?? "").trim(),
-      apresentacao: String(pick(r, "Apresentacao", "Apresentação") ?? "").trim(),
-      ano: Math.round(toNum(pick(r, "Ano"))),
-      mesIdx: mesIdxDe(pick(r, "Mes Calendario", "Mês Calendário")),
-      uf: String(pick(r, "UF") ?? "").trim().toUpperCase(),
-      regiao: String(pick(r, "Regiao", "Região") ?? "").trim(),
-      unidade: toNum(pick(r, "Unidade")),
-      fat: toNum(pick(r, "Real CH")),
-    };
-  });
-}
 
 function aggBy(rows: Row[], keyFn: (r: Row) => string, labelFn: (r: Row) => string): Agg[] {
   const map = new Map<string, Agg>();
@@ -925,9 +875,9 @@ export default function DadosIQVIA() {
   const [mesSelecionado, setMesSelecionado] = useState<string>("all");
   const [anoBase, setAnoBase] = useState<number | "all">("all");
   const [regiao, setRegiao] = useState<string>("Todas");
-  const [arquivoNome, setArquivoNome] = useState<string | null>(null);
-
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [geradoEm, setGeradoEm] = useState<string>("");
+  const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState<string | null>(null);
 
   const theme = BRANDS[marca];
   const anoRef = anoBase === "all" ? 2026 : anoBase;
@@ -937,67 +887,74 @@ export default function DadosIQVIA() {
     laby: dadosLaby,
     bendita: dadosBendita,
   };
-  const arquivoCarregado =
-    dadosAlivik.length > 0 || dadosLaby.length > 0 || dadosBendita.length > 0;
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const wb = XLSX.read(ev.target?.result, { type: "binary" });
-
-        // Lê cada aba isoladamente — uma aba faltando não derruba as demais.
-        const lerAba = (theme: BrandTheme): Row[] => {
-          try {
-            const sheet = wb.Sheets[theme.sheet];
-            if (!sheet) {
-              toast.warning(`Aba "${theme.sheet}" não encontrada.`);
-              return [];
-            }
-            const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: null });
-            return parseRows(raw).filter(theme.filter);
-          } catch (err) {
-            toast.error(`Erro ao ler aba "${theme.sheet}".`);
-            return [];
-          }
-        };
-
-        const a = lerAba(BRANDS.alivik);
-        const l = lerAba(BRANDS.laby);
-        const b = lerAba(BRANDS.bendita);
-
-        setDadosAlivik(a);
-        setDadosLaby(l);
-        setDadosBendita(b);
-        setArquivoNome(file.name);
-
-        const total = a.length + l.length + b.length;
-        if (total > 0) toast.success(`Base IQVIA carregada — ${fmtInt(total)} registros.`);
-        else toast.error("Nenhum registro válido encontrado no arquivo.");
-      } catch (err) {
-        toast.error("Não foi possível ler o arquivo Excel.");
-      }
-    };
-    reader.onerror = () => toast.error("Falha ao ler o arquivo.");
-    reader.readAsBinaryString(file);
-    // Permite reimportar o mesmo arquivo na sequência.
-    e.target.value = "";
-  };
+  // Carrega a base IQVIA estática (public/iqvia_data.json) ao montar.
+  useEffect(() => {
+    setCarregando(true);
+    fetch("/iqvia_data.json")
+      .then((res) => {
+        if (!res.ok) throw new Error("Arquivo não encontrado");
+        return res.json();
+      })
+      .then((data) => {
+        // Converter alivik
+        const alivik: Row[] = (data.alivik ?? []).map((d: any) => ({
+          marca: d.m,
+          marcaNorm: norm(d.m),
+          categoria: "",
+          tipo: "",
+          apresentacao: "",
+          ano: d.a,
+          mesIdx: d.mi,
+          uf: d.uf,
+          regiao: d.r,
+          unidade: d.u ?? 0,
+          fat: d.f ?? 0,
+        }));
+        // Converter laby (igual ao alivik)
+        const laby: Row[] = (data.laby ?? []).map((d: any) => ({
+          marca: d.m,
+          marcaNorm: norm(d.m),
+          categoria: "",
+          tipo: "",
+          apresentacao: "",
+          ano: d.a,
+          mesIdx: d.mi,
+          uf: d.uf,
+          regiao: d.r,
+          unidade: d.u ?? 0,
+          fat: d.f ?? 0,
+        }));
+        // Converter bendita
+        const bendita: Row[] = (data.bendita ?? []).map((d: any) => ({
+          marca: "BENDITA CANFORA (BVR)",
+          marcaNorm: norm("BENDITA CANFORA (BVR)"),
+          categoria: "GRIPES E RESFRIADOS",
+          tipo: "",
+          apresentacao: d.p ?? "",
+          ano: d.a,
+          mesIdx: d.mi,
+          uf: d.uf,
+          regiao: d.r,
+          unidade: 0,
+          fat: d.f ?? 0,
+        }));
+        setDadosAlivik(alivik);
+        setDadosLaby(laby);
+        setDadosBendita(bendita);
+        setGeradoEm(data.geradoEm ?? "");
+        setCarregando(false);
+      })
+      .catch(() => {
+        setErro("Não foi possível carregar a base IQVIA.");
+        setCarregando(false);
+      });
+  }, []);
 
   const dadosMarca = dados[marca];
 
   return (
     <div className="space-y-6 p-4 sm:p-6">
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".xlsx,.xls"
-        className="hidden"
-        onChange={handleUpload}
-      />
-
       {/* Header com seletor de marca */}
       <div className="rounded-xl p-5 text-white sm:p-6" style={{ backgroundColor: theme.dark }}>
         <div className="flex items-center gap-2">
@@ -1093,44 +1050,24 @@ export default function DadosIQVIA() {
               </SelectContent>
             </Select>
           </div>
-
-          <div className="ml-auto flex flex-col items-end gap-1">
-            <Button onClick={() => inputRef.current?.click()} style={{ backgroundColor: theme.dark }}>
-              <Upload className="mr-1 h-4 w-4" />
-              Atualizar base IQVIA
-            </Button>
-            {arquivoNome && (
-              <span className="text-xs text-muted-foreground">{arquivoNome}</span>
-            )}
-          </div>
         </CardContent>
       </Card>
 
       {/* Conteúdo */}
-      {!arquivoCarregado ? (
+      {carregando ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-            <div
-              className="flex h-14 w-14 items-center justify-center rounded-full"
-              style={{ backgroundColor: theme.tagBg }}
-            >
-              <Upload className="h-7 w-7" style={{ color: theme.tagFg }} />
-            </div>
-            <p className="max-w-md text-sm text-muted-foreground">
-              Nenhuma base IQVIA carregada. Clique em "Atualizar base IQVIA" para importar o arquivo
-              Excel.
-            </p>
-            <Button onClick={() => inputRef.current?.click()} style={{ backgroundColor: theme.dark }}>
-              <Upload className="mr-1 h-4 w-4" />
-              Atualizar base IQVIA
-            </Button>
+          <CardContent className="flex items-center justify-center py-16">
+            <p className="text-sm text-muted-foreground">Carregando base IQVIA...</p>
           </CardContent>
+        </Card>
+      ) : erro ? (
+        <Card>
+          <CardContent className="py-16 text-center text-sm text-red-500">{erro}</CardContent>
         </Card>
       ) : dadosMarca.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center text-sm text-muted-foreground">
-            Sem dados de <strong>{theme.label}</strong> nesta base. Verifique se a aba "{theme.sheet}"
-            existe no arquivo importado.
+            Sem dados de <strong>{theme.label}</strong> nesta base.
           </CardContent>
         </Card>
       ) : marca === "bendita" ? (
@@ -1143,6 +1080,12 @@ export default function DadosIQVIA() {
           mes={mesSelecionado}
           anoRef={anoRef}
         />
+      )}
+
+      {geradoEm && (
+        <p className="text-center text-xs text-muted-foreground">
+          Base IQVIA · Gerado em: {geradoEm}
+        </p>
       )}
     </div>
   );

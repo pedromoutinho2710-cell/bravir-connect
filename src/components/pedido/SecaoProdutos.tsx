@@ -110,9 +110,19 @@ export function SecaoProdutos({
   const [importOpen, setImportOpen] = useState(false);
   const [precos, setPrecos] = useState<Record<string, Record<string, number>>>({});
   const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, { preco: number; desconto_perfil: number | null; origem: string }>>({});
-  // Valor "em digitação" do campo de quantidade (string), por produto.
-  // Permite que o campo fique vazio enquanto o usuário edita; a conversão/validação ocorre no onBlur.
   const [qtdDraft, setQtdDraft] = useState<Record<string, string>>({});
+  const [descontoGlobalPct, setDescontoGlobalPct] = useState<number | null>(null);
+
+  const descontoMaxCluster = useMemo(() => {
+    if (!perfilCliente) return 0;
+    const vals = Object.values(descontos).map((m) => (m[perfilCliente] ?? 0) * 100);
+    return vals.length > 0 ? Math.max(...vals) : 0;
+  }, [descontos, perfilCliente]);
+
+  // Inicializa o slider com o desconto máximo do cluster quando o cliente/cluster muda
+  useEffect(() => {
+    setDescontoGlobalPct(descontoMaxCluster > 0 ? descontoMaxCluster : null);
+  }, [descontoMaxCluster]);
 
   const limparQtdDraft = (produto_id: string) =>
     setQtdDraft((d) => {
@@ -153,7 +163,12 @@ export function SecaoProdutos({
 
   const calcItem = (p: Produto, qtd: number): ItemPedido => {
     const bruto = precos[p.id]?.[tabelaPreco] ?? 0;
-    const dPerfil = descontoLivre ? 0 : (descontos[p.id]?.[perfilCliente] ?? 0);
+    const dPerfilCluster = descontos[p.id]?.[perfilCliente] ?? 0;
+    const dPerfil = descontoLivre
+      ? 0
+      : descontoGlobalPct !== null
+        ? Math.min(descontoGlobalPct / 100, dPerfilCluster)
+        : dPerfilCluster;
     const precos_calc = calcularPrecos(bruto, dPerfil, 0, 0, qtd);
     
     return {
@@ -298,9 +313,12 @@ export function SecaoProdutos({
   const itensRecalculados = useMemo(() => {
     return itens.map((i) => {
       const bruto = precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto;
+      const dPerfilCluster = descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_perfil;
       const dPerfil = (descontoLivre || preservarDescontos)
         ? i.desconto_perfil
-        : (descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_perfil);
+        : descontoGlobalPct !== null
+          ? Math.min(descontoGlobalPct / 100, dPerfilCluster)
+          : dPerfilCluster;
       const dCom = (descontoLivre || preservarDescontos) ? i.desconto_comercial : i.desconto_comercial;
       const precos_calc = calcularPrecos(bruto, dPerfil, dCom, i.desconto_trade, i.quantidade);
 
@@ -369,7 +387,7 @@ export function SecaoProdutos({
         total: precos_calc.total,
       };
     });
-  }, [itens, precos, descontos, tabelaPreco, perfilCliente, descontoLivre, precosEspeciais, preservarDescontos]);
+  }, [itens, precos, descontos, tabelaPreco, perfilCliente, descontoLivre, precosEspeciais, preservarDescontos, descontoGlobalPct]);
 
   // Sincroniza recálculo (apenas quando os números efetivamente mudam)
   useMemoEffect(itensRecalculados, itens, onChange);
@@ -492,6 +510,33 @@ export function SecaoProdutos({
             </div>
           ))}
         </div>
+
+        {/* Slider de desconto global — visível para vendedor (não gestora/descontoLivre) quando há itens */}
+        {itensRecalculados.length > 0 && !descontoLivre && descontoMaxCluster > 0 && (
+          <div className="rounded-lg border bg-green-50/40 px-4 py-3 flex flex-col gap-1.5 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex flex-col gap-1 flex-1 max-w-sm">
+              <div className="flex items-center justify-between text-xs font-medium">
+                <span>Desconto do cluster aplicado</span>
+                <span className="font-mono font-bold text-primary">
+                  {(descontoGlobalPct ?? descontoMaxCluster).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={descontoMaxCluster}
+                step={0.5}
+                value={descontoGlobalPct ?? descontoMaxCluster}
+                onChange={(e) => setDescontoGlobalPct(Number(e.target.value))}
+                className="w-full accent-primary"
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>0%</span>
+                <span>Máx. cluster: {descontoMaxCluster.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {itensRecalculados.length > 0 && (
           <div className="rounded-lg border overflow-x-auto shadow-sm">

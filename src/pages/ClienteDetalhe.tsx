@@ -98,6 +98,10 @@ type ClienteInfo = {
   telefone: string | null;
   email: string | null;
   comprador: string | null;
+  telefone_agendamento: string | null;
+  email_agendamento: string | null;
+  ativo: boolean;
+  inativado_em: string | null;
   negativado: boolean;
   aceita_saldo: boolean;
   suframa: boolean | null;
@@ -179,7 +183,13 @@ export default function ClienteDetalhe() {
   const [editCep, setEditCep] = useState("");
   const [editVendedorId, setEditVendedorId] = useState("");
   const [editObs, setEditObs] = useState("");
+  const [editTelAgendamento, setEditTelAgendamento] = useState("");
+  const [editEmailAgendamento, setEditEmailAgendamento] = useState("");
   const [salvandoEdit, setSalvandoEdit] = useState(false);
+
+  // Inativação
+  const [inativarOpen, setInativarOpen] = useState(false);
+  const [inativando, setInativando] = useState(false);
 
   // Obs tab
   const [obsLocal, setObsLocal] = useState("");
@@ -214,6 +224,7 @@ export default function ClienteDetalhe() {
   const canAviso = role === "admin" || role === "gestora";
   const canGrupo = role === "admin" || role === "gestora";
   const canBolsao = role === "admin" || role === "gestora" || role === "vendedor";
+  const canInativar = (role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id) || role === "admin" || role === "gestora";
   const initialTab = (location.state as { tab?: string } | null)?.tab === "bolsao" && canBolsao ? "bolsao" : "dados";
 
   const enviarAnalise = async () => {
@@ -237,7 +248,7 @@ export default function ClienteDetalhe() {
     const [cRes, pRes, profRes, roleRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, grupo_cliente, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional, status, aviso_pedido")
+        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, grupo_cliente, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, telefone_agendamento, email_agendamento, ativo, inativado_em, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional, status, aviso_pedido")
         .eq("id", id)
         .single(),
       supabase
@@ -271,6 +282,10 @@ export default function ClienteDetalhe() {
         telefone: c.telefone,
         email: c.email,
         comprador: c.comprador,
+        telefone_agendamento: c.telefone_agendamento ?? null,
+        email_agendamento: c.email_agendamento ?? null,
+        ativo: c.ativo ?? true,
+        inativado_em: c.inativado_em ?? null,
         negativado: c.negativado ?? false,
         aceita_saldo: c.aceita_saldo ?? false,
         suframa: c.suframa ?? null,
@@ -424,6 +439,8 @@ export default function ClienteDetalhe() {
     setEditCep(cliente.cep ?? "");
     setEditVendedorId(cliente.vendedor_id ?? "");
     setEditObs(cliente.observacoes_trade ?? "");
+    setEditTelAgendamento(cliente.telefone_agendamento ?? "");
+    setEditEmailAgendamento(cliente.email_agendamento ?? "");
     setEditOpen(true);
   };
 
@@ -448,6 +465,8 @@ export default function ClienteDetalhe() {
         cep: editCep.replace(/\D/g, "") || null,
         vendedor_id: editVendedorId || null,
         observacoes_trade: editObs.trim() || null,
+        telefone_agendamento: editTelAgendamento.trim() || null,
+        email_agendamento: editEmailAgendamento.trim() || null,
       })
       .eq("id", cliente.id);
     setSalvandoEdit(false);
@@ -506,6 +525,31 @@ export default function ClienteDetalhe() {
     if (error) { toast.error("Erro ao excluir: " + error.message); return; }
     toast.success(`${cliente.nome_parceiro || cliente.razao_social} excluído`);
     navigate(-1);
+  };
+
+  const inativarCliente = async () => {
+    if (!cliente) return;
+    setInativando(true);
+    const { error } = await supabase
+      .from("clientes")
+      .update({ ativo: false, inativado_em: new Date().toISOString(), inativado_por: user?.id ?? null } as any)
+      .eq("id", cliente.id);
+    setInativando(false);
+    if (error) { toast.error("Erro ao inativar: " + error.message); return; }
+    setCliente((c) => c ? { ...c, ativo: false, inativado_em: new Date().toISOString() } : c);
+    setInativarOpen(false);
+    toast.success(`${cliente.nome_parceiro || cliente.razao_social} inativado`);
+  };
+
+  const reativarCliente = async () => {
+    if (!cliente) return;
+    const { error } = await supabase
+      .from("clientes")
+      .update({ ativo: true, inativado_em: null, inativado_por: null } as any)
+      .eq("id", cliente.id);
+    if (error) { toast.error("Erro ao reativar: " + error.message); return; }
+    setCliente((c) => c ? { ...c, ativo: true, inativado_em: null } : c);
+    toast.success(`${cliente.nome_parceiro || cliente.razao_social} reativado`);
   };
 
   const solicitarCredito = async () => {
@@ -604,6 +648,16 @@ export default function ClienteDetalhe() {
                 Editar
               </Button>
             )}
+            {canInativar && cliente.ativo && (
+              <Button size="sm" variant="outline" onClick={() => setInativarOpen(true)} className="border-orange-300 text-orange-700 hover:bg-orange-50">
+                Inativar
+              </Button>
+            )}
+            {canInativar && !cliente.ativo && (role === "admin" || role === "gestora") && (
+              <Button size="sm" variant="outline" onClick={reativarCliente} className="border-green-300 text-green-700 hover:bg-green-50">
+                Reativar
+              </Button>
+            )}
             {canEditFull && (
               <Button size="sm" variant="destructive" onClick={() => setExcluirOpen(true)}>
                 <Trash2 className="h-4 w-4" />
@@ -647,6 +701,15 @@ export default function ClienteDetalhe() {
               <InfoItem label="Comprador" value={cliente.comprador} icon={<User className="h-3 w-3" />} />
               <InfoItem label="Telefone" value={cliente.telefone} icon={<Phone className="h-3 w-3" />} />
               <InfoItem label="Email XML/Boleto" value={cliente.email} icon={<Mail className="h-3 w-3" />} />
+              <InfoItem label="Tel. Agendamento" value={cliente.telefone_agendamento} icon={<Phone className="h-3 w-3" />} />
+              <InfoItem label="Email Agendamento" value={cliente.email_agendamento} icon={<Mail className="h-3 w-3" />} />
+              {!cliente.ativo && (
+                <div className="flex flex-col gap-0.5 sm:col-span-2 lg:col-span-3">
+                  <span className="inline-flex items-center gap-1.5 rounded-md border border-red-300 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700">
+                    Cliente inativo{cliente.inativado_em ? ` — desde ${formatDate(cliente.inativado_em)}` : ""}
+                  </span>
+                </div>
+              )}
               <InfoItem label="Cluster" value={cliente.cluster} />
               <InfoItem label="Grupo de Clientes" value={cliente.grupo_cliente} />
               <InfoItem label="Tabela de preço" value={cliente.tabela_preco} />
@@ -963,6 +1026,14 @@ export default function ClienteDetalhe() {
                 <Label>Telefone</Label>
                 <Input value={editTelefone} onChange={(e) => setEditTelefone(e.target.value)} />
               </div>
+              <div className="space-y-1.5">
+                <Label>Tel. Agendamento</Label>
+                <Input value={editTelAgendamento} onChange={(e) => setEditTelAgendamento(e.target.value)} placeholder="Contato para entregas agendadas" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Email Agendamento</Label>
+                <Input type="email" value={editEmailAgendamento} onChange={(e) => setEditEmailAgendamento(e.target.value)} placeholder="Email para entregas agendadas" />
+              </div>
               {canEditFull && (
                 <div className="space-y-1.5">
                   <Label>Vendedor (encarteiramento)</Label>
@@ -1037,6 +1108,25 @@ export default function ClienteDetalhe() {
             <AlertDialogAction onClick={excluir} disabled={excluindo} className="bg-red-600 hover:bg-red-700">
               {excluindo && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
               Excluir permanentemente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog: inativar cliente */}
+      <AlertDialog open={inativarOpen} onOpenChange={setInativarOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Inativar cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              <strong>{cliente.nome_parceiro || cliente.razao_social}</strong> será removido da sua carteira ativa. A gestora poderá reativá-lo a qualquer momento.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={inativarCliente} disabled={inativando} className="bg-orange-600 hover:bg-orange-700">
+              {inativando && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Inativar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

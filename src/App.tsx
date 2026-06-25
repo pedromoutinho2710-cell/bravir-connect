@@ -32,6 +32,7 @@ import FaturamentoClientes from "./pages/FaturamentoClientes";
 import FilaCadastros from "./pages/faturamento/FilaCadastros";
 import DashboardFaturamento from "./pages/faturamento/DashboardFaturamento";
 import GestaoEstoque from "./pages/faturamento/GestaoEstoque";
+import HistoricoAcoes from "./pages/faturamento/HistoricoAcoes";
 import NovoPedidoFaturamento from "./pages/faturamento/NovoPedidoFaturamento";
 import EditarPedido from "./pages/faturamento/EditarPedido";
 import EditarPedidoFaturamento from "@/pages/faturamento/EditarPedidoFaturamento";
@@ -50,6 +51,8 @@ import GestaoPrecos from "./pages/admin/GestaoPrecos";
 import Configuracoes from "./pages/admin/Configuracoes";
 import Campanhas from "./pages/admin/Campanhas";
 import AgenteIA from "./pages/admin/AgenteIA";
+import PoliticaComercial from "./pages/admin/PoliticaComercial";
+import PoliticaComercialView from "./pages/PoliticaComercialView";
 import MeuAgente from "./pages/MeuAgente";
 import DashboardLogistica from "./pages/logistica/DashboardLogistica";
 import FilaLogistica from "./pages/logistica/FilaLogistica";
@@ -66,6 +69,8 @@ import ClientesGestora from "./pages/gestora/ClientesGestora";
 import NovoPedidoGestora from "./pages/gestora/NovoPedidoGestora";
 import PedidosGestora from "./pages/gestora/PedidosGestora";
 import HistoricoFaturamento from "@/pages/gestora/HistoricoFaturamento";
+import ClientesInativados from "./pages/gestora/ClientesInativados";
+import AprovacaoDesconto from "./pages/gestora/AprovacaoDesconto";
 import FilaFinanceiro from "./pages/financeiro/FilaFinanceiro";
 import DadosIQVIA from "./pages/DadosIQVIA";
 
@@ -137,6 +142,7 @@ const App = () => (
               <Route path="/admin/configuracoes" element={<Configuracoes />} />
               <Route path="/admin/campanhas" element={<Campanhas />} />
               <Route path="/admin/agente-ia" element={<AgenteIA />} />
+              <Route path="/admin/politica-comercial" element={<PoliticaComercial />} />
             </Route>
 
             {/* Gestão de Estoque (mockado — Sankhya) — admin e gestora */}
@@ -177,6 +183,7 @@ const App = () => (
             {/* Dados IQVIA — visão de mercado por marca (acessível por todos os roles) */}
             <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento", "trade", "financeiro"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/dados-iqvia" element={<DadosIQVIA />} />
+              <Route path="/politica-comercial" element={<PoliticaComercialView />} />
             </Route>
 
             {/* Rotas de vendedor — acessíveis por vendedor e admin */}
@@ -205,6 +212,7 @@ const App = () => (
               <Route path="/faturamento/cadastros" element={<FilaCadastros />} />
               <Route path="/dashboard-faturamento" element={<DashboardFaturamento />} />
               <Route path="/faturamento/novo-pedido" element={<NovoPedidoFaturamento />} />
+              <Route path="/faturamento/historico-acoes" element={<HistoricoAcoes />} />
             </Route>
 
             {/* Gestão de Estoque — acessível por faturamento, admin e gestora_faturamento */}
@@ -237,6 +245,8 @@ const App = () => (
               <Route path="/gestora/novo-pedido" element={<NovoPedidoGestora />} />
               <Route path="/gestora/pedidos" element={<PedidosGestora />} />
               <Route path="/gestora/leads-evento" element={<LeadsEvento />} />
+              <Route path="/gestora/clientes-inativados" element={<ClientesInativados />} />
+              <Route path="/gestora/aprovacao-desconto" element={<AprovacaoDesconto />} />
             </Route>
 
             {/* Gestora Faturamento */}

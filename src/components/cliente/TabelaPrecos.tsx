@@ -19,19 +19,20 @@ type Props = {
   suframa: boolean | null;
 };
 
-type Produto = {
+type LinhaBase = {
   id: string;
   codigo_jiva: string;
   nome: string;
   cx_embarque: number;
   marca: string;
-};
-
-type LinhaProduto = Produto & {
-  precoFinal: number | null;
+  ean: string | null;
+  precoBruto: number;
+  descontoCluster: number;
   ipi: number;
   st: number;
 };
+
+type LinhaProduto = LinhaBase & { precoFinal: number | null };
 
 const ORDEM_MARCAS = ["Bendita Cânfora", "Alivik", "Bravir", "Laby"];
 const VERDE = "FF1A5C2A";
@@ -45,12 +46,15 @@ export function TabelaPrecos({
   clienteUf,
   clienteTabela,
   clienteCluster,
-  clienteDescontoAdicional,
+  clienteDescontoAdicional: _cda,
   clienteCodigoParceiro,
   suframa: _suframa,
 }: Props) {
   const [loading, setLoading] = useState(true);
-  const [linhas, setLinhas] = useState<LinhaProduto[]>([]);
+  const [linhasBase, setLinhasBase] = useState<LinhaBase[]>([]);
+  const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, number>>({});
+  const [descontoAplicado, setDescontoAplicado] = useState(0);
+  const [descontoMaxCluster, setDescontoMaxCluster] = useState(0);
   const [qtds, setQtds] = useState<Record<string, number>>({});
   const [exportando, setExportando] = useState(false);
 
@@ -71,10 +75,10 @@ export function TabelaPrecos({
 
       const { data: prods } = await supabase
         .from("produtos")
-        .select("id, codigo_jiva, nome, cx_embarque, marca")
+        .select("id, codigo_jiva, nome, cx_embarque, marca, ean")
         .eq("ativo", true);
 
-      const produtos = (prods ?? []) as Produto[];
+      const produtosRaw = (prods ?? []) as Array<{ id: string; codigo_jiva: string; nome: string; cx_embarque: number; marca: string; ean: string | null }>;
 
       const precosMap: Record<string, number> = {};
       if (vigenciaId && clienteTabela) {
@@ -89,8 +93,8 @@ export function TabelaPrecos({
       }
 
       const impostosMap: Record<string, { ipi: number; st: number }> = {};
-      if (clienteUf && produtos.length > 0) {
-        const codigos = produtos.map((p) => p.codigo_jiva);
+      if (clienteUf && produtosRaw.length > 0) {
+        const codigos = produtosRaw.map((p) => p.codigo_jiva);
         const { data: impostos } = await supabase
           .from("impostos_produto")
           .select("codigo_jiva, ipi, st")
@@ -101,8 +105,6 @@ export function TabelaPrecos({
         });
       }
 
-      // Desconto do cluster (perfil do cliente) por produto — tabela `descontos`,
-      // chaveada por produto_id × perfil_cliente. percentual_desconto é fração (0,25 = 25%).
       const descontosMap: Record<string, number> = {};
       if (clienteCluster) {
         const { data: descontos } = await supabase
@@ -114,23 +116,23 @@ export function TabelaPrecos({
         });
       }
 
-      // Preço líquido sem IPI = preço bruto da tabela do cliente já com o
-      // desconto do cluster aplicado: preco_bruto × (1 - desconto_cluster).
-      // O preço especial por cliente (piso de preço) é aplicado num useEffect
-      // próprio, abaixo, para não depender do timing desta busca inicial.
-      const calculadas: LinhaProduto[] = produtos.map((p) => {
-        const precoBruto = precosMap[p.id] ?? 0;
-        const descontoCluster = descontosMap[p.id] ?? 0;
-        const precoLiquido = precoBruto * (1 - descontoCluster);
-        return {
-          ...p,
-          precoFinal: precoBruto === 0 ? null : precoLiquido,
-          ipi: impostosMap[p.codigo_jiva]?.ipi ?? 0,
-          st: impostosMap[p.codigo_jiva]?.st ?? 0,
-        };
-      });
+      const maxFrac = Object.values(descontosMap).reduce((m, v) => Math.max(m, v), 0);
+      const maxPct = Math.round(maxFrac * 10000) / 100;
 
-      calculadas.sort((a, b) => {
+      const base: LinhaBase[] = produtosRaw.map((p) => ({
+        id: p.id,
+        codigo_jiva: p.codigo_jiva,
+        nome: p.nome,
+        cx_embarque: p.cx_embarque ?? 1,
+        marca: p.marca ?? "",
+        ean: p.ean ?? null,
+        precoBruto: precosMap[p.id] ?? 0,
+        descontoCluster: descontosMap[p.id] ?? 0,
+        ipi: impostosMap[p.codigo_jiva]?.ipi ?? 0,
+        st: impostosMap[p.codigo_jiva]?.st ?? 0,
+      }));
+
+      base.sort((a, b) => {
         const ia = ORDEM_MARCAS.indexOf(a.marca);
         const ib = ORDEM_MARCAS.indexOf(b.marca);
         const ra = ia === -1 ? ORDEM_MARCAS.length : ia;
@@ -141,25 +143,20 @@ export function TabelaPrecos({
       });
 
       if (!cancelado) {
-        setLinhas(calculadas);
+        setLinhasBase(base);
+        setDescontoMaxCluster(maxPct);
+        setDescontoAplicado(maxPct);
         setLoading(false);
       }
     })();
-    return () => {
-      cancelado = true;
-    };
+    return () => { cancelado = true; };
   }, [clienteTabela, clienteUf, clienteCluster, clienteCodigoParceiro]);
 
-  // Preço especial por cliente (precos_cliente_produto) — replica a lógica que
-  // funciona no Novo Pedido (SecaoProdutos): mapa por codigo_produto, lookup por
-  // codigo_jiva, aplicado como piso quando o especial é maior que o calculado.
-  // Resolve o codigo_parceiro de forma robusta: usa a prop e, se vier vazia,
-  // busca direto na tabela `clientes` pelo clienteId (mesma fonte do pedido).
   useEffect(() => {
-    if (linhas.length === 0) return;
+    if (linhasBase.length === 0) return;
     let cancelado = false;
 
-    const aplicarEspeciais = async () => {
+    (async () => {
       let parceiro = clienteCodigoParceiro ?? "";
       if (!parceiro && clienteId) {
         const { data: cli } = await supabase
@@ -183,21 +180,25 @@ export function TabelaPrecos({
         if (p.codigo_produto != null) mapa[p.codigo_produto] = Number(p.preco_unitario);
       });
 
-      setLinhas((prev) =>
-        prev.map((l) => {
-          if (l.precoFinal == null) return l;
-          const especial = l.codigo_jiva ? mapa[l.codigo_jiva] : undefined;
-          if (especial === undefined || !(especial > l.precoFinal)) return l;
-          return { ...l, precoFinal: especial };
-        }),
-      );
-    };
+      const novosEspeciais: Record<string, number> = {};
+      linhasBase.forEach((l) => {
+        const especial = l.codigo_jiva ? mapa[l.codigo_jiva] : undefined;
+        if (especial !== undefined) novosEspeciais[l.id] = especial;
+      });
+      if (!cancelado) setPrecosEspeciais(novosEspeciais);
+    })();
+    return () => { cancelado = true; };
+  }, [clienteCodigoParceiro, clienteId, linhasBase]);
 
-    aplicarEspeciais();
-    return () => {
-      cancelado = true;
-    };
-  }, [clienteCodigoParceiro, clienteId, linhas.length]);
+  const linhas = useMemo<LinhaProduto[]>(() => {
+    return linhasBase.map((l) => {
+      if (l.precoBruto === 0) return { ...l, precoFinal: null };
+      const calculado = l.precoBruto * (1 - descontoAplicado / 100);
+      const especial = precosEspeciais[l.id] ?? null;
+      const precoFinal = especial != null && especial > calculado ? especial : calculado;
+      return { ...l, precoFinal };
+    });
+  }, [linhasBase, precosEspeciais, descontoAplicado]);
 
   const grupos = useMemo(() => {
     const map: Record<string, LinhaProduto[]> = {};
@@ -229,7 +230,6 @@ export function TabelaPrecos({
       if (l.precoFinal == null || qtd <= 0) return;
       const precoComIpi = l.precoFinal * (1 + l.ipi);
       const precoComIpiSt = precoComIpi * (1 + l.st);
-      // Total s/ ST = quantidade × Preço Líq. s/ IPI (precoFinal).
       semST += l.precoFinal * qtd;
       comST += precoComIpiSt * qtd;
     });
@@ -243,10 +243,12 @@ export function TabelaPrecos({
       const workbook = new ExcelJS.Workbook();
       const ws = workbook.addWorksheet("Tabela de Preços");
 
+      // 10 columns: Cód. Jiva, EAN, CX, Qtd, Descrição, Preço Líq., c/IPI, c/IPI+ST, Total s/ST, Total c/ST
       ws.columns = [
-        { width: 15 },
-        { width: 15 },
-        { width: 15 },
+        { width: 14 },
+        { width: 16 },
+        { width: 10 },
+        { width: 10 },
         { width: 40 },
         { width: 18 },
         { width: 18 },
@@ -265,11 +267,9 @@ export function TabelaPrecos({
       ws.getRow(3).height = 30;
 
       const agora = new Date();
-      const mesAno = agora
-        .toLocaleString("pt-BR", { month: "long", year: "numeric" })
-        .toUpperCase();
+      const mesAno = agora.toLocaleString("pt-BR", { month: "long", year: "numeric" }).toUpperCase();
 
-      ws.mergeCells("A4:I4");
+      ws.mergeCells("A4:J4");
       const tituloCell = ws.getCell("A4");
       tituloCell.value = `TABELA DE PREÇOS — ${mesAno}`;
       tituloCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
@@ -284,6 +284,7 @@ export function TabelaPrecos({
         ["CNPJ:", formatCNPJ(clienteCnpj)],
         ["CIDADE / UF:", cidadeUf],
         ["TABELA:", clienteTabela ?? "—"],
+        ["DESCONTO APLICADO:", `${descontoAplicado.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`],
         ["DATA:", hoje],
       ];
       infoLinhas.forEach(([label, value], i) => {
@@ -294,17 +295,11 @@ export function TabelaPrecos({
         ws.getCell(`B${row}`).value = value;
       });
 
-      const cabRow = 12;
+      const cabRow = 13;
       const cabecalhos = [
-        "Cód. Jiva",
-        "CX de Embarque",
-        "Qtd. Pedida",
-        "Descrição do Produto",
-        "Preço Líq. s/ IPI",
-        "Preço c/ IPI",
-        "Preço c/ IPI+ST",
-        "Total s/ ST",
-        "Total c/ ST",
+        "Cód. Jiva", "EAN", "CX de Embarque", "Qtd. Pedida",
+        "Descrição do Produto", "Preço Líq. s/ IPI", "Preço c/ IPI",
+        "Preço c/ IPI+ST", "Total s/ ST", "Total c/ ST",
       ];
       cabecalhos.forEach((h, idx) => {
         const cell = ws.getCell(cabRow, idx + 1);
@@ -312,20 +307,12 @@ export function TabelaPrecos({
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
         cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
         cell.alignment = { horizontal: "center", vertical: "middle" };
-        cell.border = {
-          top: { style: "thin" },
-          bottom: { style: "thin" },
-          left: { style: "thin" },
-          right: { style: "thin" },
-        };
+        cell.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
       });
 
       let r = cabRow + 1;
       const linhasProduto: number[] = [];
       grupos.forEach((g) => {
-        // Exporta todos os produtos da tabela (catálogo completo). Quando há
-        // quantidade pedida, ela é arredondada para o múltiplo mais próximo
-        // da CX de embarque; sem quantidade pedida, exporta 0.
         const itensExportar = g.itens.map((it) => {
           const qtdBruta = qtds[it.id] ?? 0;
           const cx = it.cx_embarque > 0 ? it.cx_embarque : 1;
@@ -333,19 +320,14 @@ export function TabelaPrecos({
           return { it, qtdExportada };
         });
 
-        ws.mergeCells(`A${r}:I${r}`);
+        ws.mergeCells(`A${r}:J${r}`);
         const gc = ws.getCell(`A${r}`);
         gc.value = g.marca;
         gc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
         gc.font = { color: { argb: "FFFFFFFF" }, bold: true };
         gc.alignment = { horizontal: "left", vertical: "middle" };
-        for (let c = 1; c <= 9; c++) {
-          ws.getCell(r, c).border = {
-            top: { style: "thin" },
-            bottom: { style: "thin" },
-            left: { style: "thin" },
-            right: { style: "thin" },
-          };
+        for (let c = 1; c <= 10; c++) {
+          ws.getCell(r, c).border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
         }
         r++;
 
@@ -357,21 +339,17 @@ export function TabelaPrecos({
           const fill = zebra ? "FFF2F2F2" : "FFFFFFFF";
           const rowNum = r;
 
-          const cells: Array<{
-            col: number;
-            val: string | number | { formula: string };
-            fmt?: string;
-            align?: "left" | "right" | "center";
-          }> = [
+          const cells: Array<{ col: number; val: string | number | { formula: string }; fmt?: string; align?: "left" | "right" | "center" }> = [
             { col: 1, val: it.codigo_jiva, align: "left" },
-            { col: 2, val: it.cx_embarque, align: "center" },
-            { col: 3, val: qtd, align: "center" },
-            { col: 4, val: it.nome, align: "left" },
-            { col: 5, val: precoLiq, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 6, val: precoComIpi, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 7, val: precoComIpiSt, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 8, val: { formula: `C${rowNum}*E${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 9, val: { formula: `C${rowNum}*G${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 2, val: it.ean ?? "—", align: "center" },
+            { col: 3, val: it.cx_embarque, align: "center" },
+            { col: 4, val: qtd, align: "center" },
+            { col: 5, val: it.nome, align: "left" },
+            { col: 6, val: precoLiq, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 7, val: precoComIpi, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 8, val: precoComIpiSt, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 9, val: { formula: `D${rowNum}*F${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 10, val: { formula: `D${rowNum}*H${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
           ];
           cells.forEach(({ col, val, fmt, align }) => {
             const cell = ws.getCell(r, col);
@@ -379,12 +357,7 @@ export function TabelaPrecos({
             cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: fill } };
             if (fmt) cell.numFmt = fmt;
             cell.alignment = { horizontal: align ?? "left", vertical: "middle" };
-            cell.border = {
-              top: { style: "thin" },
-              bottom: { style: "thin" },
-              left: { style: "thin" },
-              right: { style: "thin" },
-            };
+            cell.border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
           });
           linhasProduto.push(r);
           r++;
@@ -392,46 +365,34 @@ export function TabelaPrecos({
       });
 
       const totalGeralRow = r;
-      ws.mergeCells(`A${totalGeralRow}:G${totalGeralRow}`);
+      ws.mergeCells(`A${totalGeralRow}:H${totalGeralRow}`);
       const tg = ws.getCell(`A${totalGeralRow}`);
       tg.value = "TOTAL GERAL";
       tg.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
       tg.font = { color: { argb: "FFFFFFFF" }, bold: true };
       tg.alignment = { horizontal: "right", vertical: "middle" };
 
-      const tgH = ws.getCell(`H${totalGeralRow}`);
       const tgI = ws.getCell(`I${totalGeralRow}`);
+      const tgJ = ws.getCell(`J${totalGeralRow}`);
       if (linhasProduto.length > 0) {
-        const partsH = linhasProduto.map((n) => `H${n}`).join(",");
-        const partsI = linhasProduto.map((n) => `I${n}`).join(",");
-        tgH.value = { formula: `SUM(${partsH})` };
-        tgI.value = { formula: `SUM(${partsI})` };
-      } else {
-        tgH.value = 0;
-        tgI.value = 0;
-      }
-      [tgH, tgI].forEach((cell) => {
+        tgI.value = { formula: `SUM(${linhasProduto.map((n) => `I${n}`).join(",")})` };
+        tgJ.value = { formula: `SUM(${linhasProduto.map((n) => `J${n}`).join(",")})` };
+      } else { tgI.value = 0; tgJ.value = 0; }
+      [tgI, tgJ].forEach((cell) => {
         cell.numFmt = '"R$"#,##0.00';
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
         cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
         cell.alignment = { horizontal: "right", vertical: "middle" };
       });
-      for (let c = 1; c <= 9; c++) {
-        ws.getCell(totalGeralRow, c).border = {
-          top: { style: "thin" },
-          bottom: { style: "thin" },
-          left: { style: "thin" },
-          right: { style: "thin" },
-        };
+      for (let c = 1; c <= 10; c++) {
+        ws.getCell(totalGeralRow, c).border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
       }
 
       const dataStr = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
       const nomeArquivo = `Tabela_Precos_${clienteRazaoSocial.replace(/\s+/g, "")}_${dataStr}.xlsx`;
 
       const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -439,8 +400,7 @@ export function TabelaPrecos({
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      toast.error("Erro ao exportar: " + msg);
+      toast.error("Erro ao exportar: " + (e instanceof Error ? e.message : String(e)));
     } finally {
       setExportando(false);
     }
@@ -456,8 +416,30 @@ export function TabelaPrecos({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button size="sm" onClick={exportar} disabled={exportando}>
+      {/* Controle de desconto + botão exportar */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between rounded-lg border bg-muted/30 px-4 py-3">
+        <div className="flex flex-col gap-1.5 flex-1 max-w-sm">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-medium">Desconto a aplicar</span>
+            <span className="font-mono font-semibold text-primary">
+              {descontoAplicado.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={descontoMaxCluster}
+            step={0.5}
+            value={descontoAplicado}
+            onChange={(e) => setDescontoAplicado(Number(e.target.value))}
+            className="w-full accent-primary"
+          />
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>0%</span>
+            <span>Máx. cluster: {descontoMaxCluster.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%</span>
+          </div>
+        </div>
+        <Button size="sm" onClick={exportar} disabled={exportando} className="shrink-0">
           {exportando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Download className="h-4 w-4 mr-2" />}
           Exportar Tabela de Preços
         </Button>
@@ -468,6 +450,7 @@ export function TabelaPrecos({
           <thead>
             <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
               <th className="px-3 py-2 text-left font-semibold">Cód. Jiva</th>
+              <th className="px-3 py-2 text-left font-semibold">EAN</th>
               <th className="px-3 py-2 text-left font-semibold">Descrição</th>
               <th className="px-3 py-2 text-center font-semibold">CX Embarque</th>
               <th className="px-3 py-2 text-right font-semibold">Preço Líq. s/ IPI</th>
@@ -491,14 +474,14 @@ export function TabelaPrecos({
           </tbody>
           <tfoot>
             <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
-              <td colSpan={7} className="px-3 py-2 text-right font-bold">
+              <td colSpan={8} className="px-3 py-2 text-right font-bold">
                 Total Geral s/ ST
               </td>
               <td className="px-3 py-2 text-right font-bold">{formatBRL(totaisGerais.semST)}</td>
               <td className="px-3 py-2 text-right font-bold">—</td>
             </tr>
             <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
-              <td colSpan={7} className="px-3 py-2 text-right font-bold">
+              <td colSpan={8} className="px-3 py-2 text-right font-bold">
                 Total Geral c/ ST
               </td>
               <td className="px-3 py-2 text-right font-bold">—</td>
@@ -525,7 +508,7 @@ function GrupoLinhas({
   return (
     <>
       <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
-        <td colSpan={9} className="px-3 py-1.5 font-bold text-sm">
+        <td colSpan={10} className="px-3 py-1.5 font-bold text-sm">
           {marca}
         </td>
       </tr>
@@ -534,12 +517,12 @@ function GrupoLinhas({
         const precoLiq = it.precoFinal;
         const precoComIpi = precoLiq != null ? precoLiq * (1 + it.ipi) : null;
         const precoComIpiSt = precoComIpi != null ? precoComIpi * (1 + it.st) : null;
-        // Total s/ ST = quantidade × Preço Líq. s/ IPI (precoFinal).
         const totalSemST = precoLiq != null ? precoLiq * qtd : 0;
         const totalComST = precoComIpiSt != null ? precoComIpiSt * qtd : 0;
         return (
           <tr key={it.id} className={idx % 2 === 1 ? "bg-muted/30" : undefined}>
             <td className="px-3 py-1.5 font-mono text-xs">{it.codigo_jiva}</td>
+            <td className="px-3 py-1.5 font-mono text-xs text-muted-foreground">{it.ean ?? "—"}</td>
             <td className="px-3 py-1.5">{it.nome}</td>
             <td className="px-3 py-1.5 text-center">{it.cx_embarque}</td>
             <td className="px-3 py-1.5 text-right">{precoLiq != null ? formatBRL(precoLiq) : "—"}</td>

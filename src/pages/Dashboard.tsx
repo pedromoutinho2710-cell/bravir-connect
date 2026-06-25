@@ -166,6 +166,7 @@ export default function Dashboard() {
     problemas: 0,
   });
   const [metaTotal, setMetaTotal] = useState(0);
+  const [metaFaturamento, setMetaFaturamento] = useState(0);
   const [fatMesAtual, setFatMesAtual] = useState(0);
   const [fatFaturadoPeriodo, setFatFaturadoPeriodo] = useState(0);
   const [pipelineTotal, setPipelineTotal] = useState(0);
@@ -249,7 +250,7 @@ export default function Dashboard() {
 
     (async () => {
       try {
-        const [pedidosRes, metasGlobalRes, metasVendedorRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, mensaisRes, fatPeriodoRes] = await Promise.all([
+        const [pedidosRes, metasGlobalRes, metasVendedorRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, mensaisRes, fatPeriodoRes, metasVisaoMacroRes] = await Promise.all([
           // Pedidos do período — base para ranking e top SKUs
           supabase
             .from("pedidos")
@@ -322,6 +323,14 @@ export default function Dashboard() {
             .select("valor_total_itens, valor_liquido")
             .gte("data_faturamento", effectiveInicio)
             .lte("data_faturamento", effectiveFim),
+          // Meta de faturamento real (Visão Macro) — soma de B2B + Marca Própria + Online
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("metas_visao_macro")
+            .select("meta_b2b, meta_marca_propria, meta_online")
+            .eq("mes", mesFiltro)
+            .eq("ano", anoFiltro)
+            .maybeSingle(),
         ]);
 
         // Total faturado do período (soma do Sankhya). Usa o bruto (valor_total_itens);
@@ -345,9 +354,17 @@ export default function Dashboard() {
           problemas: probRes.count ?? 0,
         });
 
-        // Meta total do mês
+        // Meta total do mês (entrada de pedidos — metas_globais)
         const metaSum = metasGlobalRes.data ? Number(metasGlobalRes.data.valor_meta_reais) : 0;
         setMetaTotal(metaSum);
+
+        // Meta de faturamento real (Visão Macro) — soma B2B + Marca Própria + Online
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const mvmData = (metasVisaoMacroRes as any).data;
+        const metaFatSum = mvmData
+          ? Number(mvmData.meta_b2b ?? 0) + Number(mvmData.meta_marca_propria ?? 0) + Number(mvmData.meta_online ?? 0)
+          : 0;
+        setMetaFaturamento(metaFatSum);
 
         // Faturamento mês atual para % da meta
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -689,7 +706,7 @@ export default function Dashboard() {
   // Fluxo de metas
   const fatFaturadoMes = fatFaturadoPeriodo;
   const entradaPct = metaTotal > 0 ? (fatMesAtual / metaTotal) * 100 : 0;
-  const faturadoPct = metaTotal > 0 ? (fatFaturadoMes / metaTotal) * 100 : 0;
+  const faturadoPct = metaFaturamento > 0 ? (fatFaturadoMes / metaFaturamento) * 100 : 0;
 
   const badgeColor = (pct: number) => {
     if (pct >= 80) return "bg-green-100 text-green-800";
@@ -1103,9 +1120,15 @@ export default function Dashboard() {
         <div className="rounded-lg border p-4 flex-1 min-w-[160px]">
           <div className="text-xs text-muted-foreground mb-1">Total faturado</div>
           <div className="text-xl font-bold">{formatBRL(fatFaturadoMes)}</div>
-          <span className={`inline-block mt-2 rounded-full px-2 py-0.5 text-xs ${badgeColor(faturadoPct)}`}>
-            {faturadoPct.toFixed(0)}% da meta
-          </span>
+          {metaFaturamento > 0 ? (
+            <span className={`inline-block mt-2 rounded-full px-2 py-0.5 text-xs ${badgeColor(faturadoPct)}`}>
+              {faturadoPct.toFixed(0)}% da meta ({formatBRL(metaFaturamento)})
+            </span>
+          ) : (
+            <span className="inline-block mt-2 rounded-full px-2 py-0.5 text-xs bg-gray-100 text-gray-500">
+              sem meta cadastrada
+            </span>
+          )}
         </div>
 
         <ArrowRight className="h-4 w-4 text-muted-foreground shrink-0" />

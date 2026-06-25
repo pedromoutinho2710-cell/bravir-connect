@@ -8,6 +8,7 @@ import {
   FileStack,
   UserCog,
   UserPlus,
+  UserMinus,
   Megaphone,
   Store,
   Upload,
@@ -25,6 +26,7 @@ import {
   Trash2,
   Bot,
   TrendingUp,
+  Percent,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -53,6 +55,7 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Tabelas de Preço", url: "/admin/tabelas-preco", icon: Tag },
       { title: "Gestão de Preços", url: "/admin/gestao-precos", icon: Tag },
       { title: "Configurações", url: "/admin/configuracoes", icon: Settings },
+      { title: "Política Comercial (Editor)", url: "/admin/politica-comercial", icon: FileText },
       { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
       { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
       { title: "Lixeira", url: "/lixeira", icon: Trash2 },
@@ -73,6 +76,7 @@ export const BASE_FATURAMENTO_ITEMS: Item[] = [
   { title: "Clientes", url: "/faturamento/clientes", icon: Users },
   { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
   { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
+  { title: "Histórico de Ações", url: "/faturamento/historico-acoes", icon: History },
   { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
   { title: "Lixeira", url: "/lixeira", icon: Trash2 },
 ];
@@ -88,6 +92,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Bolsão", url: "/bolsao", icon: Wallet },
     { title: "Minhas Tarefas", url: "/minhas-tarefas", icon: CheckSquare },
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
+    { title: "Política Comercial", url: "/politica-comercial", icon: FileText },
     { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Lixeira", url: "/lixeira", icon: Trash2 },
@@ -104,6 +109,8 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Novo Pedido", url: "/gestora/novo-pedido", icon: PlusCircle },
     { title: "Pedidos", url: "/gestora/pedidos", icon: ClipboardList },
     { title: "Clientes", url: "/gestora/clientes", icon: Users },
+    { title: "Clientes Inativados", url: "/gestora/clientes-inativados", icon: UserMinus },
+    { title: "Aprovação de Desconto", url: "/gestora/aprovacao-desconto", icon: Percent },
     { title: "Bolsão", url: "/bolsao", icon: Wallet },
     { title: "Cadastrar Cliente", url: "/gestora/cadastrar-cliente", icon: UserPlus },
     { title: "Gestão do Time", url: "/gestora/time", icon: UserCog },

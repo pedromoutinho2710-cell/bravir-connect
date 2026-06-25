@@ -178,6 +178,32 @@ function impactoDe(s: Solicitacao): string {
     : `Ajuste${onde} de menor impacto.`;
 }
 
+// Conclusão: a solicitação some da fila e vai para "Concluídas" quando o status
+// vira "concluido" (definido após o teste de produção passar) ou quando o agente
+// já marcou o agente_status como "implementado".
+function ehConcluida(s: Solicitacao): boolean {
+  return s.status === "concluido" || s.agente_status === "implementado";
+}
+
+// Data de conclusão registrada no navegador (a tabela não tem coluna própria).
+function chaveConclusao(id: string): string {
+  return `agente_concluido_${id}`;
+}
+function marcarConcluidaLocal(id: string): void {
+  try {
+    localStorage.setItem(chaveConclusao(id), new Date().toISOString());
+  } catch {
+    // localStorage indisponível — ignora.
+  }
+}
+function dataConclusao(id: string): string | null {
+  try {
+    return localStorage.getItem(chaveConclusao(id));
+  } catch {
+    return null;
+  }
+}
+
 export default function AgenteIA() {
   const queryClient = useQueryClient();
   const [selecionada, setSelecionada] = useState<Solicitacao | null>(null);
@@ -185,6 +211,7 @@ export default function AgenteIA() {
   const [emProcesso, setEmProcesso] = useState<Record<string, Modo>>({});
   const [executandoTodas, setExecutandoTodas] = useState(false);
   const [aprovandoTodas, setAprovandoTodas] = useState(false);
+  const [analisandoTodas, setAnalisandoTodas] = useState(false);
   const [progresso, setProgresso] = useState<{ feito: number; total: number } | null>(null);
   const [resumoLote, setResumoLote] = useState<ResumoLote | null>(null);
   // Resultado do agente-monitor (plano de ação inline, antes de criar as solicitações).
@@ -224,11 +251,15 @@ export default function AgenteIA() {
     },
   });
 
-  const comPr = solicitacoes.filter((s) => s.agente_pr_url);
+  // Fila = solicitações abertas ainda não concluídas. As concluídas somem da lista
+  // principal e aparecem na aba "Concluídas".
+  const fila = solicitacoes.filter((s) => !ehConcluida(s));
+  const comPr = fila.filter((s) => s.agente_pr_url);
+  const concluidas = dashboard.filter(ehConcluida);
 
-  // Número sequencial por solicitação: a lista vem ordenada por created_at desc,
+  // Número sequencial por solicitação: a fila vem ordenada por created_at desc,
   // então a mais recente é #1. Usado na lista, na seção de PRs e no painel lateral.
-  const numeroPorId = new Map(solicitacoes.map((s, i) => [s.id, i + 1]));
+  const numeroPorId = new Map(fila.map((s, i) => [s.id, i + 1]));
   const numeroDe = (s: Solicitacao): number | null => numeroPorId.get(s.id) ?? null;
 
   // --- Métricas e agregações do dashboard -----------------------------------
@@ -274,6 +305,20 @@ export default function AgenteIA() {
   const melhoriasTestaveis = dashboard.filter(
     (s) => s.agente_status === "implementado" || s.agente_status === "pr_criado",
   );
+
+  // Fluxo visual: descobre em qual etapa a fila está para destacar no topo.
+  const naoAnalisadas = fila.filter((s) => !s.agente_resumo).length;
+  const analisadasSemPr = fila.filter((s) => s.agente_resumo && !s.agente_pr_url).length;
+  const etapaAtual =
+    naoAnalisadas > 0
+      ? 1
+      : analisadasSemPr > 0 && comPr.length === 0
+        ? 2
+        : analisadasSemPr > 0
+          ? 3
+          : comPr.length > 0
+            ? 4
+            : 0;
 
   const marcar = (id: string, modo: Modo | null) =>
     setEmProcesso((prev) => {
@@ -324,12 +369,26 @@ export default function AgenteIA() {
       } else {
         // aprovar: merge + deploy + testes (a função pode retornar ok:false controlado).
         if (data?.ok) {
+          // Teste de produção passou → conclui: sai da fila e vai para "Concluídas".
           toast.success("Merge feito, deploy concluído e testes passaram ✅");
+          marcarConcluidaLocal(s.id);
+          await supabase
+            .from("solicitacoes_gestor")
+            .update({ status: "concluido" })
+            .eq("id", s.id);
           atualizarLocal(s.id, {
             agente_status: "implementado",
+            status: "concluido",
             agente_pr_url: data.pr_url ?? s.agente_pr_url,
           });
         } else {
+          // Teste falhou → mantém na fila como "pr_criado" para corrigir.
+          // (agente_status não existe nos tipos gerados; cast necessário.)
+          await supabase
+            .from("solicitacoes_gestor")
+            .update({ agente_status: "pr_criado" } as never)
+            .eq("id", s.id);
+          atualizarLocal(s.id, { agente_status: "pr_criado" });
           const extra = data?.reverted ? " — alterações revertidas (PR de revert aberto)" : "";
           throw new Error((data?.error ?? "Falha ao aprovar.") + extra);
         }
@@ -346,7 +405,7 @@ export default function AgenteIA() {
   // Processa todas as solicitações abertas em sequência (gera um PR para cada) e
   // monta um resumo da execução ao final.
   const executarTodas = async () => {
-    const lista = [...solicitacoes];
+    const lista = [...fila];
     if (!lista.length) return;
     setExecutandoTodas(true);
     setResumoLote(null);
@@ -380,9 +439,33 @@ export default function AgenteIA() {
     toast.success("Processamento de todas as solicitações concluído");
   };
 
+  // Analisa em sequência todas as solicitações da fila que ainda não têm resumo.
+  const analisarTodas = async () => {
+    const lista = fila.filter((s) => !s.agente_resumo);
+    if (!lista.length) {
+      toast.info("Nenhuma solicitação pendente de análise.");
+      return;
+    }
+    setAnalisandoTodas(true);
+    setResumoLote(null);
+    setProgresso({ feito: 0, total: lista.length });
+    for (let i = 0; i < lista.length; i++) {
+      try {
+        await invocar(lista[i], "analisar");
+      } catch {
+        // falha já notificada por toast; segue para a próxima.
+      }
+      setProgresso({ feito: i + 1, total: lista.length });
+    }
+    setAnalisandoTodas(false);
+    setProgresso(null);
+    await invalidarTudo();
+    toast.success("Análise concluída — exporte para revisão");
+  };
+
   // Aprova (merge + deploy + testes) em sequência todas as solicitações com PR.
   const aprovarTodas = async () => {
-    const lista = solicitacoes.filter((s) => s.agente_pr_url);
+    const lista = comPr;
     if (!lista.length) {
       toast.info("Nenhuma solicitação com PR para aprovar.");
       return;
@@ -588,7 +671,12 @@ export default function AgenteIA() {
   };
 
   const ocupado =
-    executandoTodas || aprovandoTodas || monitorLoading || aprovandoPlano || testando;
+    executandoTodas ||
+    aprovandoTodas ||
+    analisandoTodas ||
+    monitorLoading ||
+    aprovandoPlano ||
+    testando;
 
   return (
     <div className="space-y-6">
@@ -603,6 +691,14 @@ export default function AgenteIA() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={analisarTodas} disabled={ocupado || fila.length === 0}>
+            {analisandoTodas ? (
+              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="mr-1 h-4 w-4" />
+            )}
+            Analisar todas
+          </Button>
           <Button variant="outline" onClick={exportarRevisao} disabled={ocupado}>
             <Download className="mr-1 h-4 w-4" />
             Exportar para revisão
@@ -623,7 +719,7 @@ export default function AgenteIA() {
             )}
             Analisar plataforma agora
           </Button>
-          <Button onClick={executarTodas} disabled={ocupado || solicitacoes.length === 0}>
+          <Button onClick={executarTodas} disabled={ocupado || fila.length === 0}>
             {executandoTodas ? (
               <Loader2 className="mr-1 h-4 w-4 animate-spin" />
             ) : (

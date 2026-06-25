@@ -257,7 +257,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
   };
 
   const salvarPedido = async (
-    status: "rascunho" | "pendente_sankhya",
+    status: "rascunho" | "pendente_sankhya" | "aguardando_aprovacao_desconto",
   ): Promise<string | null> => {
     if (!user || !podeSalvar) return null;
 
@@ -311,7 +311,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
         status,
       };
       updatePayload.vendedor_id = pedidoVendedorId;
-      if (status === "pendente_sankhya") {
+      if (status === "pendente_sankhya" || status === "aguardando_aprovacao_desconto") {
         updatePayload.data_pedido = new Date().toISOString().slice(0, 10);
       }
       const { error } = await supabase.from("pedidos").update(updatePayload).eq("id", id);
@@ -339,7 +339,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
           email: cliente.email || null,
           vigencia_id: vigenciaId || null,
           status,
-          ...(status === "pendente_sankhya"
+          ...((status === "pendente_sankhya" || status === "aguardando_aprovacao_desconto")
             ? { data_pedido: new Date().toISOString().slice(0, 10) }
             : {}),
         })
@@ -422,8 +422,19 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
       await supabase.from("itens_pedido").delete().eq("pedido_id", pedidoId);
     }
 
-    const id = await salvarPedido("pendente_sankhya");
+    const temDescontoComercial = itens.some((i) => (i.desconto_comercial ?? 0) > 0);
+    const statusEnvio = temDescontoComercial ? "aguardando_aprovacao_desconto" : "pendente_sankhya";
+    const id = await salvarPedido(statusEnvio);
     if (id) {
+      if (temDescontoComercial) {
+        toast.info("Pedido enviado para aprovação de desconto comercial pela gestora.");
+        pedidoEnviadoRef.current = true;
+        if (localSaveTimer.current) window.clearTimeout(localSaveTimer.current);
+        localStorage.removeItem(rascunhoKey);
+        navigate(navigateAfterEnviar);
+        setEnviando(false);
+        return;
+      }
       // Sucesso do envio de email/notificações controla se reportamos o handoff
       // como 100% concluído. Em caso de falha mostramos um aviso (e não o toast
       // de sucesso), evitando a perda silenciosa de notificações.

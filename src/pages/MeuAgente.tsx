@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, CheckCircle2, XCircle, RotateCcw, Bot, AlertTriangle, Clock } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, RotateCcw, Bot, AlertTriangle, Clock, Globe } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -42,6 +42,7 @@ type Solicitacao = {
   agente_concluido_em: string | null;
   agente_tentativas: number | null;
   agente_erro: string | null;
+  origem: "monitor" | "pesquisa" | null;
 };
 
 const STATUS_CONFIG: Record<
@@ -294,10 +295,16 @@ function SolicitacaoCard({
             <div className="flex items-start justify-between gap-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <StatusBadge status={sol.agente_status} />
-                {!sol.criado_por && (
+                {sol.origem === "monitor" && (
                   <Badge variant="outline" className="text-xs gap-1 text-amber-600 border-amber-300">
                     <Bot className="h-3 w-3" />
                     Monitor detectou
+                  </Badge>
+                )}
+                {sol.origem === "pesquisa" && (
+                  <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-300">
+                    <Globe className="h-3 w-3" />
+                    Pesquisa Web
                   </Badge>
                 )}
                 {(sol.agente_tentativas ?? 0) > 0 && (

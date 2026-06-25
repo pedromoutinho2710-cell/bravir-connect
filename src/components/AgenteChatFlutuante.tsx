@@ -140,6 +140,14 @@ export default function AgenteChatFlutuante() {
     setLoading(true);
 
     try {
+      // Garante que a sessão está válida antes de chamar a Edge Function
+      const { error: sessionErr } = await supabase.auth.getSession();
+      if (sessionErr) {
+        // Tenta renovar a sessão silenciosamente
+        const { error: refreshErr } = await supabase.auth.refreshSession();
+        if (refreshErr) throw new Error("Sessão expirada — faça login novamente.");
+      }
+
       // Envia apenas os turnos reais (sem saudação/confirmações) para a API.
       const apiMessages = baseConversa
         .filter((m) => !m.kind)
@@ -149,8 +157,16 @@ export default function AgenteChatFlutuante() {
         body: { messages: apiMessages },
       });
 
-      if (error || !data?.text) {
-        throw error ?? new Error("Resposta vazia do assistente");
+      if (error) {
+        const msg = typeof error === "object" && "message" in error ? (error as { message: string }).message : String(error);
+        if (msg.toLowerCase().includes("jwt") || msg.toLowerCase().includes("unauthorized") || msg.toLowerCase().includes("token")) {
+          await supabase.auth.refreshSession();
+          throw new Error("Sessão renovada — tente enviar novamente.");
+        }
+        throw new Error(msg || "Erro na Edge Function");
+      }
+      if (!data?.text) {
+        throw new Error("O assistente não retornou uma resposta. Tente novamente.");
       }
 
       const { display, registro } = splitRegistro(data.text as string);
@@ -183,13 +199,14 @@ export default function AgenteChatFlutuante() {
         }
       }
     } catch (err) {
-      console.error("Erro no agente de chat:", err);
+      const errMsg = err instanceof Error ? err.message : "Erro desconhecido";
+      console.error("Erro no agente de chat:", errMsg);
       setMessages((prev) => [
         ...prev,
         {
           id: nextId(),
           role: "assistant",
-          content: "Ops, tive um problema para responder agora. Tente novamente em alguns segundos.",
+          content: `Ops, tive um problema para responder. ${errMsg.includes("Sessão") ? errMsg : "Tente novamente em alguns segundos."}`,
         },
       ]);
     } finally {

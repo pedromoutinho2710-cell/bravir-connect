@@ -508,6 +508,11 @@ export type Database = {
           suframa: boolean | null
           tabela_preco: string | null
           telefone: string | null
+          telefone_agendamento: string | null
+          email_agendamento: string | null
+          ativo: boolean
+          inativado_em: string | null
+          inativado_por: string | null
           uf: string | null
           vendedor_id: string | null
         }
@@ -553,6 +558,11 @@ export type Database = {
           suframa?: boolean | null
           tabela_preco?: string | null
           telefone?: string | null
+          telefone_agendamento?: string | null
+          email_agendamento?: string | null
+          ativo?: boolean
+          inativado_em?: string | null
+          inativado_por?: string | null
           uf?: string | null
           vendedor_id?: string | null
         }
@@ -598,6 +608,11 @@ export type Database = {
           suframa?: boolean | null
           tabela_preco?: string | null
           telefone?: string | null
+          telefone_agendamento?: string | null
+          email_agendamento?: string | null
+          ativo?: boolean
+          inativado_em?: string | null
+          inativado_por?: string | null
           uf?: string | null
           vendedor_id?: string | null
         }
@@ -1307,6 +1322,7 @@ export type Database = {
           deleted_by: string | null
           desconto_vista: number | null
           email: string | null
+          email_contato: string | null
           faturado_em: string | null
           flag_prioridade: string | null
           id: string
@@ -1322,6 +1338,7 @@ export type Database = {
           status_atualizado_em: string | null
           tabela_preco: string | null
           telefone: string | null
+          telefone_contato: string | null
           tipo: string | null
           total: number | null
           vendedor_id: string | null
@@ -1340,6 +1357,7 @@ export type Database = {
           deleted_by?: string | null
           desconto_vista?: number | null
           email?: string | null
+          email_contato?: string | null
           faturado_em?: string | null
           flag_prioridade?: string | null
           id?: string
@@ -1355,6 +1373,7 @@ export type Database = {
           status_atualizado_em?: string | null
           tabela_preco?: string | null
           telefone?: string | null
+          telefone_contato?: string | null
           tipo?: string | null
           total?: number | null
           vendedor_id?: string | null
@@ -1373,6 +1392,7 @@ export type Database = {
           deleted_by?: string | null
           desconto_vista?: number | null
           email?: string | null
+          email_contato?: string | null
           faturado_em?: string | null
           flag_prioridade?: string | null
           id?: string
@@ -1388,6 +1408,7 @@ export type Database = {
           status_atualizado_em?: string | null
           tabela_preco?: string | null
           telefone?: string | null
+          telefone_contato?: string | null
           tipo?: string | null
           total?: number | null
           vendedor_id?: string | null
@@ -1535,6 +1556,7 @@ export type Database = {
           created_at: string | null
           cx_embarque: number | null
           disponivel: boolean
+          ean: string | null
           id: string
           marca: string | null
           nome: string
@@ -1546,6 +1568,7 @@ export type Database = {
           created_at?: string | null
           cx_embarque?: number | null
           disponivel?: boolean
+          ean?: string | null
           id?: string
           marca?: string | null
           nome: string
@@ -1557,6 +1580,7 @@ export type Database = {
           created_at?: string | null
           cx_embarque?: number | null
           disponivel?: boolean
+          ean?: string | null
           id?: string
           marca?: string | null
           nome?: string

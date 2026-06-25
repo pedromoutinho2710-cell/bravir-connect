@@ -12,6 +12,21 @@ export function useContatoCliente(clienteId: string | null | undefined) {
     queryFn: async () => {
       if (!clienteId) return null;
 
+      // Busca primeiro os campos de agendamento registrados no cadastro do cliente
+      const { data: clienteData } = await supabase
+        .from('clientes')
+        .select('telefone_agendamento, email_agendamento')
+        .eq('id', clienteId)
+        .maybeSingle();
+
+      if (clienteData?.telefone_agendamento || clienteData?.email_agendamento) {
+        return {
+          telefone_contato: (clienteData as any).telefone_agendamento ?? null,
+          email_contato: (clienteData as any).email_agendamento ?? null,
+        };
+      }
+
+      // Fallback: último pedido agendado com contato registrado
       const { data, error } = await supabase
         .from('pedidos')
         .select('telefone_contato, email_contato')
@@ -29,6 +44,6 @@ export function useContatoCliente(clienteId: string | null | undefined) {
       return data as ContatoCliente | null;
     },
     enabled: !!clienteId,
-    staleTime: 1000 * 60 * 5, // 5 minutos
+    staleTime: 1000 * 60 * 5,
   });
 }

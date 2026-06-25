@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
 import { MARCAS } from "@/lib/constants";
-import { Loader2, Search, CalendarClock, CheckCircle2, Plus, UserMinus, ShoppingCart, FileText } from "lucide-react";
+import { Loader2, Search, CalendarClock, CheckCircle2, Plus, UserMinus, ShoppingCart, FileText, Download } from "lucide-react";
 import { toast } from "sonner";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { PedidoDetalhesDialog } from "@/components/pedido/PedidoDetalhesDialog";
@@ -59,11 +59,13 @@ type ClienteAgregado = {
   nome_parceiro: string | null;
   tabela_preco: string | null;
   cluster: string | null;
+  grupo_cliente: string | null;
   desconto_adicional: number | null;
   suframa: boolean | null;
   cidade: string | null;
   uf: string | null;
   status: string | null;
+  ativo: boolean;
 };
 
 type CadastroPendente = {
@@ -111,6 +113,11 @@ export default function MeusClientes() {
   const [busca, setBusca] = useState("");
   const [ordem, setOrdem] = useState<OrdemCampo>("ltv");
   const [filtroStatus, setFiltroStatus] = useState("todos");
+  const [filtroCluster, setFiltroCluster] = useState("todos");
+  const [filtroUF, setFiltroUF] = useState("todos");
+  const [filtroTabela, setFiltroTabela] = useState("todos");
+  const [filtroGrupo, setFiltroGrupo] = useState("todos");
+  const [mostrarInativos, setMostrarInativos] = useState(false);
 
   const hoje = new Date();
   const DIA_MS = 1000 * 60 * 60 * 24;
@@ -140,13 +147,13 @@ export default function MeusClientes() {
             cliente_id,
             data_pedido,
             itens_pedido(total_item, produtos(marca)),
-            clientes(razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf, status)
+            clientes(razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, grupo_cliente, desconto_adicional, suframa, cidade, uf, status, ativo)
           `)
           .eq("vendedor_id", effectiveUserId ?? "")
           .not("status", "in", '("rascunho","cancelado")'),
         supabase
           .from("clientes")
-          .select("id, razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, desconto_adicional, suframa, cidade, uf, status")
+          .select("id, razao_social, cnpj, codigo_cliente, aceita_saldo, canal, nome_parceiro, tabela_preco, cluster, grupo_cliente, desconto_adicional, suframa, cidade, uf, status, ativo")
           .eq("vendedor_id", effectiveUserId ?? "")
           .is("deleted_at", null),
       ]);
@@ -165,11 +172,13 @@ export default function MeusClientes() {
         nome_parceiro: string | null;
         tabela_preco: string | null;
         cluster: string | null;
+        grupo_cliente: string | null;
         desconto_adicional: number | null;
         suframa: boolean | null;
         cidade: string | null;
         uf: string | null;
         status: string | null;
+        ativo: boolean;
         ltv: number;
         num_pedidos: number;
         marcas: Set<string>;
@@ -190,11 +199,13 @@ export default function MeusClientes() {
             nome_parceiro: cl?.nome_parceiro ?? null,
             tabela_preco: cl?.tabela_preco ?? null,
             cluster: cl?.cluster ?? null,
+            grupo_cliente: cl?.grupo_cliente ?? null,
             desconto_adicional: cl?.desconto_adicional ?? null,
             suframa: cl?.suframa ?? null,
             cidade: cl?.cidade ?? null,
             uf: cl?.uf ?? null,
             status: cl?.status ?? null,
+            ativo: cl?.ativo ?? true,
             ltv: 0,
             num_pedidos: 0,
             marcas: new Set(),
@@ -224,11 +235,13 @@ export default function MeusClientes() {
           nome_parceiro: cl.nome_parceiro ?? null,
           tabela_preco: cl.tabela_preco ?? null,
           cluster: cl.cluster ?? null,
+          grupo_cliente: cl.grupo_cliente ?? null,
           desconto_adicional: cl.desconto_adicional ?? null,
           suframa: cl.suframa ?? null,
           cidade: cl.cidade ?? null,
           uf: cl.uf ?? null,
           status: cl.status ?? null,
+          ativo: cl.ativo ?? true,
           ltv: 0,
           num_pedidos: 0,
           marcas: new Set(),
@@ -274,6 +287,8 @@ export default function MeusClientes() {
             cidade: c.cidade,
             uf: c.uf,
             status: c.status,
+            ativo: c.ativo,
+            grupo_cliente: c.grupo_cliente,
             ltv: c.ltv,
             num_pedidos: c.num_pedidos,
             ticket_medio: c.ticket_medio,
@@ -403,19 +418,33 @@ export default function MeusClientes() {
   };
 
   const clientesFiltrados = useMemo(() => {
-    let filtrados = busca.trim()
-      ? clientes.filter((c) => {
-          const buscaDigits = busca.replace(/\D/g, "");
-          const cnpjDigits = (c.cnpj ?? "").replace(/\D/g, "");
-          return (
-            c.razao_social.toLowerCase().includes(busca.toLowerCase()) ||
-            (buscaDigits.length > 0 && cnpjDigits.includes(buscaDigits))
-          );
-        })
-      : clientes;
+    let filtrados = clientes.filter((c) => mostrarInativos ? !c.ativo : c.ativo !== false);
+
+    if (busca.trim()) {
+      filtrados = filtrados.filter((c) => {
+        const buscaDigits = busca.replace(/\D/g, "");
+        const cnpjDigits = (c.cnpj ?? "").replace(/\D/g, "");
+        return (
+          c.razao_social.toLowerCase().includes(busca.toLowerCase()) ||
+          (buscaDigits.length > 0 && cnpjDigits.includes(buscaDigits))
+        );
+      });
+    }
 
     if (filtroStatus !== "todos") {
       filtrados = filtrados.filter((c) => (c.status ?? "ativo") === filtroStatus);
+    }
+    if (filtroCluster !== "todos") {
+      filtrados = filtrados.filter((c) => (c.cluster ?? "") === filtroCluster);
+    }
+    if (filtroUF !== "todos") {
+      filtrados = filtrados.filter((c) => (c.uf ?? "") === filtroUF);
+    }
+    if (filtroTabela !== "todos") {
+      filtrados = filtrados.filter((c) => (c.tabela_preco ?? "") === filtroTabela);
+    }
+    if (filtroGrupo !== "todos") {
+      filtrados = filtrados.filter((c) => (c.grupo_cliente ?? "") === filtroGrupo);
     }
 
     return [...filtrados].sort((a, b) => {
@@ -424,7 +453,63 @@ export default function MeusClientes() {
       if (ordem === "num_pedidos") return b.num_pedidos - a.num_pedidos;
       return a.razao_social.localeCompare(b.razao_social, "pt-BR");
     });
-  }, [clientes, busca, ordem, filtroStatus]);
+  }, [clientes, busca, ordem, filtroStatus, filtroCluster, filtroUF, filtroTabela, filtroGrupo, mostrarInativos]);
+
+  // Valores únicos para os filtros dinâmicos
+  const clustersUnicos = useMemo(() => [...new Set(clientes.map((c) => c.cluster).filter(Boolean))].sort(), [clientes]);
+  const ufsUnicas = useMemo(() => [...new Set(clientes.map((c) => c.uf).filter(Boolean))].sort(), [clientes]);
+  const tabelasUnicas = useMemo(() => [...new Set(clientes.map((c) => c.tabela_preco).filter(Boolean))].sort(), [clientes]);
+  const gruposUnicos = useMemo(() => [...new Set(clientes.map((c) => c.grupo_cliente).filter(Boolean))].sort(), [clientes]);
+
+  const exportarExcel = async () => {
+    if (clientesFiltrados.length === 0) return;
+    const ExcelJS = (await import("exceljs")).default;
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Clientes");
+    ws.columns = [
+      { header: "Código Sankhya", key: "codigo_cliente", width: 16 },
+      { header: "Razão Social", key: "razao_social", width: 40 },
+      { header: "CNPJ", key: "cnpj", width: 20 },
+      { header: "Estado", key: "uf", width: 8 },
+      { header: "Cidade", key: "cidade", width: 22 },
+      { header: "Cluster", key: "cluster", width: 24 },
+      { header: "Tabela", key: "tabela_preco", width: 14 },
+      { header: "Grupo de Clientes", key: "grupo_cliente", width: 24 },
+      { header: "Canal", key: "canal", width: 12 },
+      { header: "LTV (R$)", key: "ltv", width: 14 },
+      { header: "Pedidos", key: "num_pedidos", width: 10 },
+      { header: "Ticket Médio (R$)", key: "ticket_medio", width: 18 },
+      { header: "Última Compra", key: "ultima_compra", width: 16 },
+      { header: "Status Comercial", key: "status", width: 18 },
+    ];
+    ws.getRow(1).font = { bold: true };
+    clientesFiltrados.forEach((c) => {
+      ws.addRow({
+        codigo_cliente: c.codigo_cliente ?? "",
+        razao_social: c.razao_social,
+        cnpj: c.cnpj ? formatCNPJ(c.cnpj) : "",
+        uf: c.uf ?? "",
+        cidade: c.cidade ?? "",
+        cluster: c.cluster ?? "",
+        tabela_preco: c.tabela_preco ?? "",
+        grupo_cliente: c.grupo_cliente ?? "",
+        canal: c.canal ?? "",
+        ltv: c.ltv,
+        num_pedidos: c.num_pedidos,
+        ticket_medio: c.ticket_medio,
+        ultima_compra: c.ultima_compra ? formatDate(c.ultima_compra) : "",
+        status: c.status ?? "ativo",
+      });
+    });
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `meus-clientes-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (loading) {
     return (
@@ -459,38 +544,102 @@ export default function MeusClientes() {
         </TabsList>
 
         <TabsContent value="carteira" className="space-y-4 mt-4">
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder="Buscar por nome ou CNPJ..."
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-              />
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  placeholder="Buscar por nome ou CNPJ..."
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                />
+              </div>
+              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                <SelectTrigger className="w-full sm:w-44">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os status</SelectItem>
+                  <SelectItem value="ativo">Ativo</SelectItem>
+                  <SelectItem value="inativo">Inativo</SelectItem>
+                  <SelectItem value="aguardando_trade">Aguardando Trade</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={ordem} onValueChange={(v) => setOrdem(v as OrdemCampo)}>
+                <SelectTrigger className="w-full sm:w-56">
+                  <SelectValue placeholder="Ordenar por" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ltv">LTV (maior primeiro)</SelectItem>
+                  <SelectItem value="num_pedidos">Pedidos (maior primeiro)</SelectItem>
+                  <SelectItem value="ticket_medio">Ticket médio (maior primeiro)</SelectItem>
+                  <SelectItem value="razao_social">Nome (A–Z)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-              <SelectTrigger className="w-full sm:w-44">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os status</SelectItem>
-                <SelectItem value="ativo">Ativo</SelectItem>
-                <SelectItem value="inativo">Inativo</SelectItem>
-                <SelectItem value="aguardando_trade">Aguardando Trade</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={ordem} onValueChange={(v) => setOrdem(v as OrdemCampo)}>
-              <SelectTrigger className="w-full sm:w-56">
-                <SelectValue placeholder="Ordenar por" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ltv">LTV (maior primeiro)</SelectItem>
-                <SelectItem value="num_pedidos">Pedidos (maior primeiro)</SelectItem>
-                <SelectItem value="ticket_medio">Ticket médio (maior primeiro)</SelectItem>
-                <SelectItem value="razao_social">Nome (A–Z)</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap gap-2">
+              {clustersUnicos.length > 0 && (
+                <Select value={filtroCluster} onValueChange={setFiltroCluster}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Cluster" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os clusters</SelectItem>
+                    {clustersUnicos.map((c) => <SelectItem key={c!} value={c!}>{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              {ufsUnicas.length > 0 && (
+                <Select value={filtroUF} onValueChange={setFiltroUF}>
+                  <SelectTrigger className="w-36">
+                    <SelectValue placeholder="Estado" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os estados</SelectItem>
+                    {ufsUnicas.map((uf) => <SelectItem key={uf!} value={uf!}>{uf}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              {tabelasUnicas.length > 0 && (
+                <Select value={filtroTabela} onValueChange={setFiltroTabela}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Tabela de preço" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todas as tabelas</SelectItem>
+                    {tabelasUnicas.map((t) => <SelectItem key={t!} value={t!}>{t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              {gruposUnicos.length > 0 && (
+                <Select value={filtroGrupo} onValueChange={setFiltroGrupo}>
+                  <SelectTrigger className="w-44">
+                    <SelectValue placeholder="Grupo de clientes" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os grupos</SelectItem>
+                    {gruposUnicos.map((g) => <SelectItem key={g!} value={g!}>{g}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              <label className="flex items-center gap-1.5 text-sm text-muted-foreground cursor-pointer select-none ml-auto">
+                <input type="checkbox" checked={mostrarInativos} onChange={(e) => setMostrarInativos(e.target.checked)} className="rounded" />
+                Mostrar inativos
+              </label>
+              {clientesFiltrados.length > 0 && (
+                <Button size="sm" variant="outline" onClick={exportarExcel} className="gap-1.5 ml-auto">
+                  <Download className="h-4 w-4" />
+                  Exportar Excel
+                </Button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-blue-300 inline-block" />Comprou no mês</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-green-300 inline-block" />Até 60 dias</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-yellow-300 inline-block" />61–90 dias</span>
+              <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-red-300 inline-block" />Mais de 90 dias / sem compra</span>
+            </div>
           </div>
 
           {clientesFiltrados.length === 0 ? (
@@ -523,11 +672,25 @@ export default function MeusClientes() {
                     const proximaStr = c.proxima_compra
                       ? c.proxima_compra.toLocaleDateString("pt-BR")
                       : "—";
-                    const inativo30 = !c.ultima_compra || (hoje.getTime() - new Date(c.ultima_compra).getTime()) / DIA_MS >= 30;
+                    const diasSemCompra = c.ultima_compra
+                      ? (hoje.getTime() - new Date(c.ultima_compra).getTime()) / DIA_MS
+                      : Infinity;
+                    const mesAtual = hoje.getMonth();
+                    const anoAtual = hoje.getFullYear();
+                    const compraNoMes = c.ultima_compra
+                      ? (() => { const d = new Date(c.ultima_compra); return d.getMonth() === mesAtual && d.getFullYear() === anoAtual; })()
+                      : false;
+                    const rowCls = compraNoMes
+                      ? "cursor-pointer bg-blue-50 hover:bg-blue-100"
+                      : diasSemCompra <= 60
+                      ? "cursor-pointer bg-green-50 hover:bg-green-100"
+                      : diasSemCompra <= 90
+                      ? "cursor-pointer bg-yellow-50 hover:bg-yellow-100"
+                      : "cursor-pointer bg-red-50 hover:bg-red-100";
                     return (
                       <TableRow
                         key={c.cliente_id}
-                        className={`cursor-pointer ${inativo30 ? "bg-yellow-50 hover:bg-yellow-100" : "hover:bg-muted/50"}`}
+                        className={rowCls}
                         onClick={() => abrirSheet(c)}
                       >
                         <TableCell className="font-mono text-muted-foreground text-sm">{c.rank}</TableCell>

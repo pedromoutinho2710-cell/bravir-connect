@@ -274,6 +274,47 @@ export default function FilaLogistica() {
     carregar();
   };
 
+  // Pedido "A Faturar" (pendente_sankhya): logística registra NF sem alterar status.
+  const salvarNF = async () => {
+    if (!selecionado) return;
+    setConfirmando(true);
+
+    let nf_pdf_url: string | null = null;
+    if (nfFile) {
+      const suffix = nfNumero.trim() ? `_${nfNumero.trim()}` : "";
+      const path = `${selecionado.id}/${Date.now()}${suffix}.pdf`;
+      const { data: upData, error: upErr } = await supabase.storage
+        .from("notas_fiscais")
+        .upload(path, nfFile);
+      if (upErr) {
+        toast.error("Erro ao enviar arquivo da NF: " + upErr.message);
+        setConfirmando(false);
+        return;
+      }
+      nf_pdf_url = upData?.path ?? null;
+    }
+
+    if (!nfNumero.trim() && !nfRastreio.trim() && !obsLogistica.trim() && !nf_pdf_url) {
+      toast.error("Preencha ao menos um campo antes de salvar.");
+      setConfirmando(false);
+      return;
+    }
+
+    const { error } = await supabase.from("faturamentos").insert({
+      pedido_id: selecionado.id,
+      nota_fiscal: nfNumero.trim() || null,
+      nf_pdf_url,
+      rastreio: nfRastreio.trim() || null,
+      obs: obsLogistica.trim() || null,
+      usuario_id: user?.id ?? null,
+    } as any);
+
+    setConfirmando(false);
+    if (error) { toast.error("Erro ao salvar NF: " + error.message); return; }
+    toast.success(`NF salva para o pedido #${selecionado.numero_pedido}`);
+    setNfNumero(""); setNfRastreio(""); setNfFile(null); setObsLogistica("");
+  };
+
   // Pedido liberado (liberado_envio): logística registra a NF/rastreio e envia.
   const marcarEmTransito = async () => {
     if (!selecionado) return;
@@ -778,12 +819,53 @@ export default function FilaLogistica() {
                   </div>
                 )}
 
-                {/* A faturar — aguardando equipe de faturamento */}
+                {/* A faturar — logística registra NF sem alterar status */}
                 {selecionado.status === "pendente_sankhya" && (
-                  <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-900">
-                    <div className="font-semibold mb-1">Aguardando faturamento</div>
-                    Este pedido ainda será faturado pela equipe de faturamento. Quando faturado,
-                    seguirá para o envio (ou, se for à vista, para a aprovação do financeiro).
+                  <div className="rounded-md border p-4 space-y-4">
+                    <div className="font-semibold text-sm">Registrar NF e rastreio</div>
+                    <p className="text-xs text-muted-foreground">
+                      Registre a nota fiscal enquanto o pedido está em faturamento. O status não será alterado.
+                    </p>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label>Número da NF</Label>
+                        <Input
+                          value={nfNumero}
+                          onChange={(e) => setNfNumero(e.target.value)}
+                          placeholder="Ex: 001234 (opcional)"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Código de rastreio</Label>
+                        <Input
+                          value={nfRastreio}
+                          onChange={(e) => setNfRastreio(e.target.value)}
+                          placeholder="Ex: BR123456789 (opcional)"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Arquivo da NF (PDF)</Label>
+                      <Input
+                        type="file"
+                        accept=".pdf"
+                        onChange={(e) => setNfFile(e.target.files?.[0] ?? null)}
+                      />
+                      {nfFile && (
+                        <p className="text-xs text-muted-foreground">
+                          Arquivo selecionado: {nfFile.name}
+                        </p>
+                      )}
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Observações</Label>
+                      <Textarea
+                        rows={3}
+                        value={obsLogistica}
+                        onChange={(e) => setObsLogistica(e.target.value)}
+                        placeholder="Informações adicionais..."
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -894,6 +976,15 @@ export default function FilaLogistica() {
                   <XCircle className="h-4 w-4 mr-1" />
                   Fechar
                 </Button>
+                {selecionado.status === "pendente_sankhya" && (
+                  <Button onClick={salvarNF} disabled={confirmando}>
+                    {confirmando
+                      ? <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      : <FileText className="h-4 w-4 mr-2" />
+                    }
+                    Salvar NF
+                  </Button>
+                )}
                 {selecionado.status === "liberado_envio" && (
                   <Button onClick={marcarEmTransito} disabled={confirmando}>
                     {confirmando

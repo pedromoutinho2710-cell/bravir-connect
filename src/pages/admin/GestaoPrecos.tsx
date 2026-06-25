@@ -60,6 +60,7 @@ type Produto = {
   nome: string;
   marca: string | null;
   ativo: boolean;
+  ean: string | null;
 };
 
 // produto_id → tabela → preço bruto (vigência ativa)
@@ -111,6 +112,7 @@ export default function GestaoPrecos() {
   const [busca, setBusca] = useState("");
   const [marcaSel, setMarcaSel] = useState("todas");
   const [statusSel, setStatusSel] = useState("ativos");
+  const [eanMap, setEanMap] = useState<Record<string, string>>({});
 
   const carregar = async () => {
     setCarregando(true);
@@ -134,8 +136,8 @@ export default function GestaoPrecos() {
 
     try {
       // Produtos (todos — o filtro de status é aplicado localmente).
-      const prods = await carregarTudo<{ id: string; codigo_jiva: string; nome: string; marca: string | null; ativo: boolean | null }>(
-        (de, ate) => supabase.from("produtos").select("id, codigo_jiva, nome, marca, ativo").range(de, ate),
+      const prods = await carregarTudo<{ id: string; codigo_jiva: string; nome: string; marca: string | null; ativo: boolean | null; ean: string | null }>(
+        (de, ate) => supabase.from("produtos").select("id, codigo_jiva, nome, marca, ativo, ean").range(de, ate),
       );
 
       const produtosLista: Produto[] = prods.map((p) => ({
@@ -143,7 +145,8 @@ export default function GestaoPrecos() {
         codigo_jiva: p.codigo_jiva,
         nome: p.nome,
         marca: p.marca,
-        ativo: p.ativo !== false, // null/true → ativo; só `false` explícito é inativo
+        ativo: p.ativo !== false,
+        ean: p.ean,
       }));
 
       produtosLista.sort((a, b) => {
@@ -188,6 +191,9 @@ export default function GestaoPrecos() {
       setPrecoOriginal(original);
       setValores(init);
       setDescontos(descMap);
+      const initEan: Record<string, string> = {};
+      produtosLista.forEach((p) => { initEan[p.id] = p.ean ?? ""; });
+      setEanMap(initEan);
     } catch (e) {
       toast.error("Erro ao carregar dados: " + (e instanceof Error ? e.message : String(e)));
     } finally {
@@ -202,6 +208,13 @@ export default function GestaoPrecos() {
       ...prev,
       [produtoId]: { ...(prev[produtoId] ?? {}), [tabela]: valor },
     }));
+  };
+
+  const salvarEan = async (produtoId: string) => {
+    const ean = eanMap[produtoId]?.trim() || null;
+    const { error } = await supabase.from("produtos").update({ ean }).eq("id", produtoId);
+    if (error) toast.error("Erro ao salvar EAN: " + error.message);
+    else toast.success("EAN salvo");
   };
 
   const produtoAlterado = (id: string): boolean =>
@@ -421,6 +434,7 @@ export default function GestaoPrecos() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Código</TableHead>
+                  <TableHead>EAN</TableHead>
                   <TableHead>Produto</TableHead>
                   <TableHead>Marca</TableHead>
                   {COLUNAS_TABELA.map((c) => (
@@ -435,6 +449,17 @@ export default function GestaoPrecos() {
                   return (
                     <TableRow key={p.id} className={alterado ? "bg-blue-50 hover:bg-blue-50" : undefined}>
                       <TableCell className="font-mono text-xs">{p.codigo_jiva}</TableCell>
+                      <TableCell>
+                        <Input
+                          type="text"
+                          maxLength={14}
+                          value={eanMap[p.id] ?? ""}
+                          onChange={(e) => setEanMap((prev) => ({ ...prev, [p.id]: e.target.value }))}
+                          onBlur={() => salvarEan(p.id)}
+                          placeholder="EAN"
+                          className="h-8 w-36 font-mono text-xs"
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">{p.nome}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={`${marcaBadgeClass(p.marca)} border-transparent`}>

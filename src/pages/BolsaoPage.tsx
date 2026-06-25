@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatBRL, formatCNPJ } from "@/lib/format";
-import { Loader2, Search, Wallet, Users, TrendingUp } from "lucide-react";
+import { Loader2, Search, Wallet, Users, TrendingUp, Gift } from "lucide-react";
 import { toast } from "sonner";
 
 type ClienteBolsao = {
@@ -203,13 +203,41 @@ export default function BolsaoPage() {
                   <TableCell className="text-right text-sm">{formatBRL(c.gerado)}</TableCell>
                   <TableCell className="text-right text-sm text-muted-foreground">{formatBRL(c.usado)}</TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => navigate(`/clientes/${c.cliente_id}`, { state: { tab: "bolsao" } })}
-                    >
-                      Ver detalhes
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      {c.saldo > 0 && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 border-green-300 text-green-700 hover:bg-green-50"
+                          onClick={() =>
+                            navigate(
+                              role === "gestora" ? "/gestora/novo-pedido" : "/novo-pedido",
+                              {
+                                state: {
+                                  fromCliente: {
+                                    cliente_id: c.cliente_id,
+                                    razao_social: c.nome,
+                                    cnpj: c.cnpj,
+                                    tipo_pedido: "bonificacao",
+                                    saldo_bolsao: c.saldo,
+                                  },
+                                },
+                              }
+                            )
+                          }
+                        >
+                          <Gift className="h-3.5 w-3.5" />
+                          Criar Bonificação
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate(`/clientes/${c.cliente_id}`, { state: { tab: "bolsao" } })}
+                      >
+                        Ver detalhes
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

@@ -99,12 +99,17 @@ export function gerarPedidoPDF(d: PdfData): jsPDF {
     autoTable(doc, {
       startY: y,
       head: [["Produto", "Qtd", "P. Final", "Total"]],
-      body: itens.map((i) => [
-        `${i.codigo} — ${i.nome}`,
-        String(i.quantidade),
-        formatBRL(i.preco_final),
-        formatBRL(i.total),
-      ]),
+      body: itens.map((i) => {
+        const nomeProduto = i.marca && i.nome && !i.nome.toLowerCase().startsWith(i.marca.toLowerCase())
+          ? `${i.marca} ${i.nome}`
+          : i.nome;
+        return [
+          `${i.codigo} — ${nomeProduto}`,
+          String(i.quantidade),
+          formatBRL(i.preco_final),
+          formatBRL(i.total),
+        ];
+      }),
       foot: [["Subtotal " + marca, "", "", formatBRL(subtotal)]],
       theme: "grid",
       headStyles: { fillColor: [26, 107, 58], textColor: 255, fontStyle: "bold" },
