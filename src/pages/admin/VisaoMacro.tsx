@@ -27,6 +27,17 @@ type AggRow = {
   total: number;
 };
 
+// Linha agregada da RPC get_faturamento_por_marca: faturamento (coluna J =
+// valor_total_itens) somado por (ano, mês, marca, tipo de negócio), incluindo
+// devoluções (valor negativo subtrai) — fiel à planilha do Sankhya.
+type MarcaRow = {
+  ano: number;
+  mes: number; // 1-12
+  marca: string | null;
+  tipo_negocio: string | null;
+  total: number;
+};
+
 type MetasRow = {
   mes: number;
   ano: number;
@@ -45,22 +56,11 @@ const COR_B2B = "#3B82F6";
 const COR_MP = "#0F6E56";
 const COR_ONLINE = "#EC4899";
 
-// Cores das marcas
-const COR_LABY = "#8B5CF6";
-const COR_ALIVIK = "#0EA5E9";
-const COR_BENDITA = "#F59E0B";
-
-// Classifica um registro de faturamento em uma marca.
-// Marca Própria agrupa todo o canal "MP"; as demais saem do grupo (coluna que
-// indica a marca). Retorna null quando o registro não se encaixa em nenhuma.
-function marcaDeRow(row: { canal: string | null; grupo: string | null }): string | null {
-  if ((row.canal ?? "").toUpperCase() === "MP") return "Marca Própria";
-  const g = (row.grupo ?? "").toUpperCase();
-  if (g.includes("LABY")) return "Laby";
-  if (g.includes("ALIVIK")) return "Alivik";
-  if (g.includes("BRAVIR") || g.includes("BENDITA")) return "Bendita Cânfora/Bravir";
-  return null;
-}
+// Paleta de cores para a quebra por marca (atribuída por ordem de valor).
+const CORES_MARCA = [
+  "#0F6E56", "#8B5CF6", "#0EA5E9", "#F59E0B",
+  "#EC4899", "#3B82F6", "#14B8A6", "#EF4444",
+];
 
 // URL de autorização OAuth do Bling (client_id público; secret fica só no backend)
 const BLING_AUTH_URL = `https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=52c28f14c3e549679570757457681add807daee1&redirect_uri=https://bravir-connect.vercel.app/admin/bling-callback&state=bravir`;
@@ -223,28 +223,41 @@ export default function VisaoMacro() {
   const mpAno = ano === 2026 ? mp2026 : mp2025;
   const onlinePorMes = useMemo(() => onlinePorMesFn(vendasOnline ?? []), [vendasOnline]);
 
-  // Realizado por marca no mês/ano selecionados, a partir das linhas agregadas
-  // (devoluções/SUFRAMA/bonificações já excluídas e valor já somado pela RPC).
+  // Faturamento por marca (Sankhya) — agregado no banco via RPC, usando a coluna
+  // "Marca" real da planilha e o valor da coluna J (valor_total_itens), incluindo
+  // devoluções (valor negativo subtrai) para bater com o total da planilha.
+  const { data: marcaRows } = useQuery({
+    queryKey: ["faturamento-por-marca", ano],
+    staleTime: 5 * 60 * 1000,
+    queryFn: async (): Promise<MarcaRow[]> => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc(
+        "get_faturamento_por_marca",
+        { p_ano: ano }
+      );
+      if (error) throw error;
+      return (data ?? []) as MarcaRow[];
+    },
+  });
+
+  // Realizado por marca no mês/ano selecionados (data-driven pelas marcas reais
+  // da planilha; cor atribuída por ordem decrescente de valor).
   const realizadoPorMarca = useMemo(() => {
     const acc: Record<string, number> = {};
-    for (const r of rows ?? []) {
+    for (const r of marcaRows ?? []) {
       if (r.ano !== ano) continue;
       if (r.mes - 1 !== mes) continue;
-      const marca = marcaDeRow(r);
-      if (!marca) continue;
+      const marca = (r.marca ?? "").trim() || "Sem marca";
       acc[marca] = (acc[marca] ?? 0) + (Number(r.total) || 0);
     }
-    const ordem = [
-      { nome: "Marca Própria", cor: COR_MP },
-      { nome: "Laby", cor: COR_LABY },
-      { nome: "Alivik", cor: COR_ALIVIK },
-      { nome: "Bendita Cânfora/Bravir", cor: COR_BENDITA },
-    ];
-    const lista = ordem.map((o) => ({ ...o, valor: acc[o.nome] ?? 0 }));
+    const lista = Object.entries(acc)
+      .map(([nome, valor]) => ({ nome, valor }))
+      .sort((a, b) => b.valor - a.valor)
+      .map((m, i) => ({ ...m, cor: CORES_MARCA[i % CORES_MARCA.length] }));
     const total = lista.reduce((s, m) => s + m.valor, 0);
     const max = Math.max(1, ...lista.map((m) => m.valor));
     return { lista, total, max };
-  }, [rows, ano, mes]);
+  }, [marcaRows, ano, mes]);
 
   // Realizado do mês selecionado por canal
   const realB2B = b2bAno[mes] ?? 0;

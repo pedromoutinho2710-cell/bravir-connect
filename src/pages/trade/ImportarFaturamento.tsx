@@ -14,6 +14,8 @@ type Etapa = "upload" | "preview" | "importando" | "concluido";
 type LinhaSankhya = {
   numero_nota: string;
   numero_pedido_crm: string | null;
+  marca: string | null;
+  tipo_negocio: string | null;
   tipo_operacao: string | null;
   data_faturamento: string | null;
   codigo_parceiro: string | null;
@@ -82,7 +84,7 @@ function parseData(raw: unknown): string | null {
 }
 
 type ColunaKey =
-  | "numero_nota" | "numero_pedido_crm" | "tipo_operacao" | "data_faturamento"
+  | "numero_nota" | "numero_pedido_crm" | "marca" | "tipo_negocio" | "tipo_operacao" | "data_faturamento"
   | "codigo_parceiro" | "nome_parceiro" | "grupo_segmento" | "grupo_cliente" | "segmento"
   | "cidade_uf" | "cidade" | "uf"
   | "codigo_produto" | "descricao_produto" | "quantidade"
@@ -97,6 +99,8 @@ function detectarColuna(header: string): ColunaKey | null {
   if (n.includes("numero") && n.includes("nota")) return "numero_nota";
   if (n === "nota" || n.includes("nº nota") || n.includes("n nota")) return "numero_nota";
   if (n.includes("pedido") && n.includes("crm")) return "numero_pedido_crm";
+  if (n === "marca") return "marca";
+  if (n.includes("tipo") && n.includes("negocio")) return "tipo_negocio";
   if (n.includes("tipo") && n.includes("operacao")) return "tipo_operacao";
   if (n.includes("data") && n.includes("faturamento")) return "data_faturamento";
   if (n.includes("recebimento") && n.includes("pedido")) return "recebimento_pedido";
@@ -167,6 +171,8 @@ function mapearLinha(
   return {
     numero_nota,
     numero_pedido_crm,
+    marca: String(get("marca") ?? "").trim() || null,
+    tipo_negocio: String(get("tipo_negocio") ?? "").trim() || null,
     tipo_operacao: String(get("tipo_operacao") ?? "").trim() || null,
     data_faturamento: parseData(get("data_faturamento")),
     codigo_parceiro: String(get("codigo_parceiro") ?? "").trim() || null,
@@ -218,7 +224,7 @@ export default function ImportarFaturamento() {
     const XLSX = await import("xlsx");
     const ws = XLSX.utils.aoa_to_sheet([
       [
-        "Número da Nota", "Número Pedido CRM", "Tipo de Operação", "Data do Faturamento",
+        "Número da Nota", "Número Pedido CRM", "Marca", "Tipo de Negócio", "Tipo de Operação", "Data do Faturamento",
         "Código do Parceiro", "Nome do Parceiro",
         "Grupo Cliente / Segmento", "Cidade / UF",
         "Código do Produto", "Descrição do Produto",
