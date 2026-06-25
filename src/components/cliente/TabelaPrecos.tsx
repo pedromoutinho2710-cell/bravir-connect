@@ -55,6 +55,7 @@ export function TabelaPrecos({
   const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, number>>({});
   const [descontoAplicado, setDescontoAplicado] = useState(0);
   const [descontoMaxCluster, setDescontoMaxCluster] = useState(0);
+  const [descontoOverride, setDescontoOverride] = useState<Record<string, number>>({});
   const [qtds, setQtds] = useState<Record<string, number>>({});
   const [exportando, setExportando] = useState(false);
 
@@ -146,6 +147,7 @@ export function TabelaPrecos({
         setLinhasBase(base);
         setDescontoMaxCluster(maxPct);
         setDescontoAplicado(maxPct);
+        setDescontoOverride({});
         setLoading(false);
       }
     })();
@@ -193,12 +195,15 @@ export function TabelaPrecos({
   const linhas = useMemo<LinhaProduto[]>(() => {
     return linhasBase.map((l) => {
       if (l.precoBruto === 0) return { ...l, precoFinal: null };
-      const calculado = l.precoBruto * (1 - descontoAplicado / 100);
+      const overridePct = descontoOverride[l.id];
+      const dPct = overridePct !== undefined ? overridePct : descontoAplicado;
+      const dEfetivo = Math.min(dPct, l.descontoCluster * 100);
+      const calculado = l.precoBruto * (1 - dEfetivo / 100);
       const especial = precosEspeciais[l.id] ?? null;
       const precoFinal = especial != null && especial > calculado ? especial : calculado;
       return { ...l, precoFinal };
     });
-  }, [linhasBase, precosEspeciais, descontoAplicado]);
+  }, [linhasBase, precosEspeciais, descontoAplicado, descontoOverride]);
 
   const grupos = useMemo(() => {
     const map: Record<string, LinhaProduto[]> = {};
@@ -243,13 +248,14 @@ export function TabelaPrecos({
       const workbook = new ExcelJS.Workbook();
       const ws = workbook.addWorksheet("Tabela de Preços");
 
-      // 10 columns: Cód. Jiva, EAN, CX, Qtd, Descrição, Preço Líq., c/IPI, c/IPI+ST, Total s/ST, Total c/ST
+      // 11 columns: Cód. Jiva, EAN, CX, Qtd, Descrição, Desc.%, Preço Líq., c/IPI, c/IPI+ST, Total s/ST, Total c/ST
       ws.columns = [
         { width: 14 },
         { width: 16 },
         { width: 10 },
         { width: 10 },
         { width: 40 },
+        { width: 12 },
         { width: 18 },
         { width: 18 },
         { width: 18 },
@@ -269,7 +275,7 @@ export function TabelaPrecos({
       const agora = new Date();
       const mesAno = agora.toLocaleString("pt-BR", { month: "long", year: "numeric" }).toUpperCase();
 
-      ws.mergeCells("A4:J4");
+      ws.mergeCells("A4:K4");
       const tituloCell = ws.getCell("A4");
       tituloCell.value = `TABELA DE PREÇOS — ${mesAno}`;
       tituloCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
@@ -298,7 +304,7 @@ export function TabelaPrecos({
       const cabRow = 13;
       const cabecalhos = [
         "Cód. Jiva", "EAN", "CX de Embarque", "Qtd. Pedida",
-        "Descrição do Produto", "Preço Líq. s/ IPI", "Preço c/ IPI",
+        "Descrição do Produto", "Desc. %", "Preço Líq. s/ IPI", "Preço c/ IPI",
         "Preço c/ IPI+ST", "Total s/ ST", "Total c/ ST",
       ];
       cabecalhos.forEach((h, idx) => {
@@ -320,13 +326,13 @@ export function TabelaPrecos({
           return { it, qtdExportada };
         });
 
-        ws.mergeCells(`A${r}:J${r}`);
+        ws.mergeCells(`A${r}:K${r}`);
         const gc = ws.getCell(`A${r}`);
         gc.value = g.marca;
         gc.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
         gc.font = { color: { argb: "FFFFFFFF" }, bold: true };
         gc.alignment = { horizontal: "left", vertical: "middle" };
-        for (let c = 1; c <= 10; c++) {
+        for (let c = 1; c <= 11; c++) {
           ws.getCell(r, c).border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
         }
         r++;
@@ -338,6 +344,9 @@ export function TabelaPrecos({
           const zebra = idx % 2 === 1;
           const fill = zebra ? "FFF2F2F2" : "FFFFFFFF";
           const rowNum = r;
+          const descPct = descontoOverride[it.id] !== undefined
+            ? descontoOverride[it.id]
+            : descontoAplicado;
 
           const cells: Array<{ col: number; val: string | number | { formula: string }; fmt?: string; align?: "left" | "right" | "center" }> = [
             { col: 1, val: it.codigo_jiva, align: "left" },
@@ -345,11 +354,12 @@ export function TabelaPrecos({
             { col: 3, val: it.cx_embarque, align: "center" },
             { col: 4, val: qtd, align: "center" },
             { col: 5, val: it.nome, align: "left" },
-            { col: 6, val: precoLiq, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 7, val: precoComIpi, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 8, val: precoComIpiSt, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 9, val: { formula: `D${rowNum}*F${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
-            { col: 10, val: { formula: `D${rowNum}*H${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 6, val: `${descPct.toFixed(2)}%`, align: "center" },
+            { col: 7, val: precoLiq, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 8, val: precoComIpi, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 9, val: precoComIpiSt, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 10, val: { formula: `D${rowNum}*G${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
+            { col: 11, val: { formula: `D${rowNum}*I${rowNum}` }, fmt: '"R$"#,##0.00', align: "right" },
           ];
           cells.forEach(({ col, val, fmt, align }) => {
             const cell = ws.getCell(r, col);
@@ -365,26 +375,26 @@ export function TabelaPrecos({
       });
 
       const totalGeralRow = r;
-      ws.mergeCells(`A${totalGeralRow}:H${totalGeralRow}`);
+      ws.mergeCells(`A${totalGeralRow}:I${totalGeralRow}`);
       const tg = ws.getCell(`A${totalGeralRow}`);
       tg.value = "TOTAL GERAL";
       tg.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
       tg.font = { color: { argb: "FFFFFFFF" }, bold: true };
       tg.alignment = { horizontal: "right", vertical: "middle" };
 
-      const tgI = ws.getCell(`I${totalGeralRow}`);
       const tgJ = ws.getCell(`J${totalGeralRow}`);
+      const tgK = ws.getCell(`K${totalGeralRow}`);
       if (linhasProduto.length > 0) {
-        tgI.value = { formula: `SUM(${linhasProduto.map((n) => `I${n}`).join(",")})` };
         tgJ.value = { formula: `SUM(${linhasProduto.map((n) => `J${n}`).join(",")})` };
-      } else { tgI.value = 0; tgJ.value = 0; }
-      [tgI, tgJ].forEach((cell) => {
+        tgK.value = { formula: `SUM(${linhasProduto.map((n) => `K${n}`).join(",")})` };
+      } else { tgJ.value = 0; tgK.value = 0; }
+      [tgJ, tgK].forEach((cell) => {
         cell.numFmt = '"R$"#,##0.00';
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: VERDE } };
         cell.font = { color: { argb: "FFFFFFFF" }, bold: true };
         cell.alignment = { horizontal: "right", vertical: "middle" };
       });
-      for (let c = 1; c <= 10; c++) {
+      for (let c = 1; c <= 11; c++) {
         ws.getCell(totalGeralRow, c).border = { top: { style: "thin" }, bottom: { style: "thin" }, left: { style: "thin" }, right: { style: "thin" } };
       }
 
@@ -453,6 +463,7 @@ export function TabelaPrecos({
               <th className="px-3 py-2 text-left font-semibold">EAN</th>
               <th className="px-3 py-2 text-left font-semibold">Descrição</th>
               <th className="px-3 py-2 text-center font-semibold">CX Embarque</th>
+              <th className="px-3 py-2 text-center font-semibold">Desc. %</th>
               <th className="px-3 py-2 text-right font-semibold">Preço Líq. s/ IPI</th>
               <th className="px-3 py-2 text-right font-semibold">Preço c/ IPI</th>
               <th className="px-3 py-2 text-right font-semibold">Preço c/ IPI+ST</th>
@@ -469,19 +480,23 @@ export function TabelaPrecos({
                 itens={g.itens}
                 qtds={qtds}
                 onChangeQtd={setQtd}
+                descontoAplicado={descontoAplicado}
+                descontoOverride={descontoOverride}
+                onChangeOverride={(id, val) => setDescontoOverride((prev) => ({ ...prev, [id]: val }))}
+                onResetOverride={(id) => setDescontoOverride((prev) => { const n = { ...prev }; delete n[id]; return n; })}
               />
             ))}
           </tbody>
           <tfoot>
             <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
-              <td colSpan={8} className="px-3 py-2 text-right font-bold">
+              <td colSpan={9} className="px-3 py-2 text-right font-bold">
                 Total Geral s/ ST
               </td>
               <td className="px-3 py-2 text-right font-bold">{formatBRL(totaisGerais.semST)}</td>
               <td className="px-3 py-2 text-right font-bold">—</td>
             </tr>
             <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
-              <td colSpan={8} className="px-3 py-2 text-right font-bold">
+              <td colSpan={9} className="px-3 py-2 text-right font-bold">
                 Total Geral c/ ST
               </td>
               <td className="px-3 py-2 text-right font-bold">—</td>
@@ -499,16 +514,24 @@ function GrupoLinhas({
   itens,
   qtds,
   onChangeQtd,
+  descontoAplicado,
+  descontoOverride,
+  onChangeOverride,
+  onResetOverride,
 }: {
   marca: string;
   itens: LinhaProduto[];
   qtds: Record<string, number>;
   onChangeQtd: (id: string, v: string) => void;
+  descontoAplicado: number;
+  descontoOverride: Record<string, number>;
+  onChangeOverride: (id: string, val: number) => void;
+  onResetOverride: (id: string) => void;
 }) {
   return (
     <>
       <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
-        <td colSpan={10} className="px-3 py-1.5 font-bold text-sm">
+        <td colSpan={11} className="px-3 py-1.5 font-bold text-sm">
           {marca}
         </td>
       </tr>
@@ -519,19 +542,41 @@ function GrupoLinhas({
         const precoComIpiSt = precoComIpi != null ? precoComIpi * (1 + it.st) : null;
         const totalSemST = precoLiq != null ? precoLiq * qtd : 0;
         const totalComST = precoComIpiSt != null ? precoComIpiSt * qtd : 0;
+        const temOverride = descontoOverride[it.id] !== undefined;
+        const descExibido = temOverride ? descontoOverride[it.id] : descontoAplicado;
+        const maxDesc = it.descontoCluster * 100;
         return (
           <tr key={it.id} className={idx % 2 === 1 ? "bg-muted/30" : undefined}>
             <td className="px-3 py-1.5 font-mono text-xs">{it.codigo_jiva}</td>
             <td className="px-3 py-1.5 font-mono text-xs text-muted-foreground">{it.ean ?? "—"}</td>
             <td className="px-3 py-1.5">{it.nome}</td>
             <td className="px-3 py-1.5 text-center">{it.cx_embarque}</td>
+            <td className="px-2 py-1.5 text-center">
+              <div className="flex flex-col items-center gap-0.5">
+                <Input
+                  type="number" min={0} max={maxDesc} step={0.5}
+                  value={parseFloat(descExibido.toFixed(2))}
+                  onChange={(e) => {
+                    const val = Math.min(maxDesc, Math.max(0, parseFloat(e.target.value) || 0));
+                    onChangeOverride(it.id, val);
+                  }}
+                  onFocus={(e) => e.target.select()}
+                  className={`h-7 w-16 text-xs text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none${temOverride ? " border-primary ring-1 ring-primary/30" : ""}`}
+                />
+                {temOverride && (
+                  <button type="button" onClick={() => onResetOverride(it.id)}
+                    className="text-[9px] text-muted-foreground hover:text-primary leading-none">
+                    ↺ global
+                  </button>
+                )}
+              </div>
+            </td>
             <td className="px-3 py-1.5 text-right">{precoLiq != null ? formatBRL(precoLiq) : "—"}</td>
             <td className="px-3 py-1.5 text-right">{precoComIpi != null ? formatBRL(precoComIpi) : "—"}</td>
             <td className="px-3 py-1.5 text-right">{precoComIpiSt != null ? formatBRL(precoComIpiSt) : "—"}</td>
             <td className="px-3 py-1.5 text-center">
               <Input
-                type="number"
-                min={0}
+                type="number" min={0}
                 value={qtd === 0 ? "" : qtd}
                 onChange={(e) => onChangeQtd(it.id, e.target.value)}
                 className="h-8 w-20 mx-auto text-center"
