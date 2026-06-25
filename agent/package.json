@@ -1,0 +1,14 @@
+{
+  "name": "bravir-agente-local",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Agente IA autônomo local do Bravir Connect",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.0.0",
+    "dotenv": "^16.0.0"
+  }
+}

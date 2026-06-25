@@ -50,6 +50,7 @@ import GestaoPrecos from "./pages/admin/GestaoPrecos";
 import Configuracoes from "./pages/admin/Configuracoes";
 import Campanhas from "./pages/admin/Campanhas";
 import AgenteIA from "./pages/admin/AgenteIA";
+import MeuAgente from "./pages/MeuAgente";
 import DashboardLogistica from "./pages/logistica/DashboardLogistica";
 import FilaLogistica from "./pages/logistica/FilaLogistica";
 import SiteLanding from "./pages/site/SiteLanding";
@@ -141,6 +142,11 @@ const App = () => (
             {/* Gestão de Estoque (mockado — Sankhya) — admin e gestora */}
             <Route element={<ProtectedRoute allow={["admin", "gestora"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/admin/gestao-estoque" element={<GestaoEstoqueAdmin />} />
+            </Route>
+
+            {/* Meu Agente — acessível por qualquer role autenticado; guarda por email dentro do componente */}
+            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento", "trade", "financeiro"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/meu-agente" element={<MeuAgente />} />
             </Route>
 
             {/* Solicitações de melhoria — admin e pedro.menezes (liberado por email) */}

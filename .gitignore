@@ -1,3 +1,9 @@
+# Variáveis de ambiente — nunca versionar
+.env
+.env.*
+!.env.example
+agent/.env
+
 # Logs
 logs
 *.log
