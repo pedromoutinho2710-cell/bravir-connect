@@ -310,24 +310,25 @@ export default function Dashboard() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any)
             .from("faturamentos_sankhya")
-            .select("data_faturamento, valor_liquido, tipo_operacao")
+            .select("data_faturamento, valor_total_itens, valor_liquido")
             .gte("data_faturamento", meses6[0].inicio)
-            .lte("data_faturamento", meses6[meses6.length - 1].fim)
-            .not("tipo_operacao", "ilike", "%devolução%"),
-          // Total faturado (Sankhya) dentro do período selecionado
+            .lte("data_faturamento", meses6[meses6.length - 1].fim),
+          // Total faturado (Sankhya) dentro do período selecionado — valor BRUTO
+          // (valor_total_itens), incluindo devoluções (valor negativo subtrai),
+          // para bater com o total da planilha do Sankhya.
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any)
             .from("faturamentos_sankhya")
-            .select("valor_liquido, tipo_operacao")
+            .select("valor_total_itens, valor_liquido")
             .gte("data_faturamento", effectiveInicio)
-            .lte("data_faturamento", effectiveFim)
-            .not("tipo_operacao", "ilike", "%devolução%"),
+            .lte("data_faturamento", effectiveFim),
         ]);
 
-        // Total faturado do período (soma do Sankhya)
+        // Total faturado do período (soma do Sankhya). Usa o bruto (valor_total_itens);
+        // cai para o líquido em registros antigos ainda sem bruto (pré re-importação).
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const fatFaturadoSum = ((fatPeriodoRes.data ?? []) as any[]).reduce(
-          (s: number, r: any) => s + Number(r.valor_liquido ?? 0),
+          (s: number, r: any) => s + Number(r.valor_total_itens ?? r.valor_liquido ?? 0),
           0,
         );
         setFatFaturadoPeriodo(fatFaturadoSum);
@@ -633,7 +634,9 @@ export default function Dashboard() {
           setEntradaMarca({});
         }
 
-        // Faturamento mensal — agrupar valor_liquido por mês usando data_faturamento
+        // Faturamento mensal — agrupar o valor BRUTO (valor_total_itens) por mês usando
+        // data_faturamento, incluindo devoluções. Cai para o líquido em meses ainda sem
+        // bruto (registros antigos pré re-importação) para não zerar o histórico.
         const fatMensalArr = meses6.map((m) => ({
           mes: m.label,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -644,7 +647,7 @@ export default function Dashboard() {
               return r.data_faturamento >= m.inicio && r.data_faturamento <= m.fim;
             })
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .reduce((s: number, r: any) => s + Number(r.valor_liquido ?? 0), 0),
+            .reduce((s: number, r: any) => s + Number(r.valor_total_itens ?? r.valor_liquido ?? 0), 0),
         }));
         setFatMensal(fatMensalArr);
       } catch {

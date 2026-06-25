@@ -114,7 +114,7 @@ function detectarColuna(header: string): ColunaKey | null {
   if (n.includes("valor") && n.includes("total") && n.includes("liquido")) return "valor_liquido";
   if (n.includes("vlr") && n.includes("total") && n.includes("liquido")) return "valor_liquido";
   if (n.includes("valor") && n.includes("liquido")) return "valor_liquido";
-  if (n.includes("valor") && n.includes("total") && n.includes("item")) return "valor_total_itens";
+  if (n.includes("valor") && n.includes("total") && (n.includes("item") || n.includes("iten"))) return "valor_total_itens";
   if (n === "valor st" || (n.includes("valor") && n.includes("st") && !n.includes("base"))) return "valor_st";
   if (n.includes("base") && n.includes("st")) return "base_st";
   if (n.includes("aliq") && n.includes("ipi")) return "aliq_ipi";
@@ -296,28 +296,48 @@ export default function ImportarFaturamento() {
     setEtapa("importando");
     setVinculando(false);
     setProgresso({ feitos: 0, total: rows.length });
-    let inseridos = 0;
-    let processadosTotal = 0;
+    // 1) Parse de todas as linhas do arquivo.
     const todasLinhas: LinhaSankhya[] = [];
+    for (const r of rows) {
+      const linha = mapearLinha(r, mapeamento);
+      if (linha) todasLinhas.push(linha);
+    }
 
-    const lote = 200;
-    for (let i = 0; i < rows.length; i += lote) {
-      const sliceRows = rows.slice(i, i + lote);
-      const payload: (LinhaSankhya & { importado_por: string | null })[] = [];
-      for (const r of sliceRows) {
-        const linha = mapearLinha(r, mapeamento);
-        if (linha) {
-          todasLinhas.push(linha);
-          payload.push({ ...linha, importado_por: user?.id ?? null });
-        }
+    // 2) Replace-by-nota: apaga no staging todas as linhas das notas presentes no
+    //    arquivo e reinsere tudo. Faz o staging refletir a planilha fielmente —
+    //    inclusive o mesmo produto repetido na mesma nota (lotes/CFOP/ST distintos)
+    //    — sem perder linhas, e mantém o import idempotente sem depender de
+    //    constraint única (que tinha grão errado e descartava linhas legítimas).
+    const notasArquivo = Array.from(
+      new Set(todasLinhas.map((l) => l.numero_nota).filter(Boolean)),
+    );
+    const delLote = 200;
+    for (let i = 0; i < notasArquivo.length; i += delLote) {
+      const fatia = notasArquivo.slice(i, i + delLote);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("faturamentos_sankhya")
+        .delete()
+        .in("numero_nota", fatia);
+      if (error) {
+        console.error(error);
+        toast.error(`Erro ao limpar notas existentes: ${error.message}`);
       }
+    }
 
+    // 3) Insere todas as linhas (sem dedup — o passo 2 já garante idempotência).
+    let inseridos = 0;
+    const lote = 200;
+    for (let i = 0; i < todasLinhas.length; i += lote) {
+      const payload = todasLinhas
+        .slice(i, i + lote)
+        .map((l) => ({ ...l, importado_por: user?.id ?? null }));
       if (payload.length > 0) {
         // TODO: adicionar faturamentos_sankhya ao types.ts e remover o cast
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const { data, error } = await (supabase as any)
           .from("faturamentos_sankhya")
-          .upsert(payload, { onConflict: "numero_nota,codigo_produto", ignoreDuplicates: true })
+          .insert(payload)
           .select("id");
         if (error) {
           console.error(error);
@@ -325,14 +345,12 @@ export default function ImportarFaturamento() {
         } else {
           inseridos += (data ?? []).length;
         }
-        processadosTotal += payload.length;
       }
-
-      setProgresso({ feitos: Math.min(i + sliceRows.length, rows.length), total: rows.length });
+      setProgresso({ feitos: Math.min(i + lote, todasLinhas.length), total: rows.length });
       await new Promise((r) => setTimeout(r, 0));
     }
 
-    const duplicados = processadosTotal - inseridos;
+    const duplicados = 0;
     if (!Array.from(mapeamento.values()).includes("numero_pedido_crm")) {
       toast.info("Coluna 'Número Pedido CRM' não encontrada — pedidos não foram vinculados.");
     }
