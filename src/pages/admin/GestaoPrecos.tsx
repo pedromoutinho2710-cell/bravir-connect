@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, Upload } from "lucide-react";
 
 // Colunas de preço bruto editáveis — uma por tabela (região) de preço.
 const COLUNAS_TABELA = [
@@ -217,6 +217,67 @@ export default function GestaoPrecos() {
     else toast.success("EAN salvo");
   };
 
+  const importarEanRef = useRef<HTMLInputElement>(null);
+  const [importando, setImportando] = useState(false);
+
+  const importarEanPlanilha = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportando(true);
+    try {
+      const ExcelJS = await import("exceljs");
+      const wb = new ExcelJS.Workbook();
+      const buf = await file.arrayBuffer();
+      await wb.xlsx.load(buf);
+      const ws = wb.worksheets[0];
+
+      // Detecta índices das colunas COD/codigo_jiva e EAN (linha 1 = header)
+      const header: string[] = [];
+      ws.getRow(1).eachCell((cell) => { header.push(String(cell.value ?? "").toLowerCase().trim()); });
+      const colCod = header.findIndex((h) => h.includes("cod") || h.includes("codigo") || h.includes("código"));
+      const colEan = header.findIndex((h) => h.includes("ean"));
+      if (colCod === -1 || colEan === -1) {
+        toast.error("Planilha precisa ter colunas com 'COD' (ou 'código') e 'EAN'");
+        setImportando(false);
+        if (importarEanRef.current) importarEanRef.current.value = "";
+        return;
+      }
+
+      // Monta mapa codigo_jiva → ean
+      const mapa: Record<string, string> = {};
+      ws.eachRow((row, rowNum) => {
+        if (rowNum === 1) return;
+        const cod = String(row.getCell(colCod + 1).value ?? "").trim();
+        const ean = String(row.getCell(colEan + 1).value ?? "").trim();
+        if (cod && ean) mapa[cod] = ean;
+      });
+
+      const entradas = Object.entries(mapa);
+      if (entradas.length === 0) { toast.error("Nenhum EAN encontrado na planilha"); setImportando(false); return; }
+
+      // Atualiza em lotes de 50
+      let ok = 0; let err = 0;
+      for (let i = 0; i < entradas.length; i += 50) {
+        const lote = entradas.slice(i, i + 50);
+        await Promise.all(lote.map(async ([cod, ean]) => {
+          const { error } = await supabase.from("produtos").update({ ean }).eq("codigo_jiva", cod);
+          if (error) err++; else ok++;
+        }));
+      }
+
+      // Atualiza eanMap local
+      const novoEan = { ...eanMap };
+      produtos.forEach((p) => { if (mapa[p.codigo_jiva]) novoEan[p.id] = mapa[p.codigo_jiva]; });
+      setEanMap(novoEan);
+
+      toast.success(`${ok} EANs importados com sucesso${err > 0 ? ` (${err} com erro)` : ""}`);
+    } catch (ex) {
+      toast.error("Erro ao ler planilha: " + String(ex));
+    }
+    setImportando(false);
+    if (importarEanRef.current) importarEanRef.current.value = "";
+  };
+
   const produtoAlterado = (id: string): boolean =>
     TABELAS.some((t) => precoMudou(valores[id]?.[t], precoOriginal[id]?.[t]));
 
@@ -373,11 +434,18 @@ export default function GestaoPrecos() {
             Edite o preço bruto por produto e região. Só afeta pedidos novos.
           </p>
         </div>
-        {vigenciaAtiva && (
-          <Badge className="bg-green-100 text-green-800 border-green-300">
-            Vigência ativa: {vigenciaAtiva.nome}
-          </Badge>
-        )}
+        <div className="flex items-center gap-2">
+          {vigenciaAtiva && (
+            <Badge className="bg-green-100 text-green-800 border-green-300">
+              Vigência ativa: {vigenciaAtiva.nome}
+            </Badge>
+          )}
+          <input ref={importarEanRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={importarEanPlanilha} />
+          <Button variant="outline" size="sm" disabled={importando} onClick={() => importarEanRef.current?.click()}>
+            {importando ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Upload className="h-4 w-4 mr-1" />}
+            Importar EANs
+          </Button>
+        </div>
       </div>
 
       {/* Toolbar de filtros */}
