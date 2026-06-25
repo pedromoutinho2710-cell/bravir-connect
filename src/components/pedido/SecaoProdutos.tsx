@@ -112,6 +112,7 @@ export function SecaoProdutos({
   const [precosEspeciais, setPrecosEspeciais] = useState<Record<string, { preco: number; desconto_perfil: number | null; origem: string }>>({});
   const [qtdDraft, setQtdDraft] = useState<Record<string, string>>({});
   const [descontoGlobalPct, setDescontoGlobalPct] = useState<number | null>(null);
+  const [descontoOverride, setDescontoOverride] = useState<Record<string, number>>({});
 
   const descontoMaxCluster = useMemo(() => {
     if (!perfilCliente) return 0;
@@ -122,6 +123,7 @@ export function SecaoProdutos({
   // Inicializa o slider com o desconto máximo do cluster quando o cliente/cluster muda
   useEffect(() => {
     setDescontoGlobalPct(descontoMaxCluster > 0 ? descontoMaxCluster : null);
+    setDescontoOverride({});
   }, [descontoMaxCluster]);
 
   const limparQtdDraft = (produto_id: string) =>
@@ -164,10 +166,12 @@ export function SecaoProdutos({
   const calcItem = (p: Produto, qtd: number): ItemPedido => {
     const bruto = precos[p.id]?.[tabelaPreco] ?? 0;
     const dPerfilCluster = descontos[p.id]?.[perfilCliente] ?? 0;
+    const overridePct = descontoOverride[p.id];
+    const effectivePct = overridePct !== undefined ? overridePct : descontoGlobalPct;
     const dPerfil = descontoLivre
       ? 0
-      : descontoGlobalPct !== null
-        ? Math.min(descontoGlobalPct / 100, dPerfilCluster)
+      : effectivePct !== null
+        ? Math.min(effectivePct / 100, dPerfilCluster)
         : dPerfilCluster;
     const precos_calc = calcularPrecos(bruto, dPerfil, 0, 0, qtd);
     
@@ -314,10 +318,12 @@ export function SecaoProdutos({
     return itens.map((i) => {
       const bruto = precos[i.produto_id]?.[tabelaPreco] ?? i.preco_bruto;
       const dPerfilCluster = descontos[i.produto_id]?.[perfilCliente] ?? i.desconto_perfil;
+      const overridePct = descontoOverride[i.produto_id];
+      const effectivePct = overridePct !== undefined ? overridePct : descontoGlobalPct;
       const dPerfil = (descontoLivre || preservarDescontos)
         ? i.desconto_perfil
-        : descontoGlobalPct !== null
-          ? Math.min(descontoGlobalPct / 100, dPerfilCluster)
+        : effectivePct !== null
+          ? Math.min(effectivePct / 100, dPerfilCluster)
           : dPerfilCluster;
       const dCom = (descontoLivre || preservarDescontos) ? i.desconto_comercial : i.desconto_comercial;
       const precos_calc = calcularPrecos(bruto, dPerfil, dCom, i.desconto_trade, i.quantidade);
@@ -387,7 +393,7 @@ export function SecaoProdutos({
         total: precos_calc.total,
       };
     });
-  }, [itens, precos, descontos, tabelaPreco, perfilCliente, descontoLivre, precosEspeciais, preservarDescontos, descontoGlobalPct]);
+  }, [itens, precos, descontos, tabelaPreco, perfilCliente, descontoLivre, precosEspeciais, preservarDescontos, descontoGlobalPct, descontoOverride]);
 
   // Sincroniza recálculo (apenas quando os números efetivamente mudam)
   useMemoEffect(itensRecalculados, itens, onChange);
@@ -645,7 +651,35 @@ export function SecaoProdutos({
                           placeholder="0"
                         />
                       ) : (
-                        <span className="text-[10px] text-muted-foreground">{(i.desconto_perfil * 100).toFixed(2)}%</span>
+                        <div className="flex flex-col items-end gap-0.5">
+                          <Input
+                            type="number" min={0}
+                            max={parseFloat(((descontos[i.produto_id]?.[perfilCliente] ?? 0) * 100).toFixed(2))}
+                            step={0.5}
+                            value={descontoOverride[i.produto_id] !== undefined
+                              ? descontoOverride[i.produto_id]
+                              : parseFloat((i.desconto_perfil * 100).toFixed(2))}
+                            onChange={(e) => {
+                              const maxProd = (descontos[i.produto_id]?.[perfilCliente] ?? 0) * 100;
+                              const val = Math.min(maxProd, Math.max(0, parseFloat(e.target.value) || 0));
+                              setDescontoOverride((prev) => ({ ...prev, [i.produto_id]: val }));
+                            }}
+                            onFocus={(e) => e.target.select()}
+                            className={cn(
+                              "w-20 ml-auto h-7 text-xs px-2 py-1 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none",
+                              descontoOverride[i.produto_id] !== undefined && "border-primary ring-1 ring-primary/30"
+                            )}
+                          />
+                          {descontoOverride[i.produto_id] !== undefined && (
+                            <button
+                              type="button"
+                              onClick={() => setDescontoOverride((prev) => { const n = { ...prev }; delete n[i.produto_id]; return n; })}
+                              className="text-[9px] text-muted-foreground hover:text-primary leading-none"
+                            >
+                              ↺ global
+                            </button>
+                          )}
+                        </div>
                       )}
                     </TableCell>
 
