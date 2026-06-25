@@ -16,6 +16,7 @@ type LinhaSankhya = {
   numero_pedido_crm: string | null;
   marca: string | null;
   tipo_negocio: string | null;
+  canal: string | null;
   tipo_operacao: string | null;
   data_faturamento: string | null;
   codigo_parceiro: string | null;
@@ -168,11 +169,19 @@ function mapearLinha(
     if (!uf) uf = u || null;
   }
 
+  // canal (B2B/MP) derivado do Tipo de Negócio, pois a planilha não traz coluna Canal:
+  // MARCAS BRAVIR = B2B ("BRAVIR"); MARCAS DE TERCEIROS = Marca Própria ("MP").
+  const tipo_negocio = String(get("tipo_negocio") ?? "").trim() || null;
+  const canal = tipo_negocio
+    ? (/bravir/i.test(tipo_negocio) ? "BRAVIR" : /terceiro/i.test(tipo_negocio) ? "MP" : null)
+    : null;
+
   return {
     numero_nota,
     numero_pedido_crm,
     marca: String(get("marca") ?? "").trim() || null,
-    tipo_negocio: String(get("tipo_negocio") ?? "").trim() || null,
+    tipo_negocio,
+    canal,
     tipo_operacao: String(get("tipo_operacao") ?? "").trim() || null,
     data_faturamento: parseData(get("data_faturamento")),
     codigo_parceiro: String(get("codigo_parceiro") ?? "").trim() || null,
