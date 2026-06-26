@@ -72,6 +72,8 @@ const TIPO_META: Record<string, { label: string; cls: string }> = {
   bug: { label: "Bug", cls: "bg-red-100 text-red-800 border-red-300" },
   nova: { label: "Nova feature", cls: "bg-blue-100 text-blue-800 border-blue-300" },
   altera: { label: "Melhoria", cls: "bg-emerald-100 text-emerald-800 border-emerald-300" },
+  duvida: { label: "Dúvida", cls: "bg-violet-100 text-violet-800 border-violet-300" },
+  outro: { label: "Outro", cls: "bg-gray-100 text-gray-700 border-gray-300" },
 };
 
 function tipoMeta(t: string) {

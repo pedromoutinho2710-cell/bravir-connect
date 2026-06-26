@@ -61,7 +61,7 @@ export default function HistoricoAcoes() {
       const { data, error } = await (supabase as any)
         .from("historico_status")
         .select(`
-          id, pedido_id, status_anterior, status_novo, acao, motivo,
+          id, pedido_id, status_anterior, status_novo, acao, motivo:observacao,
           usuario_nome, usuario_email, created_at,
           pedidos(numero_pedido, clientes(razao_social, nome_parceiro))
         `)

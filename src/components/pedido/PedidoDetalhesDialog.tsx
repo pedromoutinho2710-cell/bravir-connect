@@ -174,7 +174,7 @@ export function PedidoDetalhesDialog({ pedidoId, open, onOpenChange, onCorrigir,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (supabase as any)
           .from("historico_status")
-          .select("id, acao, status_anterior, status_novo, motivo, usuario_nome, usuario_email, created_at")
+          .select("id, acao, status_anterior, status_novo, motivo:observacao, usuario_nome, usuario_email, created_at")
           .eq("pedido_id", pedidoId)
           .order("created_at", { ascending: true }),
         supabase
