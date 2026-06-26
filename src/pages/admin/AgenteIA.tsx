@@ -108,6 +108,9 @@ const AGENTE_META: Record<string, AgenteMeta> = {
   implementado: { label: "Implementado", className: "bg-emerald-100 text-emerald-800 border-emerald-300" },
   revertido: { label: "Revertido", className: "bg-orange-100 text-orange-800 border-orange-300" },
   reprovado: { label: "Reprovado", className: "bg-gray-100 text-gray-500 border-gray-300" },
+  aprovado: { label: "Aprovado", className: "bg-emerald-100 text-emerald-800 border-emerald-300" },
+  em_andamento: { label: "Em andamento", className: "bg-blue-100 text-blue-800 border-blue-300" },
+  concluido: { label: "Concluído", className: "bg-emerald-100 text-emerald-800 border-emerald-300" },
   erro: { label: "Erro", className: "bg-red-100 text-red-800 border-red-300" },
 };
 
@@ -670,6 +673,24 @@ export default function AgenteIA() {
     }
   };
 
+  const aprovarParaAgente = async (s: Solicitacao) => {
+    marcar(s.id, "aprovar");
+    try {
+      const { error } = await supabase
+        .from("solicitacoes_gestor")
+        .update({ agente_status: "aprovado" })
+        .eq("id", s.id);
+      if (error) throw error;
+      toast.success("Aprovado — o agente implementa na proxima execucao");
+      setSelecionada(null);
+      await invalidarTudo();
+    } catch (e) {
+      toast.error("Erro ao aprovar: " + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      marcar(s.id, null);
+    }
+  };
+
   const ocupado =
     executandoTodas ||
     aprovandoTodas ||
@@ -1040,6 +1061,23 @@ export default function AgenteIA() {
                             Ver PR <ExternalLink className="h-3.5 w-3.5" />
                           </a>
                         )}
+                        {!["aprovado", "em_andamento", "concluido", "implementado"].includes(
+                          s.agente_status ?? "",
+                        ) && (
+                          <Button
+                            size="sm"
+                            className="bg-emerald-600 hover:bg-emerald-700"
+                            disabled={!!proc || ocupado}
+                            onClick={() => aprovarParaAgente(s)}
+                          >
+                            {proc === "aprovar" ? (
+                              <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                            ) : (
+                              <Check className="mr-1 h-4 w-4" />
+                            )}
+                            Aprovar
+                          </Button>
+                        )}
                         <Button
                           size="sm"
                           variant="outline"
@@ -1187,6 +1225,10 @@ export default function AgenteIA() {
               const mudancas = sel.agente_mudancas;
               const prNum = prNumberFromUrl(sel.agente_pr_url);
               const ocupadoSel = !!procSel;
+              const podeEnviarAgente =
+                !["aprovado", "em_andamento", "concluido", "implementado"].includes(
+                  sel.agente_status ?? "",
+                );
               return (
                 <>
                   <SheetHeader>
@@ -1303,6 +1345,34 @@ export default function AgenteIA() {
                   </div>
 
                   <SheetFooter className="flex-col gap-2 sm:flex-col sm:space-x-0">
+                    {podeEnviarAgente ? (
+                      <Button
+                        className="w-full bg-emerald-600 hover:bg-emerald-700"
+                        disabled={ocupadoSel}
+                        onClick={() => aprovarParaAgente(sel)}
+                      >
+                        {procSel === "aprovar" ? (
+                          <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Check className="mr-1 h-4 w-4" />
+                        )}
+                        Aprovar para o Agente implementar
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-2 rounded-md border px-3 py-2">
+                        <Badge
+                          variant="outline"
+                          className={metaDe(sel.agente_status).className}
+                        >
+                          {metaDe(sel.agente_status).label}
+                        </Badge>
+                        {sel.agente_resumo && (
+                          <span className="text-xs text-muted-foreground line-clamp-2">
+                            {sel.agente_resumo}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {temPr ? (
                       <Button
                         className="w-full"
