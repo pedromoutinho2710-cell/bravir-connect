@@ -27,6 +27,7 @@ type Form = {
   cep: string;
   rua: string;
   numero: string;
+  complemento: string;
   bairro: string;
   cluster: string;
   vendedor_id: string;
@@ -49,6 +50,7 @@ const EMPTY: Form = {
   cep: "",
   rua: "",
   numero: "",
+  complemento: "",
   bairro: "",
   cluster: "",
   vendedor_id: "",
@@ -135,6 +137,7 @@ export default function CadastrarClienteFaturamento() {
       cep: form.cep || null,
       rua: form.rua || null,
       numero: form.numero || null,
+      complemento: form.complemento || null,
       bairro: form.bairro || null,
       cluster: form.cluster || null,
       vendedor_id: form.vendedor_id || null,
@@ -273,6 +276,14 @@ export default function CadastrarClienteFaturamento() {
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Complemento</Label>
+                <Input
+                  value={form.complemento}
+                  onChange={(e) => set("complemento", e.target.value)}
+                  placeholder="Galpão, loja, sala, bloco..."
+                />
+              </div>
               <div className="space-y-1.5">
                 <Label>Bairro</Label>
                 <Input

@@ -95,6 +95,7 @@ export default function ClientesAdminLista() {
   const [vendedoresMap, setVendedoresMap] = useState<Record<string, string>>({});
   const [resumo, setResumo] = useState<Resumo>({ ativos: 0, semVendedor: 0, aguardandoTrade: 0, negativados: 0 });
   const [exportando, setExportando] = useState(false);
+  const [limite, setLimite] = useState(100);
 
   const hoje = new Date();
 
@@ -351,6 +352,8 @@ export default function ClientesAdminLista() {
       return (a.nome_parceiro || a.razao_social).localeCompare(b.nome_parceiro || b.razao_social, "pt-BR");
     });
   }, [clientes, busca, filtroVendedor, filtroCluster, filtroGrupo, filtroTabela, filtroUF, filtroStatus, ordem]);
+
+  useEffect(() => { setLimite(100); }, [busca, filtroVendedor, filtroCluster, filtroGrupo, filtroTabela, filtroUF, filtroStatus, ordem]);
 
   const exportarExcel = async () => {
     setExportando(true);
@@ -630,7 +633,7 @@ export default function ClientesAdminLista() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {clientesFiltrados.map((c) => {
+              {clientesFiltrados.slice(0, limite).map((c) => {
                 const vencida = c.proxima_compra && c.proxima_compra < hoje;
                 const proximaStr = c.proxima_compra ? c.proxima_compra.toLocaleDateString("pt-BR") : "—";
                 return (
@@ -744,6 +747,15 @@ export default function ClientesAdminLista() {
               })}
             </TableBody>
           </Table>
+        </div>
+      )}
+
+      {/* Carregar mais */}
+      {clientesFiltrados.length > limite && (
+        <div className="flex justify-center pt-2">
+          <Button variant="outline" onClick={() => setLimite((l) => l + 100)}>
+            Carregar mais ({clientesFiltrados.length - limite} restantes)
+          </Button>
         </div>
       )}
 

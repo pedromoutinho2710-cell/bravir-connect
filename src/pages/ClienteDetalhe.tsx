@@ -94,6 +94,7 @@ type ClienteInfo = {
   cep: string | null;
   rua: string | null;
   numero: string | null;
+  complemento: string | null;
   bairro: string | null;
   telefone: string | null;
   email: string | null;
@@ -177,6 +178,7 @@ export default function ClienteDetalhe() {
   const [editTelefone, setEditTelefone] = useState("");
   const [editRua, setEditRua] = useState("");
   const [editNumero, setEditNumero] = useState("");
+  const [editComplemento, setEditComplemento] = useState("");
   const [editBairro, setEditBairro] = useState("");
   const [editCidade, setEditCidade] = useState("");
   const [editUf, setEditUf] = useState("");
@@ -216,7 +218,7 @@ export default function ClienteDetalhe() {
   const [analiseObs, setAnaliseObs] = useState("");
   const [salvandoAnalise, setSalvandoAnalise] = useState(false);
 
-  const canEditFull = role === "admin" || role === "faturamento";
+  const canEditFull = role === "admin" || role === "faturamento" || role === "gestora";
   const canEditLimitado = role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id;
   const canEdit = canEditFull || canEditLimitado;
   const canObs = canEditFull || (role === "vendedor" && !!cliente && cliente.vendedor_id === user?.id);
@@ -248,7 +250,7 @@ export default function ClienteDetalhe() {
     const [cRes, pRes, profRes, roleRes] = await Promise.all([
       supabase
         .from("clientes")
-        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, grupo_cliente, tabela_preco, cidade, uf, cep, rua, numero, bairro, telefone, email, comprador, telefone_agendamento, email_agendamento, ativo, inativado_em, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional, status, aviso_pedido")
+        .select("id, razao_social, nome_parceiro, cnpj, codigo_parceiro, cluster, grupo_cliente, tabela_preco, cidade, uf, cep, rua, numero, complemento, bairro, telefone, email, comprador, telefone_agendamento, email_agendamento, ativo, inativado_em, negativado, aceita_saldo, suframa, vendedor_id, observacoes_trade, desconto_adicional, status, aviso_pedido")
         .eq("id", id)
         .single(),
       supabase
@@ -278,6 +280,7 @@ export default function ClienteDetalhe() {
         cep: c.cep,
         rua: c.rua,
         numero: c.numero,
+        complemento: c.complemento ?? null,
         bairro: c.bairro,
         telefone: c.telefone,
         email: c.email,
@@ -433,6 +436,7 @@ export default function ClienteDetalhe() {
     setEditTelefone(cliente.telefone ?? "");
     setEditRua(cliente.rua ?? "");
     setEditNumero(cliente.numero ?? "");
+    setEditComplemento(cliente.complemento ?? "");
     setEditBairro(cliente.bairro ?? "");
     setEditCidade(cliente.cidade ?? "");
     setEditUf(cliente.uf ?? "");
@@ -447,8 +451,7 @@ export default function ClienteDetalhe() {
   const salvarEdicao = async () => {
     if (!cliente || !editNome.trim()) return;
     setSalvandoEdit(true);
-    const { error } = await supabase
-      .from("clientes")
+    const { error } = await (supabase.from("clientes") as any)
       .update({
         razao_social: editNome.trim(),
         cnpj: editCnpj.replace(/\D/g, ""),
@@ -459,6 +462,7 @@ export default function ClienteDetalhe() {
         telefone: editTelefone.trim() || null,
         rua: editRua.trim() || null,
         numero: editNumero.trim() || null,
+        complemento: editComplemento.trim() || null,
         bairro: editBairro.trim() || null,
         cidade: editCidade.trim() || null,
         uf: editUf.trim() || null,
@@ -589,7 +593,7 @@ export default function ClienteDetalhe() {
     );
   }
 
-  const enderecoPartes = [cliente.rua, cliente.numero ? `nº ${cliente.numero}` : null, cliente.bairro].filter(Boolean);
+  const enderecoPartes = [cliente.rua, cliente.numero ? `nº ${cliente.numero}` : null, cliente.complemento, cliente.bairro].filter(Boolean);
   const enderecoLinha = enderecoPartes.join(", ");
 
   return (
@@ -1064,6 +1068,10 @@ export default function ClienteDetalhe() {
                 <div className="space-y-1.5">
                   <Label>Número</Label>
                   <Input value={editNumero} onChange={(e) => setEditNumero(e.target.value)} />
+                </div>
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Complemento</Label>
+                  <Input value={editComplemento} onChange={(e) => setEditComplemento(e.target.value)} placeholder="Galpão, loja, sala, bloco..." />
                 </div>
                 <div className="space-y-1.5">
                   <Label>Bairro</Label>

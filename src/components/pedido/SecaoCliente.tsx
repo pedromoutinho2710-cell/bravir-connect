@@ -50,6 +50,7 @@ type Sugestao = {
   cep: string | null;
   rua: string | null;
   numero: string | null;
+  complemento: string | null;
   bairro: string | null;
   telefone: string | null;
   comprador: string | null;
@@ -122,7 +123,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
     setSearchText(cl.razao_social);
     setSugestoes([]);
     setShowSugestoes(false);
-    const partes = [cl.rua, cl.numero ? `nº ${cl.numero}` : null, cl.bairro].filter(Boolean);
+    const partes = [cl.rua, cl.numero ? `nº ${cl.numero}` : null, cl.complemento, cl.bairro].filter(Boolean);
     setEnderecoDisplay(partes.length > 0 ? partes.join(", ") : null);
     onChange({
       ...valueRef.current,
@@ -189,6 +190,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
           cep: cl.cep,
           rua: cl.rua ?? null,
           numero: cl.numero ?? null,
+          complemento: cl.complemento ?? null,
           bairro: cl.bairro ?? null,
           telefone: cl.telefone ?? null,
           comprador: cl.comprador,
@@ -265,7 +267,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
         const termo = text.trim();
         const { data } = await supabase
           .from("clientes")
-          .select("id, razao_social, nome_parceiro, cnpj, cidade, uf, cep, rua, numero, bairro, telefone, comprador, cluster, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado, email, aviso_pedido")
+          .select("id, razao_social, nome_parceiro, cnpj, cidade, uf, cep, rua, numero, complemento, bairro, telefone, comprador, cluster, tabela_preco, codigo_cliente, codigo_parceiro, aceita_saldo, negativado, email, aviso_pedido")
           .or(`razao_social.ilike.%${termo}%,nome_parceiro.ilike.%${termo}%`)
           .limit(10);
         setSugestoes((data ?? []) as Sugestao[]);

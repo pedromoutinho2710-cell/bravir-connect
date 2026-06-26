@@ -125,6 +125,7 @@ type Pedido = {
   razao_social: string;
   cnpj: string;
   cidade: string | null;
+  complemento: string | null;
   uf: string | null;
   email_xml: string | null;
   negativado: boolean;
@@ -172,7 +173,7 @@ export default function FilaLogistica() {
       .from("pedidos")
       .select(`
         id, numero_pedido, data_pedido, status, cond_pagamento, pagamento_vista, observacoes, vendedor_id, cliente_id,
-        clientes(razao_social, nome_parceiro, cnpj, cidade, uf, email, negativado, cep, rua, numero, bairro, codigo_parceiro, codigo_cliente, comprador),
+        clientes(razao_social, nome_parceiro, cnpj, cidade, uf, email, negativado, cep, rua, numero, complemento, bairro, codigo_parceiro, codigo_cliente, comprador),
         itens_pedido(
           id, quantidade, qtd_faturada, total_item, preco_final, preco_unitario_bruto,
           produtos(nome, codigo_jiva, cx_embarque, peso_unitario)
@@ -212,6 +213,7 @@ export default function FilaLogistica() {
         cep: cl?.cep ?? null,
         rua: cl?.rua ?? null,
         numero: cl?.numero ?? null,
+        complemento: cl?.complemento ?? null,
         bairro: cl?.bairro ?? null,
         codigo_parceiro: cl?.codigo_parceiro ?? null,
         codigo_cliente: cl?.codigo_cliente ?? null,
@@ -467,7 +469,7 @@ export default function FilaLogistica() {
       ${p.comprador ? `<p>Comprador: ${p.comprador}</p>` : ""}
       <p>CNPJ: ${p.cnpj ? formatCNPJ(p.cnpj) : "—"} | Data: ${formatDate(p.data_pedido)} | Vendedor: ${vendedor}</p>
       <p>Cond. Pagamento: ${p.cond_pagamento ?? "—"} | Cidade/UF: ${[p.cidade, p.uf].filter(Boolean).join(" / ") || "—"}</p>
-      ${(() => { const end = [[p.rua, p.numero].filter(Boolean).join(", "), p.bairro, p.cep ? `CEP ${p.cep}` : null].filter(Boolean).join(" — "); return end ? `<p>Endereço: ${end}</p>` : ""; })()}
+      ${(() => { const end = [[p.rua, p.numero].filter(Boolean).join(", "), p.complemento, p.bairro, p.cep ? `CEP ${p.cep}` : null].filter(Boolean).join(" — "); return end ? `<p>Endereço: ${end}</p>` : ""; })()}
       ${p.email_xml ? `<p>Email XML/Boleto: ${p.email_xml}</p>` : ""}
       ${icms != null ? `<p>ICMS interno ${p.uf}: <strong>${icms}%</strong></p>` : ""}
       ${p.negativado ? `<p><span class="badge">⚠ CLIENTE NEGATIVADO</span></p>` : ""}
@@ -713,6 +715,7 @@ export default function FilaLogistica() {
                         <span className="text-muted-foreground">Endereço: </span>
                         {[
                           [selecionado.rua, selecionado.numero].filter(Boolean).join(", "),
+                          selecionado.complemento,
                           selecionado.bairro,
                           selecionado.cep ? `CEP ${selecionado.cep}` : null,
                         ].filter(Boolean).join(" — ")}

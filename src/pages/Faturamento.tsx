@@ -421,6 +421,7 @@ export default function Faturamento() {
   const [prodFatDialog, setProdFatDialog] = useState<PedidoFat | null>(null);
   const [prodFatQtds, setProdFatQtds] = useState<Record<string, number>>({});
   const [salvandoProdFat, setSalvandoProdFat] = useState(false);
+  const [prodFatSemEstoqueConfirmado, setProdFatSemEstoqueConfirmado] = useState(false);
 
   // Dialog importar pedido
   const [importarOpen, setImportarOpen] = useState(false);
@@ -1233,6 +1234,7 @@ export default function Faturamento() {
   const abrirProdFat = (p: PedidoFat, e: React.MouseEvent) => {
     e.stopPropagation();
     setProdFatDialog(p);
+    setProdFatSemEstoqueConfirmado(false);
     const qtds: Record<string, number> = {};
     p.itens.forEach((i) => { qtds[i.id] = i.qtd_faturada; });
     setProdFatQtds(qtds);
@@ -1240,12 +1242,29 @@ export default function Faturamento() {
 
   const salvarProdFat = async () => {
     if (!prodFatDialog) return;
-    setSalvandoProdFat(true);
 
     const pedido = prodFatDialog;
-    const nowIso = new Date().toISOString();
     const itensComFat = pedido.itens.filter((i) => (prodFatQtds[i.id] ?? 0) > 0);
     const itensComSaldo = pedido.itens.filter((i) => i.quantidade - (prodFatQtds[i.id] ?? 0) > 0);
+
+    // Bloqueia envio ao Sankhya se o pedido estava sem_estoque e o usuário não confirmou
+    if (
+      pedido.status === "sem_estoque" &&
+      itensComFat.length > 0 &&
+      !prodFatSemEstoqueConfirmado
+    ) {
+      setProdFatSemEstoqueConfirmado(true);
+      toast.warning(
+        "Atenção: este pedido está marcado como Sem Estoque. Clique em Salvar novamente para confirmar o envio ao Sankhya.",
+        { duration: 6000 }
+      );
+      return;
+    }
+
+    setSalvandoProdFat(true);
+    setProdFatSemEstoqueConfirmado(false);
+
+    const nowIso = new Date().toISOString();
 
     await Promise.all(
       pedido.itens.map((item) =>
@@ -1261,6 +1280,7 @@ export default function Faturamento() {
         status: "sem_estoque",
         status_atualizado_em: nowIso,
       }).eq("id", pedido.id);
+      await insertHistorico(pedido.id, pedido.status, "sem_estoque", "marcou_sem_estoque", "Sem itens faturados — marcado via faturamento por produto");
       toast.success("Pedido marcado como sem estoque");
       setSalvandoProdFat(false);
       setProdFatDialog(null);
@@ -1269,10 +1289,12 @@ export default function Faturamento() {
     }
 
     if (itensComSaldo.length === 0) {
+      const novoStatus = statusPosFaturado(pedido.pagamento_vista);
       await supabase.from("pedidos").update({
-        status: statusPosFaturado(pedido.pagamento_vista),
+        status: novoStatus,
         status_atualizado_em: nowIso,
       }).eq("id", pedido.id);
+      await insertHistorico(pedido.id, pedido.status, novoStatus, "cadastrou_sankhya", "Todos os itens faturados via faturamento por produto");
       toast.success("Faturamento salvo!");
       setSalvandoProdFat(false);
       setProdFatDialog(null);
@@ -1359,10 +1381,12 @@ export default function Faturamento() {
       return;
     }
 
+    const novoStatusFracionado = statusPosFaturado(pedido.pagamento_vista);
     await supabase.from("pedidos").update({
-      status: statusPosFaturado(pedido.pagamento_vista),
+      status: novoStatusFracionado,
       status_atualizado_em: nowIso,
     }).eq("id", pedido.id);
+    await insertHistorico(pedido.id, pedido.status, novoStatusFracionado, "cadastrou_sankhya", "Pedido fracionado — itens sem saldo enviados ao Sankhya");
 
     toast.success("Pedido fracionado: saldo sem estoque movido para novo pedido");
     setSalvandoProdFat(false);
@@ -3277,10 +3301,14 @@ export default function Faturamento() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setProdFatDialog(null)}>Fechar</Button>
-            <Button onClick={salvarProdFat} disabled={salvandoProdFat}>
+            <Button variant="outline" onClick={() => { setProdFatDialog(null); setProdFatSemEstoqueConfirmado(false); }}>Fechar</Button>
+            <Button
+              onClick={salvarProdFat}
+              disabled={salvandoProdFat}
+              variant={prodFatSemEstoqueConfirmado ? "destructive" : "default"}
+            >
               {salvandoProdFat && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-              Salvar faturamento parcial
+              {prodFatSemEstoqueConfirmado ? "Confirmar envio ao Sankhya (Sem Estoque)" : "Salvar faturamento parcial"}
             </Button>
           </DialogFooter>
         </DialogContent>

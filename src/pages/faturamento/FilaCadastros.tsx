@@ -56,6 +56,7 @@ type Cadastro = {
   cep: string | null;
   rua: string | null;
   numero: string | null;
+  complemento: string | null;
   bairro: string | null;
   cidade: string | null;
   uf: string | null;
@@ -199,6 +200,7 @@ export default function FilaCadastros() {
         cep: cadastro.cep ?? null,
         rua: cadastro.rua ?? null,
         numero: cadastro.numero ?? null,
+        complemento: cadastro.complemento ?? null,
         bairro: cadastro.bairro ?? null,
         comprador: cadastro.contato_principal ?? null,
         cluster: form.cluster || null,
@@ -206,7 +208,7 @@ export default function FilaCadastros() {
         status: "ativo",
         negativado: negativadoEdit,
         codigo_cliente: form.codigo_cliente || null,
-        tabela_preco: form.tabela_preco ? Number(form.tabela_preco) : null,
+        tabela_preco: form.tabela_preco || null,
       });
       if (insErr) toast.error("Cadastro aprovado, mas erro ao criar cliente: " + insErr.message);
       else {
@@ -409,7 +411,7 @@ export default function FilaCadastros() {
                     <InfoRow label="CEP" value={selected.cep ?? null} />
                     <InfoRow label="Endereço" value={
                       selected.rua
-                        ? [selected.rua, selected.numero, selected.bairro, selected.cidade, selected.uf]
+                        ? [selected.rua, selected.numero, selected.complemento, selected.bairro, selected.cidade, selected.uf]
                             .filter(Boolean).join(", ")
                         : null
                     } />
@@ -591,8 +593,8 @@ export default function FilaCadastros() {
                   {aprovarDialog.rua && (
                     <div>
                       <span className="font-medium">Endereço:</span>{" "}
-                      {[aprovarDialog.rua, aprovarDialog.numero, aprovarDialog.bairro,
-                        aprovarDialog.cidade, aprovarDialog.uf]
+                      {[aprovarDialog.rua, aprovarDialog.numero, aprovarDialog.complemento,
+                        aprovarDialog.bairro, aprovarDialog.cidade, aprovarDialog.uf]
                         .filter(Boolean).join(", ")}
                     </div>
                   )}
@@ -657,7 +659,7 @@ export default function FilaCadastros() {
                         <SelectItem value="7">7</SelectItem>
                         <SelectItem value="12">12</SelectItem>
                         <SelectItem value="18">18</SelectItem>
-                        <SelectItem value="suframa">Suframa</SelectItem>
+                        <SelectItem value="Suframa">Suframa</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
