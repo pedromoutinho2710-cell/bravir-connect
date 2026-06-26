@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Loader2, Search, Upload } from "lucide-react";
+import { Loader2, Search, Upload, PowerOff, Power } from "lucide-react";
 
 // Colunas de preço bruto editáveis — uma por tabela (região) de preço.
 const COLUNAS_TABELA = [
@@ -215,6 +215,21 @@ export default function GestaoPrecos() {
     const { error } = await supabase.from("produtos").update({ ean }).eq("id", produtoId);
     if (error) toast.error("Erro ao salvar EAN: " + error.message);
     else toast.success("EAN salvo");
+  };
+
+  const [toggling, setToggling] = useState<string | null>(null);
+
+  const toggleAtivo = async (p: Produto) => {
+    setToggling(p.id);
+    const novoAtivo = !p.ativo;
+    const { error } = await supabase.from("produtos").update({ ativo: novoAtivo }).eq("id", p.id);
+    if (error) {
+      toast.error("Erro ao atualizar status: " + error.message);
+    } else {
+      setProdutos((prev) => prev.map((x) => x.id === p.id ? { ...x, ativo: novoAtivo } : x));
+      toast.success(`${p.nome} marcado como ${novoAtivo ? "ativo" : "inativo"}`);
+    }
+    setToggling(null);
   };
 
   const importarEanRef = useRef<HTMLInputElement>(null);
@@ -528,11 +543,39 @@ export default function GestaoPrecos() {
                           className="h-8 w-36 font-mono text-xs"
                         />
                       </TableCell>
-                      <TableCell className="font-medium">{p.nome}</TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={`${marcaBadgeClass(p.marca)} border-transparent`}>
-                          {p.marca ?? "—"}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{p.nome}</span>
+                          <Badge
+                            variant="outline"
+                            className={p.ativo
+                              ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+                              : "border-gray-300 bg-gray-100 text-gray-500"}
+                          >
+                            {p.ativo ? "Ativo" : "Inativo"}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1">
+                          <Badge variant="outline" className={`${marcaBadgeClass(p.marca)} border-transparent`}>
+                            {p.marca ?? "—"}
+                          </Badge>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 shrink-0"
+                            title={p.ativo ? "Desativar produto" : "Ativar produto"}
+                            disabled={toggling === p.id}
+                            onClick={() => toggleAtivo(p)}
+                          >
+                            {toggling === p.id
+                              ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              : p.ativo
+                                ? <PowerOff className="h-3.5 w-3.5 text-gray-400" />
+                                : <Power className="h-3.5 w-3.5 text-emerald-600" />}
+                          </Button>
+                        </div>
                       </TableCell>
                       {COLUNAS_TABELA.map((c) => (
                         <TableCell key={c.key} className="text-right">
