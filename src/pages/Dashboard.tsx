@@ -313,16 +313,18 @@ export default function Dashboard() {
             .from("faturamentos_sankhya")
             .select("data_faturamento, valor_total_itens, valor_liquido")
             .gte("data_faturamento", meses6[0].inicio)
-            .lte("data_faturamento", meses6[meses6.length - 1].fim),
-          // Total faturado (Sankhya) dentro do período selecionado — valor BRUTO
-          // (valor_total_itens), incluindo devoluções (valor negativo subtrai),
-          // para bater com o total da planilha do Sankhya.
+            .lte("data_faturamento", meses6[meses6.length - 1].fim)
+            .eq("canal", "BRAVIR"),
+          // Total faturado (Sankhya) do período — valor BRUTO (valor_total_itens),
+          // incluindo devoluções (valor negativo subtrai) e SOMENTE Marcas Bravir
+          // (canal "BRAVIR" = B2B; exclui Marca Própria/terceiros).
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any)
             .from("faturamentos_sankhya")
             .select("valor_total_itens, valor_liquido")
             .gte("data_faturamento", effectiveInicio)
-            .lte("data_faturamento", effectiveFim),
+            .lte("data_faturamento", effectiveFim)
+            .eq("canal", "BRAVIR"),
           // Meta de faturamento real (Visão Macro) — soma de B2B + Marca Própria + Online
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any)
