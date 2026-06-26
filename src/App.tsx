@@ -53,7 +53,7 @@ import Campanhas from "./pages/admin/Campanhas";
 import AgenteIA from "./pages/admin/AgenteIA";
 import PoliticaComercial from "./pages/admin/PoliticaComercial";
 import PoliticaComercialView from "./pages/PoliticaComercialView";
-import MeuAgente from "./pages/MeuAgente";
+
 import DashboardLogistica from "./pages/logistica/DashboardLogistica";
 import FilaLogistica from "./pages/logistica/FilaLogistica";
 import SiteLanding from "./pages/site/SiteLanding";
@@ -154,10 +154,6 @@ const App = () => (
               <Route path="/admin/gestao-estoque" element={<GestaoEstoqueAdmin />} />
             </Route>
 
-            {/* Meu Agente — acessível por qualquer role autenticado; guarda por email dentro do componente */}
-            <Route element={<ProtectedRoute allow={["admin", "vendedor", "faturamento", "logistica", "gestora", "gestora_faturamento", "trade", "financeiro"]}><AppLayout /></ProtectedRoute>}>
-              <Route path="/meu-agente" element={<MeuAgente />} />
-            </Route>
 
             {/* Solicitações de melhoria — admin e pedro.menezes (liberado por email) */}
             <Route element={<SolicitacoesRoute />}>
