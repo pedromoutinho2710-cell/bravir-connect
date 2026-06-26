@@ -19,6 +19,8 @@ type AgenteStatus =
   | "aprovado"
   | "implementando"
   | "implementado"
+  | "pr_criado"
+  | "revertido"
   | "erro"
   | "reprovado"
   | null;
@@ -42,7 +44,7 @@ type Solicitacao = {
   agente_concluido_em: string | null;
   agente_tentativas: number | null;
   agente_erro: string | null;
-  origem: "monitor" | "pesquisa" | null;
+  origem: "monitor" | "pesquisa" | "crm" | null;
 };
 
 const STATUS_CONFIG: Record<
@@ -54,6 +56,8 @@ const STATUS_CONFIG: Record<
   aprovado: { label: "Aguardando execução", variant: "secondary", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
   implementando: { label: "Implementando...", variant: "secondary", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
   implementado: { label: "Implementado", variant: "default" },
+  pr_criado: { label: "Aguardando implementação", variant: "outline" },
+  revertido: { label: "Revertido", variant: "outline" },
   erro: { label: "Erro", variant: "destructive" },
   reprovado: { label: "Reprovado", variant: "outline" },
 };
@@ -159,14 +163,15 @@ export default function MeuAgente() {
     toast.success("Copiado! Cole no Claude Code para análise.");
   }
 
-  const analisados = solicitacoes.filter((s) => s.agente_status === "analisado");
+  const daEquipe = solicitacoes.filter((s) => !!s.criado_por);
+  const analisados = solicitacoes.filter((s) => !s.criado_por && s.agente_status === "analisado");
   const emExecucao = solicitacoes.filter(
-    (s) => s.agente_status === "analisando" || s.agente_status === "aprovado" || s.agente_status === "implementando"
+    (s) => !s.criado_por && (s.agente_status === "analisando" || s.agente_status === "aprovado" || s.agente_status === "implementando")
   );
   const concluidos = solicitacoes.filter(
-    (s) => s.agente_status === "implementado" || s.agente_status === "reprovado" || s.agente_status === "erro"
+    (s) => !s.criado_por && (s.agente_status === "implementado" || s.agente_status === "reprovado" || s.agente_status === "erro")
   );
-  const aguardando = solicitacoes.filter((s) => !s.agente_status || s.agente_status === null);
+  const aguardando = solicitacoes.filter((s) => !s.criado_por && (!s.agente_status || s.agente_status === null));
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -199,6 +204,25 @@ export default function MeuAgente() {
           <Loader2 className="h-4 w-4 animate-spin" />
           Carregando...
         </div>
+      )}
+
+      {/* Pedidos da equipe — sempre visíveis */}
+      {daEquipe.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+              Pedidos da equipe
+            </h2>
+            <Badge variant="outline">{daEquipe.length}</Badge>
+          </div>
+          {daEquipe.map((sol) => (
+            <SolicitacaoCard
+              key={sol.id}
+              sol={sol}
+              onDetalhe={() => setDetalhe(sol)}
+            />
+          ))}
+        </section>
       )}
 
       {/* Plano pronto — aguardando aprovação */}

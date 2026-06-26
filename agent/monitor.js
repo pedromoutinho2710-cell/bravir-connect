@@ -27,6 +27,9 @@ function lerArquivosRecursivo(dir, extensoes, acumulado = []) {
 }
 
 function montarContexto() {
+  // Páginas removidas do menu — não faz sentido monitorar
+  const IGNORAR = ['AgenteIA.tsx', 'BlingCallback.tsx'];
+
   const arquivosFixos = [
     join(PROJECT_PATH, 'src', 'App.tsx'),
     join(PROJECT_PATH, 'src', 'hooks', 'useAuth.tsx'),
@@ -36,7 +39,7 @@ function montarContexto() {
   const arquivosDinamicos = [
     ...lerArquivosRecursivo(join(PROJECT_PATH, 'src', 'pages'), ['.tsx']),
     ...lerArquivosRecursivo(join(PROJECT_PATH, 'src', 'components'), ['.tsx', '.ts']),
-  ];
+  ].filter((f) => !IGNORAR.some((nome) => f.endsWith(nome)));
 
   const todos = [...new Set([...arquivosFixos, ...arquivosDinamicos])];
 
@@ -104,11 +107,15 @@ ${contexto}`;
     let ignorados = 0;
 
     for (const p of problemas) {
+      // Verifica duplicata nos últimos 7 dias (evita o mesmo bug aparecer toda hora)
+      const seteDiasAtras = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const palavrasChave = p.titulo.split(' ').filter((w) => w.length > 4).slice(0, 3).join(' ');
       const { data: existente } = await supabase
         .from('solicitacoes_gestor')
         .select('id')
-        .ilike('titulo', `%${p.titulo.slice(0, 30)}%`)
+        .ilike('titulo', `%${palavrasChave}%`)
         .is('deleted_at', null)
+        .gte('created_at', seteDiasAtras)
         .limit(1);
 
       if (existente && existente.length > 0) {
