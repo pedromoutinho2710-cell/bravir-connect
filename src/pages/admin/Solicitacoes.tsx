@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { Loader2, Eye, Sheet } from "lucide-react";
+import { Loader2, Eye, Sheet, Bot } from "lucide-react";
 
 const VERDE = "#0F6E56";
 
@@ -51,6 +51,7 @@ interface Solicitacao {
   chat_historico?: ChatMensagem[] | null;
   link_teste?: string | null;
   motivo_devolucao?: string | null;
+  agente_status?: string | null;
 }
 
 /* ───────────────────────── Metadados de exibição ───────────────────────── */
@@ -59,6 +60,8 @@ const TIPO_META: Record<string, { label: string; cls: string }> = {
   bug: { label: "Bug", cls: "bg-red-100 text-red-800 border-red-300" },
   nova: { label: "Nova feature", cls: "bg-blue-100 text-blue-800 border-blue-300" },
   altera: { label: "Melhoria", cls: "bg-emerald-100 text-emerald-800 border-emerald-300" },
+  duvida: { label: "Dúvida", cls: "bg-violet-100 text-violet-800 border-violet-300" },
+  outro: { label: "Outro", cls: "bg-gray-100 text-gray-700 border-gray-300" },
 };
 
 function tipoMeta(t: string) {
@@ -96,6 +99,8 @@ const TIPO_FILTERS = [
   { value: "bug", label: "Bug" },
   { value: "nova", label: "Nova feature" },
   { value: "altera", label: "Melhoria" },
+  { value: "duvida", label: "Dúvida" },
+  { value: "outro", label: "Outro" },
 ];
 
 function relativo(iso: string | null) {
@@ -193,6 +198,24 @@ export default function Solicitacoes() {
     onError: (e: unknown) => {
       console.error("Erro UPDATE status:", e);
       toast.error("Erro ao atualizar status: " + (e instanceof Error ? e.message : "desconhecido"));
+    },
+  });
+
+  const aprovarAgente = useMutation({
+    mutationFn: async (id: string) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any)
+        .from("solicitacoes_gestor")
+        .update({ agente_status: "aprovado" })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["solicitacoes_gestor"] });
+      toast.success("Aprovado para o agente implementar");
+    },
+    onError: (e: unknown) => {
+      toast.error("Erro ao aprovar: " + (e instanceof Error ? e.message : "desconhecido"));
     },
   });
 
@@ -469,6 +492,7 @@ export default function Solicitacoes() {
                 onStatus={(status, extra) =>
                   updateStatus.mutate({ id: selected.id, status, ...extra })
                 }
+                onAprovarAgente={() => aprovarAgente.mutate(selected.id)}
               />
             ) : (
               <Card>
@@ -492,6 +516,7 @@ export default function Solicitacoes() {
                 onStatus={(status, extra) =>
                   updateStatus.mutate({ id: selected.id, status, ...extra })
                 }
+                onAprovarAgente={() => aprovarAgente.mutate(selected.id)}
               />
             )}
           </DialogContent>
@@ -503,15 +528,25 @@ export default function Solicitacoes() {
 
 /* ─────────────────────── Painel de detalhe (3 cards) ─────────────────────── */
 
+const AGENTE_STATUS_META: Record<string, { label: string; cls: string }> = {
+  aprovado:     { label: "Agente: aprovado",     cls: "bg-blue-100 text-blue-800 border-blue-300" },
+  em_andamento: { label: "Agente: em andamento", cls: "bg-amber-100 text-amber-800 border-amber-300" },
+  concluido:    { label: "Agente: concluído",    cls: "bg-green-100 text-green-800 border-green-300" },
+  implementado: { label: "Agente: implementado", cls: "bg-green-100 text-green-800 border-green-300" },
+  erro:         { label: "Agente: erro",         cls: "bg-red-100 text-red-800 border-red-300" },
+};
+
 function DetalhePainel({
   solicitacao: s,
   onStatus,
+  onAprovarAgente,
 }: {
   solicitacao: Solicitacao;
   onStatus: (
     status: string,
     extra?: { motivo_devolucao?: string | null },
   ) => void;
+  onAprovarAgente: () => void;
 }) {
   const tm = tipoMeta(s.tipo);
   const sm = statusMeta(s.status);
@@ -584,6 +619,23 @@ function DetalhePainel({
           <Separator />
 
           <div className="space-y-3">
+            {/* Botão do agente */}
+            {s.agente_status && AGENTE_STATUS_META[s.agente_status] ? (
+              <Badge className={`border text-xs font-semibold ${AGENTE_STATUS_META[s.agente_status].cls}`}>
+                <Bot className="mr-1 h-3 w-3" />
+                {AGENTE_STATUS_META[s.agente_status].label}
+              </Badge>
+            ) : (
+              <Button
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 w-full"
+                onClick={onAprovarAgente}
+              >
+                <Bot className="mr-2 h-4 w-4" />
+                Aprovar para o Agente implementar
+              </Button>
+            )}
+
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
