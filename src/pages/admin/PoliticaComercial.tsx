@@ -31,11 +31,12 @@ export default function PoliticaComercial() {
   const [novoMode, setNovoMode] = useState(false);
   const [form, setForm] = useState(VAZIO);
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfParaRemover, setPdfParaRemover] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const carregar = async () => {
-    const { data } = await (supabase as any)
+    const { data } = await supabase
       .from("politica_comercial")
       .select("id, titulo, conteudo_html, pdf_url, atualizado_em, ordem")
       .order("ordem", { ascending: true })
@@ -64,6 +65,7 @@ export default function PoliticaComercial() {
     setEditando(null);
     setNovoMode(false);
     setPdfFile(null);
+    setPdfParaRemover(null);
   };
 
   const nomePdf = (path: string | null) =>
@@ -74,9 +76,11 @@ export default function PoliticaComercial() {
     if (data?.signedUrl) window.open(data.signedUrl, "_blank");
   };
 
-  const removerPdfForm = async () => {
+  // Marca o PDF para remoção ao salvar — não deleta do storage ainda,
+  // para evitar perda de arquivo se o admin clicar Cancelar depois.
+  const removerPdfForm = () => {
     if (!form.pdf_url) return;
-    await supabase.storage.from("documentos").remove([form.pdf_url]);
+    setPdfParaRemover(form.pdf_url);
     setForm((f) => ({ ...f, pdf_url: null }));
     setPdfFile(null);
     if (fileRef.current) fileRef.current.value = "";
@@ -85,10 +89,12 @@ export default function PoliticaComercial() {
   const salvar = async () => {
     if (!form.titulo.trim()) { toast.error("Título obrigatório."); return; }
     setSalvando(true);
+    const pdfUrlOriginal = form.pdf_url;
     let novoPdfPath = form.pdf_url;
 
     if (pdfFile) {
-      if (novoPdfPath) await supabase.storage.from("documentos").remove([novoPdfPath]);
+      // Upload do novo arquivo ANTES de deletar o antigo —
+      // se o upload falhar, o arquivo original continua intacto.
       const path = `politica/${Date.now()}_${pdfFile.name}`;
       const { data: upData, error: upErr } = await supabase.storage
         .from("documentos")
@@ -106,16 +112,32 @@ export default function PoliticaComercial() {
     };
 
     if (novoMode) {
-      const { error } = await (supabase as any).from("politica_comercial").insert(payload);
-      if (error) { toast.error("Erro ao criar: " + error.message); setSalvando(false); return; }
+      const { error } = await supabase.from("politica_comercial").insert(payload);
+      if (error) {
+        // Banco falhou — remove o arquivo que acabou de subir para não ficar órfão
+        if (pdfFile && novoPdfPath) await supabase.storage.from("documentos").remove([novoPdfPath]);
+        toast.error("Erro ao criar: " + error.message); setSalvando(false); return;
+      }
       toast.success("Política criada.");
     } else if (editando) {
-      const { error } = await (supabase as any)
+      const { error } = await supabase
         .from("politica_comercial")
         .update(payload)
         .eq("id", editando.id);
-      if (error) { toast.error("Erro ao salvar: " + error.message); setSalvando(false); return; }
+      if (error) {
+        // Banco falhou — remove o arquivo que acabou de subir para não ficar órfão
+        if (pdfFile && novoPdfPath) await supabase.storage.from("documentos").remove([novoPdfPath]);
+        toast.error("Erro ao salvar: " + error.message); setSalvando(false); return;
+      }
       toast.success("Política salva.");
+    }
+
+    // Banco confirmado — agora é seguro limpar arquivos antigos do storage
+    if (pdfFile && pdfUrlOriginal) {
+      await supabase.storage.from("documentos").remove([pdfUrlOriginal]);
+    }
+    if (pdfParaRemover) {
+      await supabase.storage.from("documentos").remove([pdfParaRemover]);
     }
 
     setSalvando(false);
@@ -125,8 +147,10 @@ export default function PoliticaComercial() {
 
   const excluir = async (p: Politica) => {
     if (!confirm(`Excluir "${p.titulo}"?`)) return;
+    // Banco primeiro: se falhar, o arquivo no storage continua íntegro
+    const { error } = await supabase.from("politica_comercial").delete().eq("id", p.id);
+    if (error) { toast.error("Erro ao excluir: " + error.message); return; }
     if (p.pdf_url) await supabase.storage.from("documentos").remove([p.pdf_url]);
-    await (supabase as any).from("politica_comercial").delete().eq("id", p.id);
     toast.success("Política excluída.");
     carregar();
   };

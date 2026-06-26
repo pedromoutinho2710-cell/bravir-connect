@@ -174,6 +174,7 @@ export default function PedidosCancelados() {
 
       let rows = (data ?? []).map((r: any) => ({
         ...r,
+        valor_cancelado: Number(r.valor_cancelado),
         vendedor_nome: r.profiles?.full_name ?? null,
       }));
 

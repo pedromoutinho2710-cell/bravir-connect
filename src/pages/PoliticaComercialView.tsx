@@ -20,7 +20,7 @@ export default function PoliticaComercialView() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await (supabase as any)
+      const { data } = await supabase
         .from("politica_comercial")
         .select("id, titulo, conteudo_html, pdf_url, atualizado_em")
         .order("ordem", { ascending: true })
