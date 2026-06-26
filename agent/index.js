@@ -1,6 +1,8 @@
 import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 import { analisar, implementar } from './implementador.js';
+import { iniciarMonitor } from './monitor.js';
+import { iniciarPesquisador } from './pesquisador.js';
 
 const { SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY } = process.env;
 
@@ -108,6 +110,8 @@ supabase
     if (status === 'SUBSCRIBED') {
       log('Agente ativo — ouvindo Supabase Realtime.');
       carregarPendentes();
+      iniciarMonitor(supabase);
+      iniciarPesquisador(supabase);
     } else {
       log(`Status Realtime: ${status}`);
     }

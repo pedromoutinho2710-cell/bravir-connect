@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, CheckCircle2, XCircle, RotateCcw, Bot, AlertTriangle, Clock, Globe } from "lucide-react";
+import { Loader2, CheckCircle2, XCircle, RotateCcw, Bot, AlertTriangle, Clock, Globe, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -139,6 +139,26 @@ export default function MeuAgente() {
     );
   }
 
+  function copiarParaClaude() {
+    const pendentes = solicitacoes.filter(
+      (s) => s.agente_status === "analisado" || !s.agente_status
+    );
+    if (pendentes.length === 0) {
+      toast.info("Nenhuma solicitação pendente para copiar.");
+      return;
+    }
+    const origem = (s: Solicitacao) =>
+      s.origem === "monitor" ? "[Monitor]" : s.origem === "pesquisa" ? "[Pesquisa Web]" : "[CRM]";
+    const texto = [
+      `Tenho ${pendentes.length} solicitação(ões) para analisar. Me diz o que faz sentido implementar:\n`,
+      ...pendentes.map((s, i) =>
+        `${i + 1}. ${origem(s)} ${s.titulo}\n${s.agente_resumo ?? s.descricao}`
+      ),
+    ].join("\n\n");
+    navigator.clipboard.writeText(texto);
+    toast.success("Copiado! Cole no Claude Code para análise.");
+  }
+
   const analisados = solicitacoes.filter((s) => s.agente_status === "analisado");
   const emExecucao = solicitacoes.filter(
     (s) => s.agente_status === "analisando" || s.agente_status === "aprovado" || s.agente_status === "implementando"
@@ -161,11 +181,17 @@ export default function MeuAgente() {
             </Badge>
           )}
         </div>
-        {selecionados.length > 0 && (
-          <Button size="sm" onClick={aprovarSelecionados}>
-            Aprovar {selecionados.length} selecionados
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={copiarParaClaude}>
+            <Copy className="h-3 w-3 mr-1" />
+            Copiar para Claude
           </Button>
-        )}
+          {selecionados.length > 0 && (
+            <Button size="sm" onClick={aprovarSelecionados}>
+              Aprovar {selecionados.length} selecionados
+            </Button>
+          )}
+        </div>
       </div>
 
       {isLoading && (

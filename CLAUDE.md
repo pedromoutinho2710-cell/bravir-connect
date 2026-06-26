@@ -72,3 +72,37 @@ Additional domains layered on top via migrations: `campanhas`, `metas`, `faturam
 ### Public (unauthenticated) routes
 
 `/login`, `/site`, `/site/candidatura`, `/evento`, `/evento/qr`, `/evento-qr` render outside `ProtectedRoute`. Keep public surfaces minimal and never call privileged RPCs from them.
+
+## Obsidian — Registro obrigatório
+
+**Ao final de cada sessão onde algo foi implementado ou decidido, escreva um resumo no Obsidian.**
+
+Vault: `C:\Users\Pedro.Moutinho\Documents\BravirAgente`
+
+Estrutura:
+- `Conversas\YYYY-MM-DD.md` — resumo da sessão (o que foi pedido, o que foi feito, decisões tomadas)
+- `Implementações\YYYY-MM-DD-titulo.md` — detalhe de cada implementação (arquivos alterados, por que, resultado)
+
+Formato da nota de sessão:
+```
+# Sessão YYYY-MM-DD
+
+## O que foi pedido
+[descrição em linguagem simples]
+
+## O que foi feito
+- [item 1]
+- [item 2]
+
+## Arquivos alterados
+- `src/...`
+
+## Decisões tomadas
+[decisões importantes, coisas reprovadas, mudanças de direção]
+```
+
+**Regras:**
+- Sempre usar linguagem de negócio, não técnica
+- Escrever mesmo que a sessão não tenha gerado código (ex: só análise ou discussão)
+- Nunca pular este passo no final da sessão
+- Criar as pastas automaticamente se não existirem
