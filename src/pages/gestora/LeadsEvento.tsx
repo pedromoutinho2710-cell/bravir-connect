@@ -141,7 +141,15 @@ export default function LeadsEvento() {
         vendedor_id: vendedorId,
         status: "ativo",
         canal: dialogLead.areas_atuacao?.[0] ?? "direto",
-      })
+        // Lead inbound já entra no funil do vendedor (coluna Qualificação),
+        // carregando os interesses captados no formulário do evento.
+        etapa_pipeline: "qualificacao",
+        pipeline_updated_at: new Date().toISOString(),
+        marcas_interesse: dialogLead.marcas_interesse ?? null,
+        produtos_interesse: dialogLead.produtos_interesse?.length
+          ? dialogLead.produtos_interesse.join(", ")
+          : null,
+      } as never)
       .select("id")
       .single();
 

@@ -130,10 +130,6 @@ type FichaCliente = {
 // Constantes
 // ───────────────────────────────────────────────────────────────────────
 
-const PEDRO_EMAIL = "pedro.menezes@bravir.com.br";
-const FIELDS_KEY = "pipeline_fields_pedro";
-const CONFIG_KEY = "pipeline_config_pedro";
-
 const TODOS_CAMPOS: { key: FieldKey; label: string }[] = [
   { key: "dias_sem_comprar", label: "Dias sem comprar" },
   { key: "ltv", label: "LTV" },
@@ -224,18 +220,20 @@ export default function MeuPipeline() {
   const { user } = useAuth();
   const qc = useQueryClient();
 
-  if (user?.email !== PEDRO_EMAIL) return null;
+  // Chaves de preferência por usuário (evita colisão em máquina compartilhada)
+  const fieldsKey = `pipeline_fields_${user?.id ?? "anon"}`;
+  const configKey = `pipeline_config_${user?.id ?? "anon"}`;
 
   const [fields, setFields] = useState<Record<FieldKey, boolean>>(() =>
-    loadJSON<Record<FieldKey, boolean>>(FIELDS_KEY, FIELDS_DEFAULT)
+    loadJSON<Record<FieldKey, boolean>>(fieldsKey, FIELDS_DEFAULT)
   );
   const [showFields, setShowFields] = useState(false);
   const [colunas, setColunas] = useState<ColunaConfig[]>(() =>
-    loadJSON<ColunaConfig[]>(CONFIG_KEY, COLUNAS_PADRAO)
+    loadJSON<ColunaConfig[]>(configKey, COLUNAS_PADRAO)
   );
 
-  useEffect(() => { saveJSON(FIELDS_KEY, fields); }, [fields]);
-  useEffect(() => { saveJSON(CONFIG_KEY, colunas); }, [colunas]);
+  useEffect(() => { saveJSON(fieldsKey, fields); }, [fieldsKey, fields]);
+  useEffect(() => { saveJSON(configKey, colunas); }, [configKey, colunas]);
 
   // Query principal
   const cardsQ = useQuery({
@@ -296,10 +294,13 @@ export default function MeuPipeline() {
     mutationFn: async (p: { cliente_id: string; etapa: string; motivo_perda?: string | null }) => {
       const patch: any = { etapa_pipeline: p.etapa, pipeline_updated_at: new Date().toISOString() };
       if (p.motivo_perda !== undefined) patch.motivo_perda = p.motivo_perda;
-      const { error } = await (supabase as any).from("clientes").update(patch).eq("id", p.cliente_id);
+      const { error } = await (supabase as any).from("clientes").update(patch).eq("id", p.cliente_id).eq("vendedor_id", user!.id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["meu-pipeline"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["meu-pipeline"] });
+      qc.invalidateQueries({ queryKey: ["funil-vendedor"] });
+    },
     onError: (e: any) => toast.error(e?.message ?? "Erro ao mover card"),
   });
 
@@ -313,11 +314,12 @@ export default function MeuPipeline() {
         produtos_interesse: p.patch.produtos_interesse ?? null,
         pipeline_updated_at: new Date().toISOString(),
       };
-      const { error } = await (supabase as any).from("clientes").update(payload).eq("id", p.cliente_id);
+      const { error } = await (supabase as any).from("clientes").update(payload).eq("id", p.cliente_id).eq("vendedor_id", user!.id);
       if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["meu-pipeline"] });
+      qc.invalidateQueries({ queryKey: ["funil-vendedor"] });
       toast.success("Card atualizado");
     },
     onError: (e: any) => toast.error(e?.message ?? "Erro ao salvar"),
@@ -342,10 +344,14 @@ export default function MeuPipeline() {
       const { error } = await (supabase as any)
         .from("clientes")
         .update({ etapa_pipeline: p.etapa, pipeline_updated_at: new Date().toISOString() })
-        .eq("id", p.cliente_id);
+        .eq("id", p.cliente_id)
+        .eq("vendedor_id", user!.id);
       if (error) throw error;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["meu-pipeline"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["meu-pipeline"] });
+      qc.invalidateQueries({ queryKey: ["funil-vendedor"] });
+    },
     onError: (e: any) => toast.error(e?.message ?? "Erro ao adicionar"),
   });
 
@@ -354,11 +360,13 @@ export default function MeuPipeline() {
       const { error } = await (supabase as any)
         .from("clientes")
         .update({ etapa_pipeline: null, pipeline_updated_at: new Date().toISOString() })
-        .eq("id", cliente_id);
+        .eq("id", cliente_id)
+        .eq("vendedor_id", user!.id);
       if (error) throw error;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["meu-pipeline"] });
+      qc.invalidateQueries({ queryKey: ["funil-vendedor"] });
       toast.success("Cliente removido do pipeline");
     },
     onError: (e: any) => toast.error(e?.message ?? "Erro ao remover"),

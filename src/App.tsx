@@ -91,7 +91,15 @@ const VisaoMacro = lazy(() => import("./pages/admin/VisaoMacro"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const ClienteDetalhe = lazy(() => import("./pages/ClienteDetalhe"));
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      staleTime: 30_000,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
 // Guard inline: libera /admin/solicitacoes para admin OU pedro.menezes (por email).
 // Reaproveita o ProtectedRoute (loading/auth/redirect) incluindo o próprio role do
