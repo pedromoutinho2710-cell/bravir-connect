@@ -71,6 +71,9 @@ import PedidosGestora from "./pages/gestora/PedidosGestora";
 import HistoricoFaturamento from "@/pages/gestora/HistoricoFaturamento";
 import ClientesInativados from "./pages/gestora/ClientesInativados";
 import AprovacaoDesconto from "./pages/gestora/AprovacaoDesconto";
+import PedidosCancelados from "./pages/faturamento/PedidosCancelados";
+import RelatorioCancelamentos from "./pages/admin/RelatorioCancelamentos";
+import MeusCancelamentos from "./pages/vendedor/MeusCancelamentos";
 import FilaFinanceiro from "./pages/financeiro/FilaFinanceiro";
 import DadosIQVIA from "./pages/DadosIQVIA";
 
@@ -143,6 +146,7 @@ const App = () => (
               <Route path="/admin/campanhas" element={<Campanhas />} />
               <Route path="/admin/agente-ia" element={<AgenteIA />} />
               <Route path="/admin/politica-comercial" element={<PoliticaComercial />} />
+              <Route path="/admin/relatorio-cancelamentos" element={<RelatorioCancelamentos />} />
             </Route>
 
             {/* Gestão de Estoque (mockado — Sankhya) — admin e gestora */}
@@ -195,6 +199,7 @@ const App = () => (
               <Route path="/minhas-tarefas" element={<MinhasTarefas />} />
               <Route path="/cadastrar-cliente" element={<CadastrarCliente />} />
               <Route path="/meu-pipeline" element={<MeuPipeline />} />
+              <Route path="/meus-cancelamentos" element={<MeusCancelamentos />} />
             </Route>
 
             {/* Propostas e Calculadora — vendedor, gestora e admin */}
@@ -213,6 +218,7 @@ const App = () => (
               <Route path="/dashboard-faturamento" element={<DashboardFaturamento />} />
               <Route path="/faturamento/novo-pedido" element={<NovoPedidoFaturamento />} />
               <Route path="/faturamento/historico-acoes" element={<HistoricoAcoes />} />
+              <Route path="/faturamento/pedidos-cancelados" element={<PedidosCancelados />} />
             </Route>
 
             {/* Gestão de Estoque — acessível por faturamento, admin e gestora_faturamento */}

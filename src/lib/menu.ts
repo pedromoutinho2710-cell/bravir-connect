@@ -27,6 +27,7 @@ import {
   Bot,
   TrendingUp,
   Percent,
+  Ban,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -58,6 +59,7 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Política Comercial (Editor)", url: "/admin/politica-comercial", icon: FileText },
       { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
       { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
+      { title: "Cancelamentos", url: "/admin/relatorio-cancelamentos", icon: Ban },
       { title: "Lixeira", url: "/lixeira", icon: Trash2 },
     ],
   },
@@ -77,6 +79,7 @@ export const BASE_FATURAMENTO_ITEMS: Item[] = [
   { title: "Clientes p/ cadastrar", url: "/faturamento/clientes-pendentes", icon: UserPlus },
   { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
   { title: "Histórico de Ações", url: "/faturamento/historico-acoes", icon: History },
+  { title: "Pedidos Cancelados", url: "/faturamento/pedidos-cancelados", icon: Ban },
   { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
   { title: "Lixeira", url: "/lixeira", icon: Trash2 },
 ];
@@ -93,6 +96,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Minhas Tarefas", url: "/minhas-tarefas", icon: CheckSquare },
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
     { title: "Política Comercial", url: "/politica-comercial", icon: FileText },
+    { title: "Meus Cancelamentos", url: "/meus-cancelamentos", icon: Ban },
     { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Lixeira", url: "/lixeira", icon: Trash2 },
@@ -129,6 +133,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Clientes", url: "/faturamento/clientes", icon: Users },
     { title: "Fila de Cadastros", url: "/faturamento/cadastros", icon: ClipboardCheck },
     { title: "Gestão de Estoque", url: "/faturamento/gestao-estoque", icon: Boxes },
+    { title: "Pedidos Cancelados", url: "/faturamento/pedidos-cancelados", icon: Ban },
     { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Lixeira", url: "/lixeira", icon: Trash2 },

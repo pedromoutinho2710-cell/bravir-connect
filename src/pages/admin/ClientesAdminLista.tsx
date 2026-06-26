@@ -73,15 +73,6 @@ function tabelaLabel(v: string | null): string {
   return t ? t.label : v;
 }
 
-function calcCicloMedio(dates: Date[]): number | null {
-  if (dates.length < 2) return null;
-  const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
-  let totalDiff = 0;
-  for (let i = 1; i < sorted.length; i++) {
-    totalDiff += (sorted[i].getTime() - sorted[i - 1].getTime()) / (1000 * 60 * 60 * 24);
-  }
-  return totalDiff / (sorted.length - 1);
-}
 
 function abcBadge(abc: "A" | "B" | "C") {
   const cls = {
@@ -182,105 +173,45 @@ export default function ClientesAdminLista() {
     })();
   }, []);
 
-  // Carrega todos os clientes + pedidos e calcula curva ABC, LTV, ciclo, etc.
+  // Carrega todos os clientes com métricas pré-agregadas via RPC (uma única chamada ao banco)
   useEffect(() => {
     (async () => {
-      const [clRes, pedRes] = await Promise.all([
-        supabase
-          .from("clientes")
-          .select("id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, cluster, grupo_cliente, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade, codigo_cliente, codigo_parceiro, canal, desconto_adicional, suframa")
-          .is("deleted_at", null),
-        supabase
-          .from("pedidos")
-          .select("cliente_id, data_pedido, itens_pedido(total_item, produtos(marca))")
-          .not("status", "in", '("rascunho","cancelado")'),
-      ]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc("clientes_com_metricas");
 
-      if (clRes.error) {
-        toast.error("Erro ao carregar clientes: " + clRes.error.message);
+      if (error) {
+        toast.error("Erro ao carregar clientes: " + error.message);
         setLoading(false);
         return;
       }
 
-      const agg = new Map<string, { ltv: number; num_pedidos: number; marcas: Set<string>; dates: Date[] }>();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (pedRes.data ?? []).forEach((p: any) => {
-        if (!p.cliente_id) return;
-        if (!agg.has(p.cliente_id)) {
-          agg.set(p.cliente_id, { ltv: 0, num_pedidos: 0, marcas: new Set(), dates: [] });
-        }
-        const entry = agg.get(p.cliente_id)!;
-        entry.num_pedidos += 1;
-        if (p.data_pedido) entry.dates.push(new Date(p.data_pedido));
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (p.itens_pedido ?? []).forEach((item: any) => {
-          entry.ltv += Number(item.total_item);
-          if (item.produtos?.marca) entry.marcas.add(item.produtos.marca);
-        });
-      });
+      const rawList = (data as any[]).map((c: any) => ({
+        ...c,
+        ltv: Number(c.ltv),
+        num_pedidos: Number(c.num_pedidos),
+        ticket_medio: Number(c.ticket_medio),
+        ciclo_medio: c.ciclo_medio != null ? Number(c.ciclo_medio) : null,
+        marcas_compradas: (c.marcas ?? []) as string[],
+        aceita_saldo: c.aceita_saldo ?? false,
+      }));
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rawList = (clRes.data ?? []).map((c: any) => {
-        const a = agg.get(c.id) ?? { ltv: 0, num_pedidos: 0, marcas: new Set<string>(), dates: [] as Date[] };
-        return {
-          ...c,
-          ltv: a.ltv,
-          num_pedidos: a.num_pedidos,
-          ticket_medio: a.num_pedidos > 0 ? a.ltv / a.num_pedidos : 0,
-          marcas_compradas: Array.from(a.marcas),
-          dates: a.dates,
-        };
-      });
-
-      rawList.sort((a, b) => b.ltv - a.ltv);
+      rawList.sort((a: any, b: any) => b.ltv - a.ltv);
       const total = rawList.length;
       const cutA = Math.ceil(total * 0.2);
       const cutB = Math.ceil(total * 0.5);
 
-      const agregados: ClienteAgregado[] = rawList.map((c, idx) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const agregados: ClienteAgregado[] = rawList.map((c: any, idx: number) => {
         const abc: "A" | "B" | "C" = idx < cutA ? "A" : idx < cutB ? "B" : "C";
-        const ciclo_medio = calcCicloMedio(c.dates);
-        const sortedDates = [...c.dates].sort((a, b) => b.getTime() - a.getTime());
-        const ultima_compra = sortedDates[0]?.toISOString().slice(0, 10) ?? null;
         let proxima_compra: Date | null = null;
-        if (ultima_compra && ciclo_medio) {
-          proxima_compra = new Date(sortedDates[0].getTime() + ciclo_medio * 24 * 60 * 60 * 1000);
+        if (c.ultima_compra && c.ciclo_medio) {
+          const [y, m, d] = (c.ultima_compra as string).split("-").map(Number);
+          proxima_compra = new Date(
+            new Date(y, m - 1, d).getTime() + c.ciclo_medio * 24 * 60 * 60 * 1000
+          );
         }
-        return {
-          id: c.id,
-          razao_social: c.razao_social,
-          nome_parceiro: c.nome_parceiro,
-          nome_fantasia: c.nome_fantasia,
-          cnpj: c.cnpj,
-          email: c.email,
-          telefone: c.telefone,
-          comprador: c.comprador,
-          cidade: c.cidade,
-          uf: c.uf,
-          cep: c.cep,
-          cluster: c.cluster,
-          grupo_cliente: c.grupo_cliente,
-          tabela_preco: c.tabela_preco,
-          vendedor_id: c.vendedor_id,
-          status: c.status,
-          negativado: c.negativado,
-          aceita_saldo: c.aceita_saldo ?? false,
-          observacoes_trade: c.observacoes_trade,
-          codigo_cliente: c.codigo_cliente,
-          codigo_parceiro: c.codigo_parceiro,
-          canal: c.canal,
-          desconto_adicional: c.desconto_adicional,
-          suframa: c.suframa,
-          ltv: c.ltv,
-          num_pedidos: c.num_pedidos,
-          ticket_medio: c.ticket_medio,
-          marcas_compradas: c.marcas_compradas,
-          rank: idx + 1,
-          abc,
-          ciclo_medio,
-          ultima_compra,
-          proxima_compra,
-        };
+        return { ...c, rank: idx + 1, abc, proxima_compra };
       });
 
       setClientes(agregados);

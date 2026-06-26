@@ -141,27 +141,27 @@ export default function FaturamentoClientes() {
 
   const carregar = useCallback(async () => {
     setLoading(true);
-    const [clientesRes, roleRes, loRes] = await Promise.all([
-      supabase
-        .from("clientes")
-        .select("id, razao_social, nome_parceiro, nome_fantasia, cnpj, email, telefone, comprador, cidade, uf, cep, codigo_parceiro, codigo_cliente, cluster, tabela_preco, vendedor_id, status, negativado, aceita_saldo, observacoes_trade")
-        .order("razao_social")
-        .range(0, 9999),
+    const [rpcRes, roleRes] = await Promise.all([
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (supabase as any).rpc("clientes_com_metricas"),
       supabase.from("user_roles").select("user_id").eq("role", "vendedor"),
-      supabase
-        .from("pedidos")
-        .select("cliente_id, data_pedido, itens_pedido(total_item)")
-        .neq("status", "rascunho")
-        .order("data_pedido", { ascending: false }),
     ]);
 
-    if (clientesRes.error) {
-      toast.error("Erro ao carregar clientes: " + clientesRes.error.message);
+    if (rpcRes.error) {
+      toast.error("Erro ao carregar clientes: " + rpcRes.error.message);
     } else {
-      setClientes((clientesRes.data ?? []) as Cliente[]);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rows = (rpcRes.data as any[]) ?? [];
+      setClientes(rows as Cliente[]);
+      const loMap: Record<string, LastOrder> = {};
+      rows.forEach((c) => {
+        if (c.ultima_compra) {
+          loMap[c.id] = { data_pedido: c.ultima_compra, total: Number(c.ultima_compra_total ?? 0) };
+        }
+      });
+      setLastOrders(loMap);
     }
 
-    // Busca nomes dos vendedores via user_roles + profiles
     if (roleRes.data && roleRes.data.length > 0) {
       const vendedorIds = roleRes.data.map((r) => r.user_id);
       const profRes = await supabase
@@ -181,20 +181,6 @@ export default function FaturamentoClientes() {
         setVendedoresMap(map);
         setVendedores(lista);
       }
-    }
-
-    // Monta mapa de último pedido por cliente
-    if (loRes.data) {
-      const map: Record<string, LastOrder> = {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (loRes.data as any[]).forEach((p) => {
-        if (!map[p.cliente_id]) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
-          map[p.cliente_id] = { data_pedido: p.data_pedido, total };
-        }
-      });
-      setLastOrders(map);
     }
 
     setLoading(false);

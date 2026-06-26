@@ -42,9 +42,8 @@ export default function AprovacaoDesconto() {
     const { data, error } = await supabase
       .from("pedidos")
       .select(`
-        id, numero_pedido, created_at,
+        id, numero_pedido, created_at, vendedor_id,
         clientes(razao_social, nome_parceiro),
-        profiles(name),
         itens_pedido(produto_id, quantidade, preco_unitario_bruto, desconto_perfil, desconto_comercial, preco_final, total_item, produtos(nome, codigo_jiva))
       `)
       .eq("status", "aguardando_aprovacao_desconto")
@@ -52,11 +51,22 @@ export default function AprovacaoDesconto() {
 
     if (error) { toast.error("Erro ao carregar pedidos"); setLoading(false); return; }
 
+    // Busca nomes dos vendedores separadamente (pedidos não tem FK formal p/ profiles)
+    const vendedorIds = [...new Set((data ?? []).map((p: any) => p.vendedor_id).filter(Boolean))];
+    const nomesPorId: Record<string, string> = {};
+    if (vendedorIds.length > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, name")
+        .in("id", vendedorIds);
+      (profs ?? []).forEach((pr: any) => { nomesPorId[pr.id] = pr.name; });
+    }
+
     const lista: PedidoAprovacao[] = (data ?? []).map((p: any) => ({
       id: p.id,
       numero_pedido: p.numero_pedido,
       cliente_nome: p.clientes?.nome_parceiro || p.clientes?.razao_social || "—",
-      vendedor_nome: p.profiles?.name || "—",
+      vendedor_nome: (p.vendedor_id && nomesPorId[p.vendedor_id]) || "—",
       created_at: p.created_at,
       total: (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item ?? 0), 0),
       itens: (p.itens_pedido ?? [])
