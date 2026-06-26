@@ -41,7 +41,7 @@ export default function MeusCancelamentos() {
   const ano = parseInt(anoStr, 10);
   const mes = parseInt(mesStr, 10);
   const iniDate = filtroMes ? `${filtroMes}-01` : undefined;
-  const fimDate = filtroMes ? `${filtroMes}-31` : undefined;
+  const fimDate = filtroMes ? `${filtroMes}-${String(new Date(ano, mes, 0).getDate()).padStart(2, "0")}` : undefined;
 
   const { data: cancelamentos = [], isLoading: loadingList } = useQuery<Cancelamento[]>({
     queryKey: ["meus-cancelamentos", user?.id, filtroMes],

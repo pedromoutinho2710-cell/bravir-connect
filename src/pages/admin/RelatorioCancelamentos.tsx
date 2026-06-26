@@ -99,7 +99,7 @@ export default function RelatorioCancelamentos() {
   });
 
   const iniDate = filtroMesIni ? `${filtroMesIni}-01` : undefined;
-  const fimDate = filtroMesFim ? `${filtroMesFim}-31` : undefined;
+  const fimDate = filtroMesFim ? (() => { const [y, m] = filtroMesFim.split("-").map(Number); return `${filtroMesFim}-${String(new Date(y, m, 0).getDate()).padStart(2, "0")}`; })() : undefined;
 
   const { data: cancelamentos = [], isLoading } = useQuery<Cancelamento[]>({
     queryKey: ["cancelamentos-admin", filtroMesIni, filtroMesFim, filtroVendedor, filtroMotivo],
