@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Pencil, Link2, CheckCircle2 } from "lucide-react";
+import { Loader2, Pencil } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -44,11 +44,9 @@ type MetasRow = {
   meta_b2b: number;
   meta_marca_propria: number;
   meta_online: number;
-};
-
-type BlingVenda = {
-  data?: string;
-  total?: number;
+  // Realizado do canal Online digitado manualmente pela gestão (a integração
+  // com o Bling foi desativada por estar trazendo dados incorretos).
+  realizado_online: number;
 };
 
 // Cores dos canais
@@ -61,9 +59,6 @@ const CORES_MARCA = [
   "#0F6E56", "#8B5CF6", "#0EA5E9", "#F59E0B",
   "#EC4899", "#3B82F6", "#14B8A6", "#EF4444",
 ];
-
-// URL de autorização OAuth do Bling (client_id público; secret fica só no backend)
-const BLING_AUTH_URL = `https://www.bling.com.br/Api/v3/oauth/authorize?response_type=code&client_id=52c28f14c3e549679570757457681add807daee1&redirect_uri=https://bravir-connect.vercel.app/admin/bling-callback&state=bravir`;
 
 // Soma B2B por mês (12 posições) para um ano específico, a partir das linhas
 // já agregadas no banco. B2B = canal "BRAVIR" (a coluna canal classifica o
@@ -91,17 +86,6 @@ function mpPorMes(rows: AggRow[], ano: number): number[] {
   return arr;
 }
 
-// Soma vendas online (Bling) por mês (12 posições).
-function onlinePorMesFn(vendas: BlingVenda[]): number[] {
-  const arr = new Array(12).fill(0);
-  for (const v of vendas) {
-    if (!v.data) continue;
-    const m = Number(v.data.slice(5, 7));
-    if (m >= 1 && m <= 12) arr[m - 1] += Number(v.total ?? 0);
-  }
-  return arr;
-}
-
 // Percentual de atingimento (0 se meta nula, para evitar Infinity).
 function pctAtingimento(realizado: number, meta: number): number {
   return meta > 0 ? (realizado / meta) * 100 : 0;
@@ -125,7 +109,7 @@ export default function VisaoMacro() {
   const [mes, setMes] = useState(hoje.getMonth());
   const [ano, setAno] = useState(hoje.getFullYear() >= 2026 ? 2026 : 2025);
   const [editOpen, setEditOpen] = useState(false);
-  const [formMeta, setFormMeta] = useState({ b2b: "", mp: "", online: "" });
+  const [formMeta, setFormMeta] = useState({ b2b: "", mp: "", online: "", realizadoOnline: "" });
   const [salvando, setSalvando] = useState(false);
 
   // B2B (Sankhya) — agregado no banco via RPC (antes baixava milhares de linhas
@@ -144,32 +128,26 @@ export default function VisaoMacro() {
     },
   });
 
-  // Status da conexão Bling (admin consegue ler bling_tokens)
-  const { data: blingConectado } = useQuery({
-    queryKey: ["bling-conectado"],
-    queryFn: async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { count } = await (supabase as any)
-        .from("bling_tokens")
-        .select("id", { count: "exact", head: true });
-      return (count ?? 0) > 0;
-    },
-  });
-
-  // Metas do mês/ano selecionado
-  const { data: metas } = useQuery({
-    queryKey: ["metas-visao-macro", mes, ano],
-    queryFn: async () => {
+  // Metas + realizado Online (manual) de todos os meses do ano selecionado.
+  // Buscamos o ano inteiro para alimentar tanto os cards do mês quanto o gráfico
+  // e a tabela comparativa (que precisam do realizado Online mês a mês).
+  const { data: metasAno } = useQuery({
+    queryKey: ["metas-visao-macro", ano],
+    queryFn: async (): Promise<MetasRow[]> => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase as any)
         .from("metas_visao_macro")
-        .select("mes, ano, meta_b2b, meta_marca_propria, meta_online")
-        .eq("mes", mes + 1)
-        .eq("ano", ano)
-        .maybeSingle();
-      return (data as MetasRow | null) ?? null;
+        .select("mes, ano, meta_b2b, meta_marca_propria, meta_online, realizado_online")
+        .eq("ano", ano);
+      return (data as MetasRow[] | null) ?? [];
     },
   });
+
+  // Linha de metas do mês selecionado
+  const metas = useMemo(
+    () => (metasAno ?? []).find((m) => m.mes === mes + 1) ?? null,
+    [metasAno, mes]
+  );
 
   // Meta total da campanha ativa: soma meta_valor de todos os vendedores
   const { data: metaCampanha } = useQuery({
@@ -192,28 +170,10 @@ export default function VisaoMacro() {
     },
   });
 
-  // Vendas online (Bling) do ano selecionado — só quando conectado
-  const { data: vendasOnline, isLoading: loadingOnline } = useQuery({
-    queryKey: ["bling-vendas", ano],
-    enabled: !!blingConectado,
-    queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke("bling-oauth", {
-        body: { dataInicial: `01/01/${ano}`, dataFinal: `31/12/${ano}` },
-        headers: { "x-action": "vendas" },
-      });
-      if (error) {
-        console.error("Erro Bling vendas:", error);
-        throw error;
-      }
-      const vendas = (data?.data ?? []) as BlingVenda[];
-      console.log("Bling vendas recebidas:", vendas.length, vendas[0]);
-      return vendas;
-    },
-  });
-
   const metaB2B = metas?.meta_b2b ?? 0;
   const metaMP = metas?.meta_marca_propria ?? 0;
   const metaOnline = metas?.meta_online ?? 0;
+  const realizadoOnline = metas?.realizado_online ?? 0;
 
   const b2b2025 = useMemo(() => b2bPorMes(rows ?? [], 2025), [rows]);
   const b2b2026 = useMemo(() => b2bPorMes(rows ?? [], 2026), [rows]);
@@ -221,7 +181,15 @@ export default function VisaoMacro() {
   const mp2025 = useMemo(() => mpPorMes(rows ?? [], 2025), [rows]);
   const mp2026 = useMemo(() => mpPorMes(rows ?? [], 2026), [rows]);
   const mpAno = ano === 2026 ? mp2026 : mp2025;
-  const onlinePorMes = useMemo(() => onlinePorMesFn(vendasOnline ?? []), [vendasOnline]);
+  // Realizado Online (manual) por mês (12 posições), a partir das linhas de metas
+  // do ano selecionado.
+  const onlinePorMes = useMemo(() => {
+    const arr = new Array(12).fill(0);
+    for (const m of metasAno ?? []) {
+      if (m.mes >= 1 && m.mes <= 12) arr[m.mes - 1] = Number(m.realizado_online) || 0;
+    }
+    return arr;
+  }, [metasAno]);
 
   // Faturamento por marca (Sankhya) — agregado no banco via RPC, usando a coluna
   // "Marca" real da planilha e o valor da coluna J (valor_total_itens), incluindo
@@ -262,7 +230,7 @@ export default function VisaoMacro() {
   // Realizado do mês selecionado por canal
   const realB2B = b2bAno[mes] ?? 0;
   const realMP = mpAno[mes] ?? 0;
-  const realOnline = blingConectado ? (onlinePorMes[mes] ?? 0) : 0;
+  const realOnline = onlinePorMes[mes] ?? 0;
 
   const canais = useMemo(
     () => [
@@ -272,7 +240,6 @@ export default function VisaoMacro() {
         cor: COR_B2B,
         realizado: realB2B,
         meta: metaB2B,
-        pendente: false,
       },
       {
         key: "mp",
@@ -280,7 +247,6 @@ export default function VisaoMacro() {
         cor: COR_MP,
         realizado: realMP,
         meta: metaMP,
-        pendente: false,
       },
       {
         key: "online",
@@ -288,10 +254,9 @@ export default function VisaoMacro() {
         cor: COR_ONLINE,
         realizado: realOnline,
         meta: metaOnline,
-        pendente: !blingConectado,
       },
     ],
-    [realB2B, realMP, realOnline, metaB2B, metaMP, metaOnline, blingConectado]
+    [realB2B, realMP, realOnline, metaB2B, metaMP, metaOnline]
   );
 
   // KPIs globais (mês selecionado)
@@ -319,14 +284,14 @@ export default function VisaoMacro() {
       mes: MESES_ABREV[i],
       b2b: b2bAno[i] ?? 0,
       mp: mpAno[i] ?? 0,
-      online: blingConectado ? (onlinePorMes[i] ?? 0) : 0,
+      online: onlinePorMes[i] ?? 0,
     }));
     const max = Math.max(
       1,
       ...lista.flatMap((l) => [l.b2b, l.mp, l.online])
     );
     return { lista, max };
-  }, [mes, b2bAno, mpAno, onlinePorMes, blingConectado]);
+  }, [mes, b2bAno, mpAno, onlinePorMes]);
 
   // Tabela comparativa (todos os meses)
   const tabela = useMemo(() => {
@@ -334,7 +299,7 @@ export default function VisaoMacro() {
       const b25 = b2b2025[i] ?? 0;
       const b26 = b2b2026[i] ?? 0;
       const mp26 = mp2026[i] ?? 0;
-      const on26 = ano === 2026 && blingConectado ? (onlinePorMes[i] ?? 0) : 0;
+      const on26 = ano === 2026 ? (onlinePorMes[i] ?? 0) : 0;
       const total26 = b26 + mp26 + on26;
       const varB2B = b25 > 0 ? ((b26 - b25) / b25) * 100 : null;
       return { nome, b25, b26, mp26, on26, total26, varB2B };
@@ -351,7 +316,7 @@ export default function VisaoMacro() {
     );
     const varTotal = tot.b25 > 0 ? ((tot.b26 - tot.b25) / tot.b25) * 100 : null;
     return { linhas, tot, varTotal };
-  }, [b2b2025, b2b2026, mp2026, onlinePorMes, ano, blingConectado]);
+  }, [b2b2025, b2b2026, mp2026, onlinePorMes, ano]);
 
   const renderVar = (v: number | null) => {
     if (v === null) return <span className="text-muted-foreground">—</span>;
@@ -368,6 +333,7 @@ export default function VisaoMacro() {
       b2b: metaB2B ? String(metaB2B) : "",
       mp: metaMP ? String(metaMP) : "",
       online: metaOnline ? String(metaOnline) : "",
+      realizadoOnline: realizadoOnline ? String(realizadoOnline) : "",
     });
     setEditOpen(true);
   }
@@ -379,6 +345,7 @@ export default function VisaoMacro() {
         b2b: metaB2B ? String(metaB2B) : "",
         mp: metaMP ? String(metaMP) : "",
         online: metaOnline ? String(metaOnline) : "",
+        realizadoOnline: realizadoOnline ? String(realizadoOnline) : "",
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -397,6 +364,7 @@ export default function VisaoMacro() {
             meta_b2b: Number(formMeta.b2b) || 0,
             meta_marca_propria: Number(formMeta.mp) || 0,
             meta_online: Number(formMeta.online) || 0,
+            realizado_online: Number(formMeta.realizadoOnline) || 0,
           },
           { onConflict: "mes,ano" }
         );
@@ -411,8 +379,6 @@ export default function VisaoMacro() {
       setSalvando(false);
     }
   }
-
-  console.log("blingConectado:", blingConectado, "vendasOnline:", vendasOnline?.length, "onlinePorMes:", onlinePorMes);
 
   return (
     <div className="space-y-6 p-4 md:p-6">
@@ -450,17 +416,6 @@ export default function VisaoMacro() {
             <Pencil className="mr-2 h-4 w-4" />
             Editar Metas
           </Button>
-          {blingConectado ? (
-            <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
-              <CheckCircle2 className="mr-1 h-3 w-3" />
-              Bling conectado
-            </Badge>
-          ) : (
-            <Button onClick={() => { window.location.href = BLING_AUTH_URL; }}>
-              <Link2 className="mr-2 h-4 w-4" />
-              Conectar Bling
-            </Button>
-          )}
         </div>
       </div>
 
@@ -515,7 +470,6 @@ export default function VisaoMacro() {
               const pct = pctAtingimento(c.realizado, c.meta);
               const diff = c.realizado - c.meta;
               const status = statusCanal(pct);
-              const semDados = c.pendente && c.realizado === 0;
               return (
                 <Card key={c.key}>
                   <CardHeader className="pb-2">
@@ -537,11 +491,6 @@ export default function VisaoMacro() {
                         <p className="text-sm text-muted-foreground">
                           {pct.toFixed(1)}% da meta
                         </p>
-                        {semDados && (
-                          <span className="text-xs text-muted-foreground">
-                            · Dados pendentes
-                          </span>
-                        )}
                       </div>
                     </div>
                     {/* Barra de progresso */}
@@ -642,12 +591,6 @@ export default function VisaoMacro() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {loadingOnline && (
-                <div className="mb-3 flex items-center gap-2 text-xs text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Carregando vendas online…
-                </div>
-              )}
               <div className="flex items-end justify-between gap-3 h-56">
                 {barras.lista.map((l) => (
                   <div
@@ -791,6 +734,19 @@ export default function VisaoMacro() {
                 onChange={(e) => setFormMeta((f) => ({ ...f, online: e.target.value }))}
                 placeholder="0"
               />
+            </div>
+            <div className="space-y-1">
+              <Label>Realizado Online (R$)</Label>
+              <Input
+                type="number"
+                value={formMeta.realizadoOnline}
+                onChange={(e) => setFormMeta((f) => ({ ...f, realizadoOnline: e.target.value }))}
+                placeholder="0"
+              />
+              <p className="text-xs text-muted-foreground">
+                Informe manualmente o faturamento Online do mês (a integração com o
+                Bling está desativada temporariamente).
+              </p>
             </div>
           </div>
           <DialogFooter>
