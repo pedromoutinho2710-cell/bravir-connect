@@ -4,6 +4,9 @@
 !.env.example
 agent/.env
 
+# Configuração local do Claude Code (pode conter tokens) — nunca versionar
+.claude/settings.local.json
+
 # Logs
 logs
 *.log
