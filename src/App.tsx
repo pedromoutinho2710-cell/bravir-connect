@@ -22,7 +22,6 @@ import Formularios from "./pages/admin/Formularios";
 import Equipe from "./pages/admin/Equipe";
 import Metas from "./pages/admin/Metas";
 import GestaoMetas from "./pages/admin/GestaoMetas";
-import BlingCallback from "@/pages/admin/BlingCallback";
 import Trade from "./pages/Trade";
 import TradeCampanhas from "./pages/TradeCampanhas";
 import ImportarFaturamento from "./pages/trade/ImportarFaturamento";
@@ -73,7 +72,9 @@ import ClientesInativados from "./pages/gestora/ClientesInativados";
 import AprovacaoDesconto from "./pages/gestora/AprovacaoDesconto";
 import PedidosCancelados from "./pages/faturamento/PedidosCancelados";
 import RelatorioCancelamentos from "./pages/admin/RelatorioCancelamentos";
+import RelatorioBonificacoes from "./pages/admin/RelatorioBonificacoes";
 import MeusCancelamentos from "./pages/vendedor/MeusCancelamentos";
+import MinhasBonificacoes from "./pages/vendedor/MinhasBonificacoes";
 import FilaFinanceiro from "./pages/financeiro/FilaFinanceiro";
 import DadosIQVIA from "./pages/DadosIQVIA";
 
@@ -132,7 +133,6 @@ const App = () => (
             <Route element={<ProtectedRoute allow={["admin"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/admin/visao-macro" element={<VisaoMacro />} />
-              <Route path="/admin/bling-callback" element={<BlingCallback />} />
               <Route path="/admin/equipe" element={<Equipe />} />
               <Route path="/admin/metas" element={<Metas />} />
               <Route path="/admin/formularios" element={<Formularios />} />
@@ -152,6 +152,11 @@ const App = () => (
             {/* Gestão de Estoque (mockado — Sankhya) — admin e gestora */}
             <Route element={<ProtectedRoute allow={["admin", "gestora"]}><AppLayout /></ProtectedRoute>}>
               <Route path="/admin/gestao-estoque" element={<GestaoEstoqueAdmin />} />
+            </Route>
+
+            {/* Bonificações — admin e gestora */}
+            <Route element={<ProtectedRoute allow={["admin", "gestora"]}><AppLayout /></ProtectedRoute>}>
+              <Route path="/admin/relatorio-bonificacoes" element={<RelatorioBonificacoes />} />
             </Route>
 
 
@@ -196,6 +201,7 @@ const App = () => (
               <Route path="/cadastrar-cliente" element={<CadastrarCliente />} />
               <Route path="/meu-pipeline" element={<MeuPipeline />} />
               <Route path="/meus-cancelamentos" element={<MeusCancelamentos />} />
+              <Route path="/minhas-bonificacoes" element={<MinhasBonificacoes />} />
             </Route>
 
             {/* Propostas e Calculadora — vendedor, gestora e admin */}

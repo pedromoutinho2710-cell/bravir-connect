@@ -21,6 +21,7 @@ import {
   FileText,
   Calculator,
   CheckSquare,
+  LayoutTemplate,
   BarChart2,
   Wallet,
   Trash2,
@@ -28,6 +29,7 @@ import {
   TrendingUp,
   Percent,
   Ban,
+  Gift,
 } from "lucide-react";
 import type { AppRole } from "@/lib/roles";
 
@@ -60,6 +62,7 @@ export const ADMIN_SECTIONS: Section[] = [
       { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
       { title: "Solicitações de melhoria", url: "/admin/solicitacoes", icon: ClipboardList },
       { title: "Cancelamentos", url: "/admin/relatorio-cancelamentos", icon: Ban },
+      { title: "Bonificações", url: "/admin/relatorio-bonificacoes", icon: Gift },
       { title: "Lixeira", url: "/lixeira", icon: Trash2 },
     ],
   },
@@ -94,9 +97,11 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Meus Clientes", url: "/meus-clientes", icon: Users },
     { title: "Bolsão", url: "/bolsao", icon: Wallet },
     { title: "Minhas Tarefas", url: "/minhas-tarefas", icon: CheckSquare },
+    { title: "Meu Pipeline", url: "/meu-pipeline", icon: LayoutTemplate },
     { title: "Cadastrar Cliente", url: "/cadastrar-cliente", icon: UserPlus },
     { title: "Política Comercial", url: "/politica-comercial", icon: FileText },
     { title: "Meus Cancelamentos", url: "/meus-cancelamentos", icon: Ban },
+    { title: "Minhas Bonificações", url: "/minhas-bonificacoes", icon: Gift },
     { title: "Dados IQVIA", url: "/dados-iqvia", icon: TrendingUp },
     { title: "Solicitações de Melhorias", url: "/minhas-solicitacoes", icon: ClipboardList },
     { title: "Lixeira", url: "/lixeira", icon: Trash2 },
@@ -115,6 +120,7 @@ export const FLAT_MENU_STATIC: Partial<Record<AppRole, Item[]>> = {
     { title: "Clientes", url: "/gestora/clientes", icon: Users },
     { title: "Clientes Inativados", url: "/gestora/clientes-inativados", icon: UserMinus },
     { title: "Aprovação de Desconto", url: "/gestora/aprovacao-desconto", icon: Percent },
+    { title: "Bonificações", url: "/admin/relatorio-bonificacoes", icon: Gift },
     { title: "Bolsão", url: "/bolsao", icon: Wallet },
     { title: "Cadastrar Cliente", url: "/gestora/cadastrar-cliente", icon: UserPlus },
     { title: "Gestão do Time", url: "/gestora/time", icon: UserCog },
