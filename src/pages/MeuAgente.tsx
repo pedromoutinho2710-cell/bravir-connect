@@ -32,6 +32,7 @@ type Solicitacao = {
   tipo: string | null;
   tela: string | null;
   criado_por: string | null;
+  criado_por_nome: string | null;
   created_at: string;
   agente_status: AgenteStatus;
   agente_resumo: string | null;
@@ -144,22 +145,34 @@ export default function MeuAgente() {
   }
 
   function copiarParaClaude() {
-    const pendentes = solicitacoes.filter(
-      (s) => s.agente_status === "analisado" || !s.agente_status
+    const equipe = solicitacoes.filter((s) => !!s.criado_por);
+    const monitor = solicitacoes.filter(
+      (s) => !s.criado_por && (s.agente_status === "analisado" || !s.agente_status)
     );
-    if (pendentes.length === 0) {
+
+    if (equipe.length === 0 && monitor.length === 0) {
       toast.info("Nenhuma solicitação pendente para copiar.");
       return;
     }
-    const origem = (s: Solicitacao) =>
-      s.origem === "monitor" ? "[Monitor]" : s.origem === "pesquisa" ? "[Pesquisa Web]" : "[CRM]";
-    const texto = [
-      `Tenho ${pendentes.length} solicitação(ões) para analisar. Me diz o que faz sentido implementar:\n`,
-      ...pendentes.map((s, i) =>
-        `${i + 1}. ${origem(s)} ${s.titulo}\n${s.agente_resumo ?? s.descricao}`
-      ),
-    ].join("\n\n");
-    navigator.clipboard.writeText(texto);
+
+    const partes: string[] = ["Analisa as solicitações abaixo e me diz o que faz sentido implementar:\n"];
+
+    if (equipe.length > 0) {
+      partes.push(`## Pedidos da equipe (${equipe.length})`);
+      equipe.forEach((s, i) => {
+        const quem = s.criado_por_nome ? `por ${s.criado_por_nome}` : "";
+        partes.push(`${i + 1}. ${s.titulo} ${quem}\n${s.descricao}`);
+      });
+    }
+
+    if (monitor.length > 0) {
+      partes.push(`\n## Monitor de código (${monitor.length})`);
+      monitor.forEach((s, i) => {
+        partes.push(`${i + 1}. ${s.titulo}\n${s.agente_resumo ?? s.descricao}`);
+      });
+    }
+
+    navigator.clipboard.writeText(partes.join("\n\n"));
     toast.success("Copiado! Cole no Claude Code para análise.");
   }
 
@@ -219,7 +232,19 @@ export default function MeuAgente() {
             <SolicitacaoCard
               key={sol.id}
               sol={sol}
+              onAprovar={
+                sol.agente_status !== "implementado" && sol.agente_status !== "reprovado"
+                  ? () => atualizar.mutate({ id: sol.id, patch: { agente_status: "implementado", agente_concluido_em: new Date().toISOString() } })
+                  : undefined
+              }
+              onReprovar={
+                sol.agente_status !== "implementado" && sol.agente_status !== "reprovado"
+                  ? () => reprovar(sol.id)
+                  : undefined
+              }
               onDetalhe={() => setDetalhe(sol)}
+              labelAprovar="Já implementado"
+              labelReprovar="Não vamos fazer"
             />
           ))}
         </section>
@@ -316,6 +341,8 @@ function SolicitacaoCard({
   onReprovar,
   onTentarNovamente,
   onDetalhe,
+  labelAprovar,
+  labelReprovar,
 }: {
   sol: Solicitacao;
   selecionado?: boolean;
@@ -324,8 +351,10 @@ function SolicitacaoCard({
   onReprovar?: () => void;
   onTentarNovamente?: () => void;
   onDetalhe: () => void;
+  labelAprovar?: string;
+  labelReprovar?: string;
 }) {
-  const podeSelecionar = sol.agente_status === "analisado";
+  const podeSelecionar = sol.agente_status === "analisado" && !sol.criado_por;
 
   return (
     <Card
@@ -370,6 +399,12 @@ function SolicitacaoCard({
 
             <p className="font-medium text-sm leading-tight">{sol.titulo}</p>
 
+            {sol.criado_por_nome && (
+              <p className="text-xs text-muted-foreground">
+                Pedido por <span className="font-medium">{sol.criado_por_nome}</span>
+              </p>
+            )}
+
             {sol.agente_mudancas?.resumo && (
               <p className="text-xs text-muted-foreground line-clamp-2">
                 {sol.agente_mudancas.resumo}
@@ -388,13 +423,13 @@ function SolicitacaoCard({
                 {onAprovar && (
                   <Button size="sm" variant="default" onClick={onAprovar} className="h-7 text-xs">
                     <CheckCircle2 className="h-3 w-3 mr-1" />
-                    Aprovar
+                    {labelAprovar ?? "Aprovar"}
                   </Button>
                 )}
                 {onReprovar && (
                   <Button size="sm" variant="outline" onClick={onReprovar} className="h-7 text-xs">
                     <XCircle className="h-3 w-3 mr-1" />
-                    Reprovar
+                    {labelReprovar ?? "Reprovar"}
                   </Button>
                 )}
                 {onTentarNovamente && (
