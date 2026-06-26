@@ -110,7 +110,7 @@ supabase
     if (status === 'SUBSCRIBED') {
       log('Agente ativo — ouvindo Supabase Realtime.');
       carregarPendentes();
-      iniciarMonitor(supabase);
+      // Monitor desligado — análise de código feita diretamente no Claude Code
       iniciarPesquisador(supabase);
     } else {
       log(`Status Realtime: ${status}`);
