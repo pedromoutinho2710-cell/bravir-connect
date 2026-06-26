@@ -394,7 +394,7 @@ export default function PedidosCancelados() {
 
               {/* Cliente — busca livre + seleção */}
               <div className="space-y-1">
-                <FormLabel>Cliente (opcional)</FormLabel>
+                <label className="text-sm font-medium leading-none">Cliente <span className="text-muted-foreground font-normal">(opcional)</span></label>
                 <Input
                   placeholder="Buscar por nome do cliente..."
                   value={clienteBusca}
