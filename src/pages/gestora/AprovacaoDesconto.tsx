@@ -57,9 +57,9 @@ export default function AprovacaoDesconto() {
     if (vendedorIds.length > 0) {
       const { data: profs } = await supabase
         .from("profiles")
-        .select("id, name")
+        .select("id, full_name")
         .in("id", vendedorIds);
-      (profs ?? []).forEach((pr: any) => { nomesPorId[pr.id] = pr.name; });
+      (profs ?? []).forEach((pr: any) => { nomesPorId[pr.id] = pr.full_name; });
     }
 
     const lista: PedidoAprovacao[] = (data ?? []).map((p: any) => ({
@@ -93,7 +93,7 @@ export default function AprovacaoDesconto() {
     setProcessando(pedidoId);
     const { error } = await supabase
       .from("pedidos")
-      .update({ status: "pendente_sankhya", data_pedido: new Date().toISOString().slice(0, 10) })
+      .update({ status: "aguardando_faturamento", data_pedido: new Date().toISOString().slice(0, 10) })
       .eq("id", pedidoId);
     if (error) { toast.error("Erro ao aprovar: " + error.message); setProcessando(null); return; }
     toast.success(`Pedido #${numeroPedido} aprovado e enviado para faturamento!`);

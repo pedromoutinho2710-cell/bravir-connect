@@ -633,6 +633,7 @@ export default function RelatorioBonificacoes() {
                     placeholder="Buscar cliente..."
                     value={buscaCliente}
                     onFocus={() => setClienteDropOpen(true)}
+                    onBlur={() => setTimeout(() => setClienteDropOpen(false), 150)}
                     onChange={(e) => {
                       setBuscaCliente(e.target.value);
                       form.setValue("cliente_id", null);

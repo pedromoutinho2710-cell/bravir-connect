@@ -32,62 +32,51 @@ CREATE INDEX pedidos_cancelados_data
   ON public.pedidos_cancelados (data_cancelamento DESC);
 
 -- ─────────────────────────────────────────────────────────────────────────
--- 2. RLS — padrão EXISTS + user_roles (mesmo padrão de 20260619010000)
+-- 2. RLS — padrão has_role() conforme o restante do sistema
 -- ─────────────────────────────────────────────────────────────────────────
 ALTER TABLE public.pedidos_cancelados ENABLE ROW LEVEL SECURITY;
 
--- Retaguarda vê tudo
+-- SELECT: admin, faturamento e gestora_faturamento veem tudo
 CREATE POLICY "pc_select_retaguarda" ON public.pedidos_cancelados
   FOR SELECT TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.user_roles ur
-      WHERE ur.user_id = auth.uid()
-        AND ur.role::text IN ('admin', 'faturamento', 'gestora_faturamento')
-    )
+    public.has_role(auth.uid(), 'admin')
+    OR public.has_role(auth.uid(), 'faturamento')
+    OR public.has_role(auth.uid(), 'gestora_faturamento')
+    OR public.has_role(auth.uid(), 'gestora')
   );
 
--- Vendedor vê apenas os próprios cancelamentos
+-- SELECT: vendedor vê apenas os próprios cancelamentos
 CREATE POLICY "pc_select_vendedor" ON public.pedidos_cancelados
   FOR SELECT TO authenticated
   USING (
-    vendedor_id = auth.uid()
-    AND EXISTS (
-      SELECT 1 FROM public.user_roles ur
-      WHERE ur.user_id = auth.uid() AND ur.role::text = 'vendedor'
-    )
+    public.has_role(auth.uid(), 'vendedor')
+    AND vendedor_id = auth.uid()
   );
 
--- INSERT: retaguarda
+-- INSERT: faturamento e retaguarda
 CREATE POLICY "pc_insert_retaguarda" ON public.pedidos_cancelados
   FOR INSERT TO authenticated
   WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM public.user_roles ur
-      WHERE ur.user_id = auth.uid()
-        AND ur.role::text IN ('admin', 'faturamento', 'gestora_faturamento')
-    )
+    public.has_role(auth.uid(), 'admin')
+    OR public.has_role(auth.uid(), 'faturamento')
+    OR public.has_role(auth.uid(), 'gestora_faturamento')
   );
 
--- UPDATE: retaguarda
+-- UPDATE: faturamento e retaguarda
 CREATE POLICY "pc_update_retaguarda" ON public.pedidos_cancelados
   FOR UPDATE TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.user_roles ur
-      WHERE ur.user_id = auth.uid()
-        AND ur.role::text IN ('admin', 'faturamento', 'gestora_faturamento')
-    )
+    public.has_role(auth.uid(), 'admin')
+    OR public.has_role(auth.uid(), 'faturamento')
+    OR public.has_role(auth.uid(), 'gestora_faturamento')
   );
 
 -- DELETE: apenas admin
 CREATE POLICY "pc_delete_admin" ON public.pedidos_cancelados
   FOR DELETE TO authenticated
   USING (
-    EXISTS (
-      SELECT 1 FROM public.user_roles ur
-      WHERE ur.user_id = auth.uid() AND ur.role::text = 'admin'
-    )
+    public.has_role(auth.uid(), 'admin')
   );
 
 -- ─────────────────────────────────────────────────────────────────────────
