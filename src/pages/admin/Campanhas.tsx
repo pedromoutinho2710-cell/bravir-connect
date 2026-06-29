@@ -412,12 +412,8 @@ export function CampanhasContent() {
 
   const toggleAtiva = useMutation({
     mutationFn: async ({ id, ativa }: { id: string; ativa: boolean }) => {
-      if (ativa) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (supabase.from("campanhas") as any)
-          .update({ ativa: false })
-          .neq("id", id);
-      }
+      // Múltiplas campanhas podem ficar ativas simultaneamente — ativar uma NÃO
+      // desativa as demais (antes havia um update .neq("id", id) que zerava todas).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase.from("campanhas") as any)
         .update({ ativa })
