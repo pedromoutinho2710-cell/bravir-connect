@@ -11,6 +11,7 @@ import { formatBRL, formatDate, MESES_ABREV } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 import { exportDashboardExcel } from "@/lib/exportDashboardExcel";
 import { exportarBaseDadosCompleta } from "@/lib/excel";
+import { fetchRankingVendedores } from "@/lib/ranking";
 import { Download } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -423,17 +424,7 @@ export default function Dashboard() {
           });
         }
 
-        // Ranking vendedores — todos, sem slice
-        const vendedorAgg: Record<string, { faturamento: number; numPedidos: number }> = {};
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        pedidosSemCancelado.forEach((p: any) => {
-          if (!vendedorAgg[p.vendedor_id]) vendedorAgg[p.vendedor_id] = { faturamento: 0, numPedidos: 0 };
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const total = (p.itens_pedido ?? []).reduce((s: number, i: any) => s + Number(i.total_item), 0);
-          vendedorAgg[p.vendedor_id].faturamento += total;
-          vendedorAgg[p.vendedor_id].numPedidos += 1;
-        });
-
+        // profileMap — usado também pela seção de ranking por campanha (abaixo)
         const profileMap: Record<string, string> = {};
         {
           const { data: profilesData } = await supabase
@@ -444,54 +435,19 @@ export default function Dashboard() {
           });
         }
 
-        let rankingList: RankingVendedor[] = Object.entries(vendedorAgg)
-          .map(([vendedor_id, data]) => ({
-            vendedor_id,
-            nome: profileMap[vendedor_id] ?? "—",
-            faturamento: data.faturamento,
-            numPedidos: data.numPedidos,
-            clientesAtivos: clientesAtivosPorVendedor[vendedor_id]?.size ?? 0,
-            clientesCarteira: clientesCarteiraPorVendedor[vendedor_id] ?? 0,
-            metaMes: metasPorVendedor[vendedor_id] ?? null,
-          }))
-          .sort((a, b) => b.faturamento - a.faturamento);
-
-        // Incluir todos os vendedores (role vendedor/gestora) mesmo sem pedidos no período
-        const { data: rolesData } = await supabase
-          .from("user_roles")
-          .select("user_id")
-          .in("role", ["vendedor", "gestora"]);
-        const todosVendedorIds = (rolesData ?? []).map((r) => r.user_id);
-
-        const idsNovos = todosVendedorIds.filter((id) => !profileMap[id]);
-        if (idsNovos.length > 0) {
-          const { data: novosProfiles } = await supabase
-            .from("profiles")
-            .select("id, full_name, email")
-            .in("id", idsNovos);
-          (novosProfiles ?? []).forEach((p) => {
-            profileMap[p.id] = p.full_name || p.email;
-          });
-        }
-
-        todosVendedorIds.forEach((vendedor_id) => {
-          const nome = profileMap[vendedor_id] ?? "—";
-          if (!nome || nome === "—") return; // pular vendedores sem profile
-          if (!vendedorAgg[vendedor_id]) {
-            rankingList.push({
-              vendedor_id,
-              nome,
-              faturamento: 0,
-              numPedidos: 0,
-              clientesAtivos: 0,
-              clientesCarteira: clientesCarteiraPorVendedor[vendedor_id] ?? 0,
-              metaMes: metasPorVendedor[vendedor_id] ?? null,
-            });
-          }
-        });
-
-        rankingList = rankingList.filter((r) => r.nome && r.nome !== "—");
-        rankingList.sort((a, b) => b.faturamento - a.faturamento);
+        // Ranking vendedores — fonte ÚNICA compartilhada com o Painel do Vendedor
+        // (src/lib/ranking.ts), para que as posições sejam idênticas nos dois.
+        // Aqui só enriquecemos a base ordenada com colunas exclusivas do admin.
+        const baseRanking = await fetchRankingVendedores(effectiveInicio, effectiveFim);
+        const rankingList: RankingVendedor[] = baseRanking.map((r) => ({
+          vendedor_id: r.vendedor_id,
+          nome: r.nome,
+          faturamento: r.faturamento,
+          numPedidos: r.numPedidos,
+          clientesAtivos: clientesAtivosPorVendedor[r.vendedor_id]?.size ?? 0,
+          clientesCarteira: clientesCarteiraPorVendedor[r.vendedor_id] ?? 0,
+          metaMes: metasPorVendedor[r.vendedor_id] ?? null,
+        }));
         setRanking(rankingList);
 
         // Ranking campanha por vendedor
