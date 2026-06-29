@@ -297,26 +297,28 @@ export default function VisaoMacro() {
   const tabela = useMemo(() => {
     const linhas = MESES_ABREV.map((nome, i) => {
       const b25 = b2b2025[i] ?? 0;
+      const mp25 = mp2025[i] ?? 0;
       const b26 = b2b2026[i] ?? 0;
       const mp26 = mp2026[i] ?? 0;
       const on26 = ano === 2026 ? (onlinePorMes[i] ?? 0) : 0;
       const total26 = b26 + mp26 + on26;
       const varB2B = b25 > 0 ? ((b26 - b25) / b25) * 100 : null;
-      return { nome, b25, b26, mp26, on26, total26, varB2B };
+      return { nome, b25, mp25, b26, mp26, on26, total26, varB2B };
     });
     const tot = linhas.reduce(
       (acc, l) => ({
         b25: acc.b25 + l.b25,
+        mp25: acc.mp25 + l.mp25,
         b26: acc.b26 + l.b26,
         mp26: acc.mp26 + l.mp26,
         on26: acc.on26 + l.on26,
         total26: acc.total26 + l.total26,
       }),
-      { b25: 0, b26: 0, mp26: 0, on26: 0, total26: 0 }
+      { b25: 0, mp25: 0, b26: 0, mp26: 0, on26: 0, total26: 0 }
     );
     const varTotal = tot.b25 > 0 ? ((tot.b26 - tot.b25) / tot.b25) * 100 : null;
     return { linhas, tot, varTotal };
-  }, [b2b2025, b2b2026, mp2026, onlinePorMes, ano]);
+  }, [b2b2025, mp2025, b2b2026, mp2026, onlinePorMes, ano]);
 
   const renderVar = (v: number | null) => {
     if (v === null) return <span className="text-muted-foreground">—</span>;
@@ -661,6 +663,7 @@ export default function VisaoMacro() {
                     <tr className="border-b text-left text-muted-foreground">
                       <th className="py-2 pr-4 font-medium">Mês</th>
                       <th className="py-2 pr-4 text-right font-medium">B2B 2025</th>
+                      <th className="py-2 pr-4 text-right font-medium">MP 2025</th>
                       <th className="py-2 pr-4 text-right font-medium">B2B 2026</th>
                       <th className="py-2 pr-4 text-right font-medium">MP 2026</th>
                       <th className="py-2 pr-4 text-right font-medium">Online 2026</th>
@@ -673,6 +676,7 @@ export default function VisaoMacro() {
                       <tr key={l.nome} className="border-b last:border-0">
                         <td className="py-2 pr-4">{l.nome}</td>
                         <td className="py-2 pr-4 text-right">{formatBRL(l.b25)}</td>
+                        <td className="py-2 pr-4 text-right">{formatBRL(l.mp25)}</td>
                         <td className="py-2 pr-4 text-right">{formatBRL(l.b26)}</td>
                         <td className="py-2 pr-4 text-right">{formatBRL(l.mp26)}</td>
                         <td className="py-2 pr-4 text-right">{formatBRL(l.on26)}</td>
@@ -685,6 +689,7 @@ export default function VisaoMacro() {
                     <tr className="border-t-2 font-semibold">
                       <td className="py-2 pr-4">Total</td>
                       <td className="py-2 pr-4 text-right">{formatBRL(tabela.tot.b25)}</td>
+                      <td className="py-2 pr-4 text-right">{formatBRL(tabela.tot.mp25)}</td>
                       <td className="py-2 pr-4 text-right">{formatBRL(tabela.tot.b26)}</td>
                       <td className="py-2 pr-4 text-right">{formatBRL(tabela.tot.mp26)}</td>
                       <td className="py-2 pr-4 text-right">{formatBRL(tabela.tot.on26)}</td>
