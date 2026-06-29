@@ -1336,7 +1336,7 @@ export default function MeuPainel() {
           <CardHeader className="flex flex-row items-center gap-2 pb-3">
             <Trophy className="h-5 w-5 text-primary" />
             <CardTitle>Minha posição no ranking</CardTitle>
-            <span className="ml-auto text-xs text-muted-foreground">faturado no período · sem valores</span>
+            <span className="ml-auto text-xs text-muted-foreground">entrada de pedidos no período · sem valores</span>
           </CardHeader>
           <CardContent>
             <div className="space-y-1.5">
