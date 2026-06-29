@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatBRL, formatDate, MESES_ABREV } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
+import { fetchRankingVendedores } from "@/lib/ranking";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, UserPlus, Briefcase, Gift, Trophy, PackageX } from "lucide-react";
 import { toast } from "sonner";
@@ -167,6 +168,19 @@ type CampanhaAtiva = {
   campanha_niveis?: CampanhaNivel[];
 };
 
+// View-model de uma campanha ativa já com o desempenho do vendedor calculado.
+// O painel renderiza um card destes por campanha ativa (podem ser 2-3 ao mesmo tempo).
+type CampanhaView = {
+  campanha: CampanhaAtiva;
+  marcas: string[];
+  entrada: number;
+  entradaPorMarca: Record<string, number>;
+  metaVendedor: number | null;
+  metaTipo: "valor" | "unidades";
+  metaQuantidade: number | null;
+  categoria: string | null;
+};
+
 const MARCA_CORES: Record<string, string> = {
   "Bendita Cânfora": "#7f77dd",
   "Laby": "#378add",
@@ -209,14 +223,7 @@ export default function MeuPainel() {
   const [baixandoTabela, setBaixandoTabela] = useState(false);
   const [clientesPeriodo, setClientesPeriodo] = useState<ClientesPeriodo>({ carteira: 0, comPedido: 0, novos: 0, semPedidoList: [] });
   const [modalSemPedidoOpen, setModalSemPedidoOpen] = useState(false);
-  const [campanhaAtiva, setCampanhaAtiva] = useState<CampanhaAtiva | null>(null);
-  const [campanhaMarcas, setCampanhaMarcas] = useState<string[]>([]);
-  const [campanhaEntrada, setCampanhaEntrada] = useState(0);
-  const [campanhaEntradaPorMarca, setCampanhaEntradaPorMarca] = useState<Record<string, number>>({});
-  const [campanhaMetaVendedor, setCampanhaMetaVendedor] = useState<number | null>(null);
-  const [campanhaMetaTipo, setCampanhaMetaTipo] = useState<"valor" | "unidades">("valor");
-  const [campanhaMetaQuantidade, setCampanhaMetaQuantidade] = useState<number | null>(null);
-  const [campanhaCategoria, setCampanhaCategoria] = useState<string | null>(null);
+  const [campanhasAtivas, setCampanhasAtivas] = useState<CampanhaView[]>([]);
   const [rankingPosicoes, setRankingPosicoes] = useState<{ nome: string; isVoce: boolean }[]>([]);
   const [fatMensalVendedor, setFatMensalVendedor] = useState<{ mes: string; valor: number }[]>([]);
   const [topClientes, setTopClientes] = useState<{ cliente_id: string; nome: string; total: number }[]>([]);
@@ -236,91 +243,96 @@ export default function MeuPainel() {
 
   useEffect(() => {
     if (!effectiveUserId) return;
+    let cancelado = false;
     (async () => {
+      // Todas as campanhas ativas (podem ser várias simultâneas)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: campanha } = await (supabase as any)
+      const { data: campanhasData } = await (supabase as any)
         .from("campanhas")
         .select("*, campanha_niveis(*)")
         .eq("ativa", true)
-        .maybeSingle();
+        .order("data_fim", { ascending: true });
 
-      if (!campanha) {
-        setCampanhaAtiva(null);
-        setCampanhaMarcas([]);
-        setCampanhaEntrada(0);
-        setCampanhaEntradaPorMarca({});
-        setCampanhaMetaVendedor(null);
-        setCampanhaMetaTipo("valor");
-        setCampanhaMetaQuantidade(null);
-        setCampanhaCategoria(null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ativas = (campanhasData ?? []) as any[];
+      if (ativas.length === 0) {
+        if (!cancelado) setCampanhasAtivas([]);
         return;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: campanhaProdutosData } = await (supabase as any)
-        .from("campanha_produtos")
-        .select("tipo, marca, produto_id")
-        .eq("campanha_id", campanha.id);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cps = (campanhaProdutosData ?? []) as any[];
-      const marcasSet = new Set<string>(
-        cps.filter((cp) => cp.tipo === "marca").map((cp) => cp.marca as string),
-      );
-      const produtosSet = new Set<string>(
-        cps.filter((cp) => cp.tipo === "produto").map((cp) => cp.produto_id as string),
-      );
-      const marcasArr = Array.from(marcasSet);
-
-      setCampanhaAtiva(campanha as CampanhaAtiva);
-      setCampanhaMarcas(marcasArr);
-
-      // Itens do vendedor no período da campanha
-      const { data: pedidosCampData } = await supabase
-        .from("pedidos")
-        .select("id, vendedor_id, data_pedido, status, itens_pedido(quantidade, total_item, produto_id, produtos(marca))")
-        .eq("vendedor_id", effectiveUserId)
-        .gte("data_pedido", campanha.data_inicio)
-        .lte("data_pedido", campanha.data_fim)
-        .not("status", "in", '("rascunho","cancelado","devolvido")');
-
-      let entrada = 0;
-      let entradaUnidades = 0;
-      const porMarca: Record<string, number> = {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const p of (pedidosCampData ?? []) as any[]) {
+      const views = await Promise.all(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        for (const it of (p.itens_pedido ?? []) as any[]) {
-          const marca = it.produtos?.marca as string | undefined;
-          const prodId = it.produto_id as string | undefined;
-          if ((marca && marcasSet.has(marca)) || (prodId && produtosSet.has(prodId))) {
-            const valor = Number(it.total_item ?? 0);
-            entrada += valor;
-            entradaUnidades += Number(it.quantidade ?? 0);
-            const chaveMarca = marca ?? "Outros";
-            porMarca[chaveMarca] = (porMarca[chaveMarca] ?? 0) + valor;
+        ativas.map(async (campanha: any): Promise<CampanhaView> => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: campanhaProdutosData } = await (supabase as any)
+            .from("campanha_produtos")
+            .select("tipo, marca, produto_id")
+            .eq("campanha_id", campanha.id);
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const cps = (campanhaProdutosData ?? []) as any[];
+          const marcasSet = new Set<string>(
+            cps.filter((cp) => cp.tipo === "marca").map((cp) => cp.marca as string),
+          );
+          const produtosSet = new Set<string>(
+            cps.filter((cp) => cp.tipo === "produto").map((cp) => cp.produto_id as string),
+          );
+          const marcasArr = Array.from(marcasSet);
+
+          // Itens do vendedor no período da campanha
+          const { data: pedidosCampData } = await supabase
+            .from("pedidos")
+            .select("id, vendedor_id, data_pedido, status, itens_pedido(quantidade, total_item, produto_id, produtos(marca))")
+            .eq("vendedor_id", effectiveUserId)
+            .gte("data_pedido", campanha.data_inicio)
+            .lte("data_pedido", campanha.data_fim)
+            .not("status", "in", '("rascunho","cancelado","devolvido")');
+
+          let entrada = 0;
+          let entradaUnidades = 0;
+          const porMarca: Record<string, number> = {};
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          for (const p of (pedidosCampData ?? []) as any[]) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            for (const it of (p.itens_pedido ?? []) as any[]) {
+              const marca = it.produtos?.marca as string | undefined;
+              const prodId = it.produto_id as string | undefined;
+              if ((marca && marcasSet.has(marca)) || (prodId && produtosSet.has(prodId))) {
+                const valor = Number(it.total_item ?? 0);
+                entrada += valor;
+                entradaUnidades += Number(it.quantidade ?? 0);
+                const chaveMarca = marca ?? "Outros";
+                porMarca[chaveMarca] = (porMarca[chaveMarca] ?? 0) + valor;
+              }
+            }
           }
-        }
-      }
-      setCampanhaEntradaPorMarca(porMarca);
 
-      // Meta individual do vendedor na campanha
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: metaData } = await (supabase as any)
-        .from("campanha_metas_vendedor")
-        .select("meta_valor, categoria, tipo_meta, meta_quantidade")
-        .eq("campanha_id", campanha.id)
-        .eq("vendedor_id", effectiveUserId)
-        .maybeSingle();
+          // Meta individual do vendedor na campanha
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: metaData } = await (supabase as any)
+            .from("campanha_metas_vendedor")
+            .select("meta_valor, categoria, tipo_meta, meta_quantidade")
+            .eq("campanha_id", campanha.id)
+            .eq("vendedor_id", effectiveUserId)
+            .maybeSingle();
 
-      const tipoMetaCamp = (metaData?.tipo_meta ?? "valor") as "valor" | "unidades";
-      setCampanhaMetaVendedor(metaData?.meta_valor != null ? Number(metaData.meta_valor) : null);
-      setCampanhaCategoria(metaData?.categoria ?? null);
-      setCampanhaMetaTipo(tipoMetaCamp);
-      setCampanhaMetaQuantidade(metaData?.meta_quantidade ?? null);
-      setCampanhaEntrada(tipoMetaCamp === "unidades" ? entradaUnidades : entrada);
-      console.log("[DEBUG campanha]", { metaData, tipoMetaCamp, entradaUnidades, entrada });
+          const tipoMetaCamp = (metaData?.tipo_meta ?? "valor") as "valor" | "unidades";
+          return {
+            campanha: campanha as CampanhaAtiva,
+            marcas: marcasArr,
+            entrada: tipoMetaCamp === "unidades" ? entradaUnidades : entrada,
+            entradaPorMarca: porMarca,
+            metaVendedor: metaData?.meta_valor != null ? Number(metaData.meta_valor) : null,
+            metaTipo: tipoMetaCamp,
+            metaQuantidade: metaData?.meta_quantidade ?? null,
+            categoria: metaData?.categoria ?? null,
+          };
+        }),
+      );
+
+      if (!cancelado) setCampanhasAtivas(views);
     })();
+    return () => { cancelado = true; };
   }, [effectiveUserId]);
 
   // ── KPIs do período (pedidos) — agregação cacheada via TanStack Query.
@@ -573,49 +585,23 @@ export default function MeuPainel() {
     })();
   }, [effectiveUserId]);
 
-  // Mini-ranking de posições — faturado real (Sankhya) por vendedor no período.
-  // Mostra a posição de todos SEM valores; o próprio vendedor é destacado via
-  // match com nome_vendedor: nome_sankhya (exato) quando preenchido, senão full_name.
+  // Mini-ranking de posições — ENTRADA DE PEDIDOS por vendedor no período.
+  // Fonte ÚNICA compartilhada com o Dashboard admin (src/lib/ranking.ts), para
+  // que as posições fiquem idênticas nos dois. O próprio vendedor é destacado
+  // por vendedor_id (em vez do antigo match textual por nome).
   useEffect(() => {
     if (!effectiveUserId) return;
     let cancelado = false;
     const { inicio, fim } = rangeEfetivo(periodo, customAtivo, customInicio, customFim);
     (async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data, error } = await (supabase as any)
-        .from("faturamentos_sankhya")
-        .select("nome_vendedor, valor_liquido")
-        .gte("data_faturamento", inicio)
-        .lte("data_faturamento", fim)
-        .not("tipo_operacao", "ilike", "%devolução%");
+      const lista = await fetchRankingVendedores(inicio, fim);
       if (cancelado) return;
-      if (error || !data) {
-        setRankingPosicoes([]);
-        return;
-      }
-      const somaPorVendedor: Record<string, number> = {};
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (data as any[]).forEach((r) => {
-        const nome = (r.nome_vendedor ?? "").trim();
-        if (!nome) return;
-        somaPorVendedor[nome] = (somaPorVendedor[nome] ?? 0) + Number(r.valor_liquido ?? 0);
-      });
-      const nomeSankhyaNorm = (vendedorNomeSankhya ?? "").trim().toLowerCase();
-      const fullNameNorm = (vendedorFullName ?? "").trim().toLowerCase();
-      const lista = Object.entries(somaPorVendedor)
-        .sort(([, a], [, b]) => b - a)
-        .map(([nome]) => {
-          const nomeNorm = nome.toLowerCase();
-          const isVoce = nomeSankhyaNorm
-            ? nomeNorm === nomeSankhyaNorm
-            : fullNameNorm.length > 0 &&
-              (nomeNorm.includes(fullNameNorm) || fullNameNorm.includes(nomeNorm));
-          return { nome, isVoce };
-        });
-      setRankingPosicoes(lista);
+      setRankingPosicoes(
+        lista.map((r) => ({ nome: r.nome, isVoce: r.vendedor_id === effectiveUserId })),
+      );
     })();
     return () => { cancelado = true; };
-  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim, vendedorFullName, vendedorNomeSankhya]);
+  }, [effectiveUserId, periodo, customAtivo, customInicio, customFim]);
 
   // Faturamento mensal (Sankhya) do próprio vendedor — últimos 6 meses.
   // Mesma lógica/visual do Dashboard admin, filtrado por nome_vendedor
@@ -1525,23 +1511,24 @@ export default function MeuPainel() {
       </Dialog>
 
       {/* Campanha ativa — visão individual */}
-      {campanhaAtiva && (() => {
-        const niveis = [...((campanhaAtiva.campanha_niveis ?? []) as CampanhaNivel[])].sort(
+      {campanhasAtivas.map((cv) => {
+        const campanha = cv.campanha;
+        const niveis = [...((campanha.campanha_niveis ?? []) as CampanhaNivel[])].sort(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (a: any, b: any) => (a.ordem ?? a.valor_minimo ?? 0) - (b.ordem ?? b.valor_minimo ?? 0),
         );
-        const meta = campanhaMetaVendedor ?? 0;
-        const ehUnidades = campanhaMetaTipo === "unidades";
-        const metaAlvo = ehUnidades ? (campanhaMetaQuantidade ?? 0) : meta;
-        const pctGeral = metaAlvo > 0 ? (campanhaEntrada / metaAlvo) * 100 : 0;
+        const meta = cv.metaVendedor ?? 0;
+        const ehUnidades = cv.metaTipo === "unidades";
+        const metaAlvo = ehUnidades ? (cv.metaQuantidade ?? 0) : meta;
+        const pctGeral = metaAlvo > 0 ? (cv.entrada / metaAlvo) * 100 : 0;
         const pct = Math.min(pctGeral, 100);
-        const falta = metaAlvo > 0 ? Math.max(0, metaAlvo - campanhaEntrada) : 0;
-        const diasRestantes = campanhaAtiva.data_fim
-          ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - Date.now()) / 86400000))
+        const falta = metaAlvo > 0 ? Math.max(0, metaAlvo - cv.entrada) : 0;
+        const diasRestantes = campanha.data_fim
+          ? Math.max(0, Math.ceil((new Date(campanha.data_fim).getTime() - Date.now()) / 86400000))
           : 0;
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const nivelAtual: any = niveis.reduce((acc: any, n: any) => {
-          if (campanhaEntrada >= Number(n.valor_minimo ?? 0)) {
+          if (cv.entrada >= Number(n.valor_minimo ?? 0)) {
             if (!acc || Number(n.valor_minimo ?? 0) >= Number(acc.valor_minimo ?? 0)) return n;
           }
           return acc;
@@ -1549,7 +1536,7 @@ export default function MeuPainel() {
         const barColor = pct >= 80 ? "#22c55e" : pct >= 50 ? "#eab308" : "#ef4444";
 
         return (
-          <Card>
+          <Card key={campanha.id}>
             <CardHeader className="flex flex-row items-center gap-2 pb-3">
               <Trophy className="h-5 w-5 text-primary" />
               <CardTitle>Campanha ativa</CardTitle>
@@ -1562,13 +1549,13 @@ export default function MeuPainel() {
             <CardContent className="space-y-4">
               <div className="flex flex-col lg:flex-row gap-4">
                 <div className="flex-1 space-y-2">
-                  <h3 className="text-lg font-bold">{campanhaAtiva.nome}</h3>
-                  {campanhaAtiva.descricao && (
-                    <p className="text-sm text-muted-foreground">{campanhaAtiva.descricao}</p>
+                  <h3 className="text-lg font-bold">{campanha.nome}</h3>
+                  {campanha.descricao && (
+                    <p className="text-sm text-muted-foreground">{campanha.descricao}</p>
                   )}
-                  {campanhaMarcas.length > 0 && (
+                  {cv.marcas.length > 0 && (
                     <div className="flex flex-wrap gap-1">
-                      {campanhaMarcas.map((m) => (
+                      {cv.marcas.map((m) => (
                         <Badge
                           key={m}
                           style={{ backgroundColor: MARCA_CORES[m] ?? "#888780", color: "#fff", border: "none" }}
@@ -1619,19 +1606,19 @@ export default function MeuPainel() {
                   <div className="text-xs text-muted-foreground">Meta total</div>
                   <div className="text-xl font-bold">
                     {ehUnidades
-                      ? `${campanhaMetaQuantidade ?? 0} un.`
+                      ? `${cv.metaQuantidade ?? 0} un.`
                       : meta > 0 ? formatBRL(meta) : "—"}
                   </div>
-                  {campanhaCategoria && (
-                    <Badge className={`${nivelBadgeClass(campanhaCategoria)} mt-1.5 text-xs`}>
-                      {campanhaCategoria}
+                  {cv.categoria && (
+                    <Badge className={`${nivelBadgeClass(cv.categoria)} mt-1.5 text-xs`}>
+                      {cv.categoria}
                     </Badge>
                   )}
                 </div>
                 <div className="rounded-md border p-3">
                   <div className="text-xs text-muted-foreground">Total realizado</div>
                   <div className="text-xl font-bold text-green-700">
-                    {ehUnidades ? `${campanhaEntrada} un.` : formatBRL(campanhaEntrada)}
+                    {ehUnidades ? `${cv.entrada} un.` : formatBRL(cv.entrada)}
                   </div>
                 </div>
                 <div className="rounded-md border p-3">
@@ -1658,12 +1645,12 @@ export default function MeuPainel() {
               </div>
 
               {/* Cards de realizado por marca */}
-              {campanhaMarcas.length > 0 && (
+              {cv.marcas.length > 0 && (
                 <div className="space-y-2">
                   <div className="text-xs font-medium text-muted-foreground">Realizado por marca</div>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                    {campanhaMarcas.map((marca) => {
-                      const realizado = campanhaEntradaPorMarca[marca] ?? 0;
+                    {cv.marcas.map((marca) => {
+                      const realizado = cv.entradaPorMarca[marca] ?? 0;
                       const pctMeta = meta > 0 ? (realizado / meta) * 100 : 0;
                       const pctBarra = Math.min(pctMeta, 100);
                       return (
@@ -1699,7 +1686,7 @@ export default function MeuPainel() {
             </CardContent>
           </Card>
         );
-      })()}
+      })}
 
       {/* Campanhas ativas */}
       {campanhas.length > 0 && (
