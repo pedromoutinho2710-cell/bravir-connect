@@ -88,8 +88,10 @@ type Props = {
   tipoPedido?: string;
 };
 
-// SKUs (codigo_jiva) que não podem ser usados em pedidos de bonificação
-const SKUS_BLOQUEADOS_BONIFICACAO = ["6226", "35", "16", "4046", "17"];
+// SKUs (codigo_jiva) que não podem ser usados em pedidos de bonificação.
+// Apenas as Benditas Cânfora Tablete permanecem bloqueadas; as manteigas de
+// cacau (Luxo Batom 33, Push Pull 35, FPS15 Líquida 6226) são liberadas.
+const SKUS_BLOQUEADOS_BONIFICACAO = ["16", "4046", "17"];
 
 export function SecaoProdutos({
   produtos,
