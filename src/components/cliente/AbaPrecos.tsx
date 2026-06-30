@@ -120,11 +120,13 @@ export function AbaPrecos({
         .select("produto_id, preco_bruto")
         .eq("vigencia_id", vigenciaId)
         .eq("tabela", clienteTabela),
-      // 3) Produtos disponíveis (catálogo ativo).
+      // 3) Catálogo ativo. Inclui produtos sem estoque (disponivel = false) para
+      // que a gestora consiga editar o preço deles — mesmo universo de produtos
+      // usado no formulário de pedido (useNovoPedido carrega por ativo = true).
       supabase
         .from("produtos")
         .select("id, codigo_jiva, nome, marca")
-        .eq("disponivel", true),
+        .eq("ativo", true),
       // 4) Desconto do cluster por produto. percentual_desconto é fração (0,25 = 25%).
       clienteCluster
         ? supabase
