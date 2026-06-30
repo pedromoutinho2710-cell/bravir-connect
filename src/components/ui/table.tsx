@@ -2,10 +2,28 @@ import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
-const Table = React.forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(
-  ({ className, ...props }, ref) => (
-    <div className="relative w-full overflow-auto">
-      <table ref={ref} className={cn("w-full caption-bottom text-sm", className)} {...props} />
+interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
+  /**
+   * "bravir" aplica o padrão de tabela da marca: cabeçalho verde + texto
+   * branco em negrito, linhas zebradas (verde bem claro) e container
+   * arredondado. Padrão é "default" (shadcn) — opt-in, não quebra tabelas existentes.
+   */
+  variant?: "default" | "bravir";
+}
+
+const Table = React.forwardRef<HTMLTableElement, TableProps>(
+  ({ className, variant = "default", ...props }, ref) => (
+    <div
+      className={cn(
+        "relative w-full overflow-auto",
+        variant === "bravir" && "rounded-lg border border-border bg-card shadow-card",
+      )}
+    >
+      <table
+        ref={ref}
+        className={cn("w-full caption-bottom text-sm", variant === "bravir" && "bravir-table", className)}
+        {...props}
+      />
     </div>
   ),
 );
