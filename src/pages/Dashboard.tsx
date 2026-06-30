@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Loader2, ArrowRight, ChevronDown } from "lucide-react";
+import { Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import { formatBRL, formatDate, MESES_ABREV } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
@@ -14,6 +14,7 @@ import { exportarBaseDadosCompleta } from "@/lib/excel";
 import { fetchRankingVendedores } from "@/lib/ranking";
 import { Download } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import CampanhaDashboardCard, { type CampanhaDashboardView } from "@/components/campanha/CampanhaDashboardCard";
 
 type Periodo = "hoje" | "semana" | "mes" | "mes_anterior" | "ano";
 
@@ -118,6 +119,29 @@ type FiltroReativo = {
   label: string | null;
 };
 
+// Benefício ativo do trade (campanhas.categoria = 'beneficio') — exibido em card próprio.
+type Beneficio = {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  tipo: string | null;
+  valor: number | null;
+  data_inicio: string | null;
+  data_fim: string | null;
+};
+
+const BENEFICIO_TIPO_LABEL: Record<string, string> = {
+  desconto: "Desconto",
+  bonificacao: "Bonificação",
+  outro: "Outro",
+};
+
+const BENEFICIO_TIPO_COLOR: Record<string, string> = {
+  desconto: "bg-blue-100 text-blue-800 border-blue-300",
+  bonificacao: "bg-green-100 text-green-800 border-green-300",
+  outro: "bg-gray-100 text-gray-800 border-gray-300",
+};
+
 const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "hoje", label: "Hoje" },
   { key: "semana", label: "Semana" },
@@ -175,22 +199,12 @@ export default function Dashboard() {
   const [topSkus, setTopSkus] = useState<RankingSku[]>([]);
   const [tabProdutos, setTabProdutos] = useState<"quantidade" | "valor">("quantidade");
   const [topSkusValor, setTopSkusValor] = useState<RankingSkuValor[]>([]);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [campanhaAtiva, setCampanhaAtiva] = useState<any>(null);
-  const [entradaCampanha, setEntradaCampanha] = useState(0);
+  // Todas as campanhas ativas (categoria='campanha') — pode haver várias simultâneas.
+  const [campanhasView, setCampanhasView] = useState<CampanhaDashboardView[]>([]);
+  // Benefícios ativos (categoria='beneficio').
+  const [beneficios, setBeneficios] = useState<Beneficio[]>([]);
   const [entradaMarca, setEntradaMarca] = useState<Record<string, number>>({});
   const [fatMensal, setFatMensal] = useState<{ mes: string; valor: number }[]>([]);
-  const [rankingCampanha, setRankingCampanha] = useState<{
-    vendedor_id: string;
-    nome: string;
-    fatCampanha: number;
-    nivel: string | null;
-    metaVendedor: number | null;
-    categoriaInicial: string | null;
-    nivelExibido: string | null;
-  }[]>([]);
-  const [metaTotalCampanha, setMetaTotalCampanha] = useState(0);
-  const [vendedorExpandido, setVendedorExpandido] = useState<string | null>(null);
 
   // Ranking de clientes reativo
   const [rankingClientes, setRankingClientes] = useState<RankingCliente[]>([]);
@@ -251,7 +265,7 @@ export default function Dashboard() {
 
     (async () => {
       try {
-        const [pedidosRes, metasGlobalRes, metasVendedorRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, mensaisRes, fatPeriodoRes, metasVisaoMacroRes] = await Promise.all([
+        const [pedidosRes, metasGlobalRes, metasVendedorRes, pedidosMesRes, pipelineRes, preFatRes, lancadosRes, aguardRes, fatKpiRes, probRes, campanhaRes, beneficiosRes, mensaisRes, fatPeriodoRes, metasVisaoMacroRes] = await Promise.all([
           // Pedidos do período — base para ranking e top SKUs
           supabase
             .from("pedidos")
@@ -297,16 +311,23 @@ export default function Dashboard() {
           supabase.from("pedidos").select("id", { count: "exact", head: true }).eq("status", "faturado").gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
           // KPI: Problemas (com_problema + devolvido + cancelado)
           supabase.from("pedidos").select("id", { count: "exact", head: true }).in("status", ["com_problema", "devolvido", "cancelado"]).gte("data_pedido", kpiInicio).lte("data_pedido", kpiFim),
-          // Campanha ativa
+          // Campanhas ativas — TODAS as de categoria='campanha' (mesmo filtro do Meu Painel).
+          // Sistema permite várias campanhas ativas ao mesmo tempo (sem .limit(1)).
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (supabase as any)
             .from("campanhas")
             .select("*, campanha_niveis(*)")
-            .lte("data_inicio", effectiveFim)
-            .gte("data_fim", effectiveInicio)
-            .order("data_fim", { ascending: false })
-            .limit(1)
-            .maybeSingle(),
+            .eq("ativa", true)
+            .eq("categoria", "campanha")
+            .order("data_fim", { ascending: true }),
+          // Benefícios ativos — categoria='beneficio' (card próprio no Dashboard).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (supabase as any)
+            .from("campanhas")
+            .select("id, nome, descricao, tipo, valor, data_inicio, data_fim")
+            .eq("ativa", true)
+            .eq("categoria", "beneficio")
+            .order("data_fim", { ascending: true }),
           // Faturamento mensal — últimos 6 meses (dados reais do Sankhya)
           // TODO: adicionar faturamentos_sankhya ao types.ts
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -402,15 +423,6 @@ export default function Dashboard() {
         );
         setPipelineTotal(pipeline);
 
-        // Campanha ativa
-        const campanha = campanhaRes.data ?? null;
-        setCampanhaAtiva(campanha);
-
-        if (!campanha) {
-          setEntradaCampanha(0);
-          setRankingCampanha([]);
-        }
-
         // Clientes na carteira por vendedor (status = 'ativo')
         const clientesCarteiraPorVendedor: Record<string, number> = {};
         {
@@ -450,100 +462,151 @@ export default function Dashboard() {
         }));
         setRanking(rankingList);
 
-        // Ranking campanha por vendedor
-        if (campanha) {
+        // ── Campanhas ativas (categoria='campanha') — pode haver várias simultâneas ──
+        // Deriva-se o desempenho POR campanha (loop). Para evitar N+1, as marcas/
+        // produtos e as metas de todas as campanhas saem de uma query cada (.in),
+        // e os pedidos do período que cobre todas elas saem de um único select,
+        // filtrado em memória por campanha.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const campanhasAtivas = (campanhaRes.data ?? []) as any[];
+
+        if (campanhasAtivas.length === 0) {
+          setCampanhasView([]);
+        } else {
+          const campanhaIds = campanhasAtivas.map((c) => c.id as string);
+
+          // Marcas/produtos de cada campanha (1 query) → agrupado por campanha
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: campanhaProdutosData } = await (supabase as any)
+          const { data: cpData } = await (supabase as any)
             .from("campanha_produtos")
-            .select("tipo, produto_id, marca")
-            .eq("campanha_id", campanha.id);
-
+            .select("campanha_id, tipo, produto_id, marca")
+            .in("campanha_id", campanhaIds);
+          const marcasPorCampanha: Record<string, Set<string>> = {};
+          const produtosPorCampanha: Record<string, Set<string>> = {};
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const marcasCampanha = new Set<string>(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ((campanhaProdutosData ?? []) as any[]).filter((cp: any) => cp.tipo === "marca").map((cp: any) => cp.marca as string)
-          );
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const produtosCampanha = new Set<string>(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            ((campanhaProdutosData ?? []) as any[]).filter((cp: any) => cp.tipo === "produto").map((cp: any) => cp.produto_id as string)
-          );
-
-          // Período efetivo da campanha = interseção entre o filtro do dashboard e o intervalo da campanha
-          const campInicio = effectiveInicio > campanha.data_inicio ? effectiveInicio : campanha.data_inicio;
-          const campFim = effectiveFim < campanha.data_fim ? effectiveFim : campanha.data_fim;
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: pedCampDetalhe } = await (supabase as any)
-            .from("pedidos")
-            .select("vendedor_id, itens_pedido(total_item, produto_id, produto:produtos(marca))")
-            .gte("data_pedido", campInicio)
-            .lte("data_pedido", campFim)
-            .not("status", "in", '("cancelado","devolvido","rascunho")');
-
-          let entradaFiltrada = 0;
-          const vendedorFatCamp: Record<string, number> = {};
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ((pedCampDetalhe ?? []) as any[]).forEach((p: any) => {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (p.itens_pedido ?? []).forEach((item: any) => {
-              const marca = item.produto?.marca as string | undefined;
-              const prodId = item.produto_id as string | undefined;
-              if ((marca && marcasCampanha.has(marca)) || (prodId && produtosCampanha.has(prodId))) {
-                entradaFiltrada += Number(item.total_item);
-                if (p.vendedor_id) {
-                  if (!vendedorFatCamp[p.vendedor_id]) vendedorFatCamp[p.vendedor_id] = 0;
-                  vendedorFatCamp[p.vendedor_id] += Number(item.total_item);
-                }
-              }
-            });
+          ((cpData ?? []) as any[]).forEach((cp: any) => {
+            if (!marcasPorCampanha[cp.campanha_id]) marcasPorCampanha[cp.campanha_id] = new Set();
+            if (!produtosPorCampanha[cp.campanha_id]) produtosPorCampanha[cp.campanha_id] = new Set();
+            if (cp.tipo === "marca" && cp.marca) marcasPorCampanha[cp.campanha_id].add(cp.marca as string);
+            if (cp.tipo === "produto" && cp.produto_id) produtosPorCampanha[cp.campanha_id].add(cp.produto_id as string);
           });
-          setEntradaCampanha(entradaFiltrada);
 
-          // Metas individuais por vendedor
+          // Período efetivo de cada campanha = interseção do filtro do dashboard com o intervalo da campanha
+          const periodos = campanhasAtivas.map((c) => {
+            const ini = effectiveInicio > c.data_inicio ? effectiveInicio : c.data_inicio;
+            const fim = effectiveFim < c.data_fim ? effectiveFim : c.data_fim;
+            return { id: c.id as string, ini: ini as string, fim: fim as string, valido: ini <= fim };
+          });
+          const periodosValidos = periodos.filter((p) => p.valido);
+
+          // Metas individuais por vendedor de TODAS as campanhas (1 query) → agrupado
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { data: metasVendedorData } = await (supabase as any)
+          const { data: metasCampData } = await (supabase as any)
             .from("campanha_metas_vendedor")
-            .select("vendedor_id, meta_valor, categoria")
-            .eq("campanha_id", campanha.id);
-
-          const metaTotalCampanha = (metasVendedorData ?? []).reduce((s: number, m: any) => s + Number(m.meta_valor), 0);
-          setMetaTotalCampanha(metaTotalCampanha);
-
-          const metasVendedorMap: Record<string, { meta: number; categoria: string | null }> = {};
+            .select("campanha_id, vendedor_id, meta_valor, categoria")
+            .in("campanha_id", campanhaIds);
+          const metasPorCampanha: Record<string, { vendedor_id: string; meta: number; categoria: string | null }[]> = {};
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ((metasVendedorData ?? []) as any[]).forEach((m: any) => {
-            metasVendedorMap[m.vendedor_id] = { meta: Number(m.meta_valor), categoria: m.categoria ?? null };
+          ((metasCampData ?? []) as any[]).forEach((m: any) => {
+            if (!metasPorCampanha[m.campanha_id]) metasPorCampanha[m.campanha_id] = [];
+            metasPorCampanha[m.campanha_id].push({ vendedor_id: m.vendedor_id, meta: Number(m.meta_valor), categoria: m.categoria ?? null });
           });
 
-          // Buscar profiles de vendedores com meta que não estão no profileMap
-          const metaVendedorIds = (metasVendedorData ?? []).map((m: any) => m.vendedor_id as string);
-          const idsParaBuscar = metaVendedorIds.filter((id: string) => !profileMap[id]);
-          if (idsParaBuscar.length > 0) {
-            const { data: extraProfiles } = await supabase.from("profiles").select("id, full_name, email").in("id", idsParaBuscar);
+          // Pedidos do período que cobre todas as campanhas ativas (1 query — evita N+1)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          let pedCampDetalhe: any[] = [];
+          if (periodosValidos.length > 0) {
+            const globalInicio = periodosValidos.reduce((min, p) => (p.ini < min ? p.ini : min), periodosValidos[0].ini);
+            const globalFim = periodosValidos.reduce((max, p) => (p.fim > max ? p.fim : max), periodosValidos[0].fim);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const { data } = await (supabase as any)
+              .from("pedidos")
+              .select("vendedor_id, data_pedido, itens_pedido(total_item, produto_id, produto:produtos(marca))")
+              .gte("data_pedido", globalInicio)
+              .lte("data_pedido", globalFim)
+              .not("status", "in", '("cancelado","devolvido","rascunho")');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            pedCampDetalhe = (data ?? []) as any[];
+          }
+
+          // Garantir nomes de todos os vendedores com meta (1 query p/ os faltantes)
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const allMetaVendedorIds = [...new Set(((metasCampData ?? []) as any[]).map((m: any) => m.vendedor_id as string))];
+          const idsFaltantes = allMetaVendedorIds.filter((id) => !profileMap[id]);
+          if (idsFaltantes.length > 0) {
+            const { data: extraProfiles } = await supabase.from("profiles").select("id, full_name, email").in("id", idsFaltantes);
             (extraProfiles ?? []).forEach((p) => { profileMap[p.id] = p.full_name || p.email; });
           }
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const niveisCamp = [...((campanha.campanha_niveis ?? []) as any[])].sort(
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (a: any, b: any) => Number(b.valor_minimo) - Number(a.valor_minimo)
-          );
+          // Monta a view (entrada + meta + ranking) de cada campanha
+          const views: CampanhaDashboardView[] = campanhasAtivas.map((campanha) => {
+            const periodo = periodos.find((p) => p.id === campanha.id)!;
+            const marcasSet = marcasPorCampanha[campanha.id] ?? new Set<string>();
+            const produtosSet = produtosPorCampanha[campanha.id] ?? new Set<string>();
 
-          const rankingCampList = metaVendedorIds
-            .map((vendedor_id: string) => {
-              const fat = vendedorFatCamp[vendedor_id] ?? 0;
+            let entrada = 0;
+            const vendedorFatCamp: Record<string, number> = {};
+            if (periodo.valido) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              const nivel = (niveisCamp.find((n: any) => fat >= Number(n.valor_minimo)) as any)?.nome ?? null;
-              const metaVendedor = metasVendedorMap[vendedor_id]?.meta ?? null;
-              const categoriaInicial = metasVendedorMap[vendedor_id]?.categoria ?? null;
-              const nome = profileMap[vendedor_id] ?? vendedor_id;
-              return { vendedor_id, nome, fatCampanha: fat, nivel, metaVendedor, categoriaInicial, nivelExibido: nivelMaior(categoriaInicial, nivel) };
-            })
-            .sort((a, b) => b.fatCampanha - a.fatCampanha);
+              pedCampDetalhe.forEach((p: any) => {
+                if (p.data_pedido < periodo.ini || p.data_pedido > periodo.fim) return;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                (p.itens_pedido ?? []).forEach((item: any) => {
+                  const marca = item.produto?.marca as string | undefined;
+                  const prodId = item.produto_id as string | undefined;
+                  if ((marca && marcasSet.has(marca)) || (prodId && produtosSet.has(prodId))) {
+                    const v = Number(item.total_item);
+                    entrada += v;
+                    if (p.vendedor_id) vendedorFatCamp[p.vendedor_id] = (vendedorFatCamp[p.vendedor_id] ?? 0) + v;
+                  }
+                });
+              });
+            }
 
-          setRankingCampanha(rankingCampList);
+            const metas = metasPorCampanha[campanha.id] ?? [];
+            const metaTotalCampanha = metas.reduce((s, m) => s + m.meta, 0);
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const niveisCamp = [...((campanha.campanha_niveis ?? []) as any[])].sort(
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              (a: any, b: any) => Number(b.valor_minimo) - Number(a.valor_minimo)
+            );
+
+            const ranking = metas
+              .map((m) => {
+                const fat = vendedorFatCamp[m.vendedor_id] ?? 0;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const nivel = (niveisCamp.find((n: any) => fat >= Number(n.valor_minimo)) as any)?.nome ?? null;
+                const nome = profileMap[m.vendedor_id] ?? m.vendedor_id;
+                return {
+                  vendedor_id: m.vendedor_id,
+                  nome,
+                  fatCampanha: fat,
+                  nivel,
+                  metaVendedor: m.meta,
+                  categoriaInicial: m.categoria,
+                  nivelExibido: nivelMaior(m.categoria, nivel),
+                };
+              })
+              .sort((a, b) => b.fatCampanha - a.fatCampanha);
+
+            return { campanha, entrada, metaTotalCampanha, ranking };
+          });
+
+          setCampanhasView(views);
         }
+
+        // ── Benefícios ativos (categoria='beneficio') ──
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        setBeneficios(((beneficiosRes.data ?? []) as any[]).map((b: any): Beneficio => ({
+          id: b.id,
+          nome: b.nome,
+          descricao: b.descricao ?? null,
+          tipo: b.tipo ?? null,
+          valor: b.valor != null ? Number(b.valor) : null,
+          data_inicio: b.data_inicio ?? null,
+          data_fim: b.data_fim ?? null,
+        })));
 
         // Top SKUs por quantidade e por valor — todos, sem slice
         const skuAgg: Record<string, { quantidade: number; valor: number }> = {};
@@ -635,32 +698,6 @@ export default function Dashboard() {
   const previsaoMes = fatMesAtual + pipelineTotal;
   const previsaoPct = metaTotal > 0 ? Math.min((previsaoMes / metaTotal) * 100, 100) : 0;
 
-  // Campanha: nível mais alto, progresso e dias
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const niveisOrdenados: any[] = campanhaAtiva
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? [...((campanhaAtiva.campanha_niveis ?? []) as any[])].sort((a: any, b: any) => (a.ordem ?? 0) - (b.ordem ?? 0))
-    : [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const nivelMaisAlto: any = niveisOrdenados.length > 0
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? niveisOrdenados.reduce((acc: any, n: any) => (Number(n.valor_minimo) > Number(acc.valor_minimo) ? n : acc), niveisOrdenados[0])
-    : null;
-  const campanhaMetaMaxima = nivelMaisAlto ? Number(nivelMaisAlto.valor_minimo) : 0;
-  void campanhaMetaMaxima;
-  const campanhaPct = metaTotalCampanha > 0 ? Math.min((entradaCampanha / metaTotalCampanha) * 100, 100) : 0;
-  const campanhaDiasRestantes = campanhaAtiva
-    ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-    : 0;
-
-  // Dias campanha para cálculo de status por vendedor
-  const campanhaTotalDias = campanhaAtiva?.data_inicio && campanhaAtiva?.data_fim
-    ? Math.max(0, Math.ceil((new Date(campanhaAtiva.data_fim).getTime() - new Date(campanhaAtiva.data_inicio).getTime()) / 86400000))
-    : 0;
-  const campanhaDiasPassados = campanhaAtiva?.data_inicio
-    ? Math.min(campanhaTotalDias, Math.max(0, Math.ceil((Date.now() - new Date(campanhaAtiva.data_inicio).getTime()) / 86400000)))
-    : 0;
-
   // Fluxo de metas
   const fatFaturadoMes = fatFaturadoPeriodo;
   const entradaPct = metaTotal > 0 ? (fatMesAtual / metaTotal) * 100 : 0;
@@ -670,15 +707,6 @@ export default function Dashboard() {
     if (pct >= 80) return "bg-green-100 text-green-800";
     if (pct >= 50) return "bg-yellow-100 text-yellow-800";
     return "bg-red-100 text-red-800";
-  };
-
-  const nivelBadgeClass = (nivel: string) => {
-    const n = nivel.toLowerCase();
-    if (n.includes("diamante")) return "bg-purple-100 text-purple-800 hover:bg-purple-100";
-    if (n.includes("ouro")) return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
-    if (n.includes("prata")) return "bg-gray-100 text-gray-700 hover:bg-gray-100";
-    if (n.includes("bronze")) return "bg-orange-100 text-orange-800 hover:bg-orange-100";
-    return "bg-gray-100 text-gray-700 hover:bg-gray-100";
   };
 
   const maxFatMensal = Math.max(...fatMensal.map((m) => m.valor), 1);
@@ -886,6 +914,8 @@ export default function Dashboard() {
     const { dataInicio: periodoInicio, dataFim: periodoFim } = getDateRange(periodo);
     const effectiveInicio = (dataInicioEfetiva && dataFimEfetiva) ? dataInicioEfetiva : periodoInicio;
     const effectiveFim = (dataInicioEfetiva && dataFimEfetiva) ? dataFimEfetiva : periodoFim;
+    // A aba "Campanha" do Excel mostra a primeira campanha ativa (mais próxima de encerrar).
+    const campanhaExport = campanhasView[0];
     try {
       await exportDashboardExcel({
         periodo,
@@ -901,10 +931,10 @@ export default function Dashboard() {
         topSkusValor,
         fatMensal,
         entradaMarca,
-        campanhaAtiva,
-        rankingCampanha,
-        entradaCampanha,
-        metaTotalCampanha,
+        campanhaAtiva: campanhaExport?.campanha ?? null,
+        rankingCampanha: campanhaExport?.ranking ?? [],
+        entradaCampanha: campanhaExport?.entrada ?? 0,
+        metaTotalCampanha: campanhaExport?.metaTotalCampanha ?? 0,
       });
     } catch {
       toast.error("Erro ao exportar Excel");
@@ -1546,236 +1576,63 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Seção 3 — Campanha Ativa */}
-      {campanhaAtiva && (
+      {/* Seção 3 — Campanhas ativas (uma por campanha; pode haver várias) */}
+      {campanhasView.map((view) => (
+        <CampanhaDashboardCard key={view.campanha.id} view={view} />
+      ))}
+
+      {/* Seção 3b — Benefícios ativos do trade */}
+      {beneficios.length > 0 && (
         <Card>
-          <CardContent className="pt-6 space-y-4">
-            {/* Área superior */}
-            <div className="flex flex-col lg:flex-row gap-4">
-              {/* Esquerda: info da campanha */}
-              <div className="flex-1 space-y-2">
-                <h3 className="text-xl font-bold">{campanhaAtiva.nome}</h3>
-                {campanhaAtiva.descricao && (
-                  <p className="text-sm text-muted-foreground">{campanhaAtiva.descricao}</p>
-                )}
-                {Array.isArray(campanhaAtiva.marcas) && campanhaAtiva.marcas.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {(campanhaAtiva.marcas as string[]).map((m) => (
-                      <Badge
-                        key={m}
-                        style={{ backgroundColor: MARCA_CORES[m] ?? "#888780", color: "#fff", border: "none" }}
-                      >
-                        {m}
-                      </Badge>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Direita: tabela de níveis */}
-              {niveisOrdenados.length > 0 && (
-                <div className="flex-1 overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nível</TableHead>
-                        <TableHead>De</TableHead>
-                        <TableHead>Até</TableHead>
-                        <TableHead>Prêmio</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-                      {niveisOrdenados.map((nivel: any) => (
-                        <TableRow key={nivel.id}>
-                          <TableCell className="font-medium">{nivel.nome}</TableCell>
-                          <TableCell>{formatBRL(nivel.valor_minimo)}</TableCell>
-                          <TableCell>{nivel.valor_maximo == null ? "Sem limite" : formatBRL(nivel.valor_maximo)}</TableCell>
-                          <TableCell className="text-sm">{nivel.descricao_premio}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Benefícios ativos</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Tipo</TableHead>
+                    <TableHead>Valor</TableHead>
+                    <TableHead>Vigência</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {beneficios.map((b) => (
+                    <TableRow key={b.id}>
+                      <TableCell>
+                        <div className="font-medium">{b.nome}</div>
+                        {b.descricao && (
+                          <div className="text-xs text-muted-foreground">{b.descricao}</div>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {b.tipo && (
+                          <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${BENEFICIO_TIPO_COLOR[b.tipo] ?? "bg-gray-100 text-gray-800 border-gray-300"}`}>
+                            {BENEFICIO_TIPO_LABEL[b.tipo] ?? b.tipo}
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {b.valor == null
+                          ? "—"
+                          : b.tipo === "desconto"
+                          ? `${b.valor}%`
+                          : formatBRL(b.valor)}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {b.data_inicio && b.data_fim
+                          ? `${formatDate(b.data_inicio)} – ${formatDate(b.data_fim)}`
+                          : b.data_fim
+                          ? `até ${formatDate(b.data_fim)}`
+                          : "—"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
-
-            {/* Separador */}
-            <div className="border-t" />
-
-            {/* Área inferior: progresso */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  Meta: {formatBRL(metaTotalCampanha)} → Entrada: {formatBRL(entradaCampanha)} · {campanhaPct.toFixed(1)}% da meta
-                </span>
-                <span className="text-muted-foreground">{campanhaDiasRestantes} dias restantes</span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-muted">
-                <div
-                  className="h-2 rounded-full transition-all"
-                  style={{ width: `${campanhaPct}%`, backgroundColor: "#1A6B3A" }}
-                />
-              </div>
-            </div>
-
-            {/* Desempenho por vendedor */}
-            {rankingCampanha.length > 0 && (
-              <>
-                <div className="border-t" />
-                <div className="space-y-3">
-                  <p className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                    Desempenho por vendedor
-                  </p>
-                  <div>
-                    {rankingCampanha.map((r, idx) => {
-                      const diasRestantes = campanhaTotalDias - campanhaDiasPassados;
-                      const metaVendedor = r.metaVendedor;
-                      const fatCampanha = r.fatCampanha;
-                      const pctAtingimento = metaVendedor && metaVendedor > 0
-                        ? Math.min((fatCampanha / metaVendedor) * 100, 100)
-                        : 0;
-                      const pctEsperado = campanhaTotalDias > 0
-                        ? (campanhaDiasPassados / campanhaTotalDias) * 100
-                        : 0;
-                      const ritmoNecessario = metaVendedor && campanhaTotalDias > 0
-                        ? metaVendedor / campanhaTotalDias
-                        : null;
-                      const ritmoAtual = campanhaDiasPassados > 0
-                        ? fatCampanha / campanhaDiasPassados
-                        : 0;
-                      const status = !metaVendedor ? "sem_meta"
-                        : ritmoNecessario !== null && ritmoAtual >= ritmoNecessario ? "verde"
-                        : ritmoNecessario !== null && ritmoAtual >= ritmoNecessario * 0.9 ? "amarelo"
-                        : "vermelho";
-                      const statusLabel = status === "verde" ? "Em linha"
-                        : status === "amarelo" ? "Próximo"
-                        : status === "vermelho" ? "Abaixo"
-                        : "Sem meta";
-                      const statusBadgeClass = status === "verde" ? "bg-green-100 text-green-800"
-                        : status === "amarelo" ? "bg-yellow-100 text-yellow-800"
-                        : status === "vermelho" ? "bg-red-100 text-red-800"
-                        : "bg-gray-100 text-gray-600";
-                      const avatarClass = status === "verde" ? "bg-green-50 text-green-800"
-                        : status === "amarelo" ? "bg-yellow-50 text-yellow-800"
-                        : status === "vermelho" ? "bg-red-50 text-red-800"
-                        : "bg-muted text-muted-foreground";
-                      const barColor = status === "verde" ? "#22c55e"
-                        : status === "amarelo" ? "#eab308"
-                        : status === "vermelho" ? "#ef4444"
-                        : "#d1d5db";
-                      const metaAtingida = metaVendedor != null && fatCampanha >= metaVendedor;
-                      const necessarioPorDia = metaVendedor != null && !metaAtingida && diasRestantes > 0
-                        ? (metaVendedor - fatCampanha) / diasRestantes
-                        : null;
-                      const diffPct = pctAtingimento - pctEsperado;
-                      const iniciais = r.nome.split(" ").slice(0, 2).map((p) => p[0]).join("").toUpperCase();
-                      const expandido = vendedorExpandido === r.vendedor_id;
-
-                      return (
-                        <div
-                          key={r.vendedor_id}
-                          className={idx < rankingCampanha.length - 1 ? "border-b" : ""}
-                        >
-                          {/* Linha resumida — clicável */}
-                          <button
-                            type="button"
-                            className="w-full flex items-center gap-2 py-3 text-left"
-                            onClick={() => setVendedorExpandido(expandido ? null : r.vendedor_id)}
-                          >
-                            <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${avatarClass}`}>
-                              {iniciais}
-                            </div>
-                            <span className="flex-1 font-medium text-sm">{r.nome}</span>
-                            {/* Mini barra de progresso */}
-                            <div className="shrink-0 rounded-full bg-muted overflow-hidden" style={{ width: 80, height: 4 }}>
-                              <div
-                                className="h-full rounded-full"
-                                style={{ width: `${pctAtingimento}%`, backgroundColor: barColor }}
-                              />
-                            </div>
-                            {/* Percentual */}
-                            <span className="text-xs tabular-nums text-right shrink-0" style={{ width: 36 }}>
-                              {pctAtingimento.toFixed(0)}%
-                            </span>
-                            {/* Badge status */}
-                            <span className={`text-xs rounded-full px-2 py-0.5 font-medium shrink-0 ${statusBadgeClass}`}>
-                              {statusLabel}
-                            </span>
-                            {/* Badge nível */}
-                            {r.nivelExibido && (
-                              <Badge className={`${nivelBadgeClass(r.nivelExibido)} text-xs shrink-0`}>{r.nivelExibido}</Badge>
-                            )}
-                            <ChevronDown
-                              className="h-4 w-4 text-muted-foreground shrink-0 transition-transform"
-                              style={{ transform: expandido ? "rotate(180deg)" : "rotate(0deg)" }}
-                            />
-                          </button>
-
-                          {/* Detalhe expandido */}
-                          {expandido && (
-                            <div className="pb-4 space-y-3">
-                              {/* 4 metric cards */}
-                              <div className="grid grid-cols-4 gap-2">
-                                <div className="bg-muted rounded-md p-3">
-                                  <div className="text-xs text-muted-foreground mb-1">Meta</div>
-                                  <div className="text-sm font-medium">
-                                    {metaVendedor ? formatBRL(metaVendedor) : "Sem meta"}
-                                  </div>
-                                </div>
-                                <div className="bg-muted rounded-md p-3">
-                                  <div className="text-xs text-muted-foreground mb-1">Realizado</div>
-                                  <div className={`text-sm font-medium ${status === "verde" ? "text-green-600" : status === "vermelho" ? "text-red-600" : ""}`}>
-                                    {formatBRL(fatCampanha)}
-                                  </div>
-                                </div>
-                                <div className="bg-muted rounded-md p-3">
-                                  <div className="text-xs text-muted-foreground mb-1">Meta/dia necessária</div>
-                                  <div className="text-sm font-medium">
-                                    {metaVendedor && campanhaTotalDias > 0
-                                      ? `${formatBRL(metaVendedor / campanhaTotalDias)}/dia`
-                                      : "—"}
-                                  </div>
-                                </div>
-                                <div className="bg-muted rounded-md p-3">
-                                  <div className="text-xs text-muted-foreground mb-1">Nec. p/ fechar</div>
-                                  <div className={`text-sm font-medium ${metaAtingida ? "text-green-600" : ""}`}>
-                                    {metaAtingida
-                                      ? "Meta atingida!"
-                                      : necessarioPorDia != null
-                                      ? `${formatBRL(necessarioPorDia)}/dia`
-                                      : "—"}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* Barra de progresso full width */}
-                              {metaVendedor != null && (
-                                <div>
-                                  <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
-                                    <div
-                                      className="h-full rounded-full transition-all"
-                                      style={{ width: `${pctAtingimento}%`, backgroundColor: barColor }}
-                                    />
-                                  </div>
-                                  <div className="flex items-center justify-between text-xs text-muted-foreground mt-1">
-                                    <span>{pctAtingimento.toFixed(1)}%</span>
-                                    <span>
-                                      Deveria estar em {Math.round(campanhaDiasPassados / Math.max(campanhaTotalDias, 1) * 100)}%
-                                      {" · "}{diffPct >= 0 ? "+" : ""}{diffPct.toFixed(1)}% {diffPct >= 0 ? "acima" : "abaixo"}
-                                    </span>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
           </CardContent>
         </Card>
       )}
