@@ -1439,7 +1439,7 @@ export default function Faturamento() {
         h2{margin:0 0 4px}p{margin:2px 0}
         .total-box{margin-top:12px;border:1px solid #aaa;padding:8px 12px;display:inline-block;background:#f9f9f9}
         .total-box p{margin:3px 0;font-size:12px}
-        .hl{font-weight:bold;color:#1a6b3a}
+        .hl{font-weight:bold;color:#006130}
       </style>
       </head><body>
       <h2>Pedido #${p.numero_pedido} — ${p.razao_social}</h2>

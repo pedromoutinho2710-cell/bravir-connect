@@ -35,8 +35,7 @@ type LinhaBase = {
 type LinhaProduto = LinhaBase & { precoFinal: number | null };
 
 const ORDEM_MARCAS = ["Bendita Cânfora", "Alivik", "Bravir", "Laby"];
-const VERDE = "FF1A5C2A";
-const VERDE_HEX = "#1A5C2A";
+const VERDE = "FF006130";
 
 export function TabelaPrecos({
   clienteId,
@@ -458,7 +457,7 @@ export function TabelaPrecos({
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full text-sm">
           <thead>
-            <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
+            <tr className="bg-primary text-primary-foreground">
               <th className="px-3 py-2 text-left font-semibold">Cód. Jiva</th>
               <th className="px-3 py-2 text-left font-semibold">EAN</th>
               <th className="px-3 py-2 text-left font-semibold">Descrição</th>
@@ -488,14 +487,14 @@ export function TabelaPrecos({
             ))}
           </tbody>
           <tfoot>
-            <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
+            <tr className="bg-primary text-primary-foreground">
               <td colSpan={9} className="px-3 py-2 text-right font-bold">
                 Total Geral s/ ST
               </td>
               <td className="px-3 py-2 text-right font-bold">{formatBRL(totaisGerais.semST)}</td>
               <td className="px-3 py-2 text-right font-bold">—</td>
             </tr>
-            <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
+            <tr className="bg-primary text-primary-foreground">
               <td colSpan={9} className="px-3 py-2 text-right font-bold">
                 Total Geral c/ ST
               </td>
@@ -530,7 +529,7 @@ function GrupoLinhas({
 }) {
   return (
     <>
-      <tr style={{ backgroundColor: VERDE_HEX }} className="text-white">
+      <tr className="bg-primary text-primary-foreground">
         <td colSpan={11} className="px-3 py-1.5 font-bold text-sm">
           {marca}
         </td>

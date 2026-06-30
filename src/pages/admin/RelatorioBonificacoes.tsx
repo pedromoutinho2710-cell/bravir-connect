@@ -31,7 +31,7 @@ import { toast } from "sonner";
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
-const GREEN_FILL = "FF1A6B3A";
+const GREEN_FILL = "FF006130";
 const AVISO_FILL = "FFFFCC00"; // amarelo aviso
 
 const STATUS_BADGE: Record<string, { label: string; className: string }> = {

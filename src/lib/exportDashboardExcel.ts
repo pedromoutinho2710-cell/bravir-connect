@@ -67,7 +67,7 @@ export type DashboardExcelData = {
 };
 
 // ── Estilo ───────────────────────────────────────────────────────────────────
-const GREEN = "FF004d1a";
+const GREEN = "FF006130";
 const GREEN_RED = "FFA32D2D";
 const ROW_EVEN_FILL = "FFF0F7F3";
 const BORDER_COLOR = "FFD0D0D0";

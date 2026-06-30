@@ -43,14 +43,14 @@ export default function AppLayout() {
               <SidebarTrigger />
             </div>
 
-            {/* Logo / título */}
-            <div className="flex items-center gap-2 flex-1">
-              <div className="bg-[#1A5C2A] rounded-md px-2 py-0.5 flex items-center">
-                <span className="text-white font-bold text-sm tracking-widest">BRAVIR</span>
-              </div>
-              <span className="text-[10px] uppercase tracking-widest text-muted-foreground hidden sm:block">
-                Cosmética e Farmacêutica
-              </span>
+            {/* Logo oficial Bravir */}
+            <div className="flex items-center flex-1 min-w-0">
+              <img
+                src="/bravir_logo.png"
+                alt="Bravir — Cosmética e Farmacêutica"
+                className="h-7 w-auto select-none"
+                draggable={false}
+              />
             </div>
 
             {/* Nome do usuário */}

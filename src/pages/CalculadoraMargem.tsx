@@ -363,7 +363,7 @@ export default function CalculadoraMargem() {
                     const markup = temRevenda && it.custo > 0 ? ((revenda! / it.custo) - 1) * 100 : null;
                     const margem = temRevenda ? ((revenda! - it.custo) / revenda!) * 100 : null;
 
-                    const okStyleMarkup = { backgroundColor: "#f0f7f3", color: "#004d1a" };
+                    const okStyleMarkup = { backgroundColor: "#f0f7f3", color: "#006130" };
                     const okStyleMargem = { backgroundColor: "#E6F1FB", color: "#185FA5" };
                     const errStyle = { backgroundColor: "#FCEBEB", color: "#A32D2D" };
 

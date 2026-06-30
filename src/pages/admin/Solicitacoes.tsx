@@ -27,8 +27,6 @@ import {
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Loader2, Eye, Sheet, Bot } from "lucide-react";
 
-const VERDE = "#0F6E56";
-
 interface ChatMensagem {
   role: "user" | "assistant" | string;
   content: string;
@@ -288,7 +286,7 @@ export default function Solicitacoes() {
       cell.fill = {
         type: "pattern",
         pattern: "solid",
-        fgColor: { argb: "FF0F6E56" },
+        fgColor: { argb: "FF006130" },
       };
       cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
     });
@@ -745,12 +743,11 @@ function DetalhePainel({
                 return (
                   <div key={i} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
                     <div
-                      className="max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap"
-                      style={
+                      className={`max-w-[80%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap ${
                         isUser
-                          ? { backgroundColor: VERDE, color: "#fff" }
-                          : { backgroundColor: "#f3f4f6", color: "#111827" }
-                      }
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-foreground"
+                      }`}
                     >
                       {m.content}
                     </div>
@@ -779,7 +776,7 @@ function MockupCard({ prompt }: { prompt: string }) {
           messages: [
             {
               role: "user",
-              content: `Gere APENAS HTML puro (sem DOCTYPE, sem html/head/body) representando um mockup simples e realista desta melhoria no CRM: ${prompt}. Use somente inline styles. Cores: verde #0F6E56 para elementos principais, cinza #f9fafb para backgrounds, bordas #e5e7eb. Fonte sans-serif. Máximo 280px de altura. Retorne SOMENTE o HTML, sem explicação.`,
+              content: `Gere APENAS HTML puro (sem DOCTYPE, sem html/head/body) representando um mockup simples e realista desta melhoria no CRM: ${prompt}. Use somente inline styles. Cores: verde #006130 para elementos principais, cinza #f9fafb para backgrounds, bordas #e5e7eb. Fonte sans-serif. Máximo 280px de altura. Retorne SOMENTE o HTML, sem explicação.`,
             },
           ],
           system_override: `Você é um especialista em UI. Gere apenas HTML puro de mockup, sem texto explicativo.`,
@@ -799,10 +796,7 @@ function MockupCard({ prompt }: { prompt: string }) {
 
   return (
     <Card className="overflow-hidden">
-      <div
-        className="flex items-center gap-2 px-5 py-3 text-sm font-semibold text-white"
-        style={{ backgroundColor: VERDE }}
-      >
+      <div className="flex items-center gap-2 px-5 py-3 text-sm font-semibold bg-primary text-primary-foreground">
         <Eye className="h-4 w-4" />
         Como ficaria no CRM
       </div>

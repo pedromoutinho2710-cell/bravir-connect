@@ -271,7 +271,7 @@ export default function LeadsEvento() {
             onClick={() => setFiltro(f)}
             className={`px-4 py-1.5 rounded-full text-sm font-medium border transition-all ${
               filtro === f
-                ? "bg-[#1a6b3a] text-white border-transparent"
+                ? "bg-primary text-primary-foreground border-transparent"
                 : "bg-white text-gray-600 border-gray-300 hover:border-gray-400"
             }`}
           >
@@ -368,7 +368,7 @@ export default function LeadsEvento() {
                     <Button
                       size="sm"
                       onClick={() => openDialog(lead)}
-                      className="bg-[#1a6b3a] text-white hover:opacity-90"
+                      className="bg-primary text-primary-foreground hover:opacity-90"
                     >
                       Direcionar
                     </Button>
@@ -487,7 +487,7 @@ export default function LeadsEvento() {
             <Button
               disabled={!vendedorId || directing}
               onClick={handleDirecionar}
-              className="bg-[#1a6b3a] text-white hover:opacity-90"
+              className="bg-primary text-primary-foreground hover:opacity-90"
             >
               {directing ? "Cadastrando..." : "Cadastrar e direcionar"}
             </Button>

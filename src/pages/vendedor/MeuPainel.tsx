@@ -14,6 +14,7 @@ import { formatBRL, formatDate, MESES_ABREV } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
 import { fetchRankingVendedores } from "@/lib/ranking";
+import { corMarca } from "@/lib/marcas";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Loader2, AlertTriangle, Download, TrendingUp, ShoppingCart, Users, Megaphone, RefreshCw, CheckSquare, CheckCircle2, ArrowDownToLine, CheckCheck, Clock, UserCheck, UserX, UserPlus, Briefcase, Gift, Trophy, PackageX } from "lucide-react";
 import { toast } from "sonner";
@@ -179,13 +180,6 @@ type CampanhaView = {
   metaTipo: "valor" | "unidades";
   metaQuantidade: number | null;
   categoria: string | null;
-};
-
-const MARCA_CORES: Record<string, string> = {
-  "Bendita Cânfora": "#7f77dd",
-  "Laby": "#378add",
-  "Bravir": "#888780",
-  "Alivik": "#1d9e75",
 };
 
 type RankProduto = {
@@ -1115,7 +1109,7 @@ export default function MeuPainel() {
                     className="w-full rounded-t transition-all"
                     style={{
                       height: `${(m.valor / maxFatMensalVendedor) * 100}%`,
-                      backgroundColor: idx === fatMensalVendedor.length - 1 ? "#1A6B3A" : "#A7C7B7",
+                      backgroundColor: idx === fatMensalVendedor.length - 1 ? "hsl(var(--primary))" : "#A7C7B7",
                       minHeight: m.valor > 0 ? "4px" : "0px",
                     }}
                   />
@@ -1144,7 +1138,7 @@ export default function MeuPainel() {
                       key={marca}
                       cx="100" cy="100" r="70"
                       fill="none"
-                      stroke={MARCA_CORES[marca] ?? "#888780"}
+                      stroke={corMarca(marca)}
                       strokeWidth="38"
                       strokeDasharray={`${dash} ${donutCircumference - dash}`}
                       strokeDashoffset={offset}
@@ -1172,7 +1166,7 @@ export default function MeuPainel() {
                   >
                     <span
                       className="shrink-0"
-                      style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: MARCA_CORES[marca] ?? "#888780" }}
+                      style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: corMarca(marca) }}
                     />
                     <span className="flex-1 min-w-0 truncate">{marca}</span>
                     <span className="text-muted-foreground shrink-0 tabular-nums" style={{ width: 44, textAlign: "right" }}>
@@ -1558,7 +1552,7 @@ export default function MeuPainel() {
                       {cv.marcas.map((m) => (
                         <Badge
                           key={m}
-                          style={{ backgroundColor: MARCA_CORES[m] ?? "#888780", color: "#fff", border: "none" }}
+                          style={{ backgroundColor: corMarca(m), color: "#fff", border: "none" }}
                         >
                           {m}
                         </Badge>
@@ -1656,7 +1650,7 @@ export default function MeuPainel() {
                       return (
                         <div key={marca} className="rounded-md border p-3 space-y-2">
                           <Badge
-                            style={{ backgroundColor: MARCA_CORES[marca] ?? "#888780", color: "#fff", border: "none" }}
+                            style={{ backgroundColor: corMarca(marca), color: "#fff", border: "none" }}
                           >
                             {marca}
                           </Badge>

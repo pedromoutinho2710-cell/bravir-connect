@@ -1,7 +1,7 @@
 import { QRCodeSVG } from "qrcode.react";
 
 const EVENTO_URL = "https://bravir-connect.vercel.app/evento";
-const GREEN = "#1a6b3a";
+const GREEN = "#006130";
 
 export default function EventoQR() {
   return (

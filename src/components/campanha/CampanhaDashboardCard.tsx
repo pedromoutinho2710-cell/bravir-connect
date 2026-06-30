@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ChevronDown } from "lucide-react";
 import { formatBRL } from "@/lib/format";
+import { corMarca } from "@/lib/marcas";
 
 // Desempenho de um vendedor dentro de uma campanha (já com nível derivado).
 export type RankingCampanhaVendedor = {
@@ -24,14 +25,6 @@ export type CampanhaDashboardView = {
   entrada: number;
   metaTotalCampanha: number;
   ranking: RankingCampanhaVendedor[];
-};
-
-// Cores por marca — espelha MeuPainel.tsx / Dashboard.tsx (reuso de valores existentes).
-const MARCA_CORES: Record<string, string> = {
-  "Bendita Cânfora": "#7f77dd",
-  "Laby": "#378add",
-  "Bravir": "#888780",
-  "Alivik": "#1d9e75",
 };
 
 function nivelBadgeClass(nivel: string) {
@@ -81,7 +74,7 @@ export default function CampanhaDashboardCard({ view }: { view: CampanhaDashboar
                 {(campanha.marcas as string[]).map((m) => (
                   <Badge
                     key={m}
-                    style={{ backgroundColor: MARCA_CORES[m] ?? "#888780", color: "#fff", border: "none" }}
+                    style={{ backgroundColor: corMarca(m), color: "#fff", border: "none" }}
                   >
                     {m}
                   </Badge>
@@ -131,8 +124,8 @@ export default function CampanhaDashboardCard({ view }: { view: CampanhaDashboar
           </div>
           <div className="h-2 w-full rounded-full bg-muted">
             <div
-              className="h-2 rounded-full transition-all"
-              style={{ width: `${campanhaPct}%`, backgroundColor: "#1A6B3A" }}
+              className="h-2 rounded-full transition-all bg-primary"
+              style={{ width: `${campanhaPct}%` }}
             />
           </div>
         </div>

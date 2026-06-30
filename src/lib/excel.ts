@@ -40,7 +40,7 @@ export interface ItemExcel {
   qtd_volumes: number;
 }
 
-const GREEN_FILL = "FF1A6B3A"; // Verde padrao Bravir
+const GREEN_FILL = "FF006130"; // Verde oficial Bravir (logo)
 
 export async function exportarPedidoExcel(pedido: PedidoParaExcel): Promise<void> {
   const workbook = new ExcelJS.Workbook();

@@ -40,8 +40,8 @@ type Proposta = {
 
 type Estado = "loading" | "ok" | "nao_encontrada" | "expirada" | "confirmada" | "recusada";
 
-const VERDE = "#004d1a";
-const VERDE_ESCURO = "#003d14";
+const VERDE = "#006130";
+const VERDE_ESCURO = "#004824";
 const LARANJA = "#EF9F27";
 
 function pad(n: number) {

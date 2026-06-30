@@ -78,10 +78,9 @@ export function ImpersonationBar() {
               onClick={() => setAbaAtiva(a.role)}
               className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
                 ativa
-                  ? "text-white"
-                  : "text-gray-600 hover:bg-green-50"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-gray-600 hover:bg-primary/10"
               }`}
-              style={ativa ? { backgroundColor: "#1A5C2A" } : undefined}
             >
               {a.label}
             </button>

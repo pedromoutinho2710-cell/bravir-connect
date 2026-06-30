@@ -12,6 +12,7 @@ import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 import { exportDashboardExcel } from "@/lib/exportDashboardExcel";
 import { exportarBaseDadosCompleta } from "@/lib/excel";
 import { fetchRankingVendedores } from "@/lib/ranking";
+import { corMarca } from "@/lib/marcas";
 import { Download } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import CampanhaDashboardCard, { type CampanhaDashboardView } from "@/components/campanha/CampanhaDashboardCard";
@@ -149,13 +150,6 @@ const PERIODOS: { key: Periodo; label: string }[] = [
   { key: "mes_anterior", label: "Mês anterior" },
   { key: "ano", label: "Ano" },
 ];
-
-const MARCA_CORES: Record<string, string> = {
-  "Bendita Cânfora": "#7f77dd",
-  "Laby": "#378add",
-  "Bravir": "#888780",
-  "Alivik": "#1d9e75",
-};
 
 const NIVEL_ORDEM: Record<string, number> = { "Bronze": 1, "Prata": 2, "Ouro": 3, "Diamante": 4 };
 
@@ -972,7 +966,7 @@ export default function Dashboard() {
       {/* Seção 1 — Cabeçalho */}
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#1A6B3A]">Dashboard</h1>
+          <h1 className="text-2xl font-bold text-primary">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Visão geral do negócio</p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -994,7 +988,6 @@ export default function Dashboard() {
                   setDataInicio(range.dataInicio);
                   setDataFim(range.dataFim);
                 }}
-                style={periodo === key && !dataInicioEfetiva ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
               >
                 {label}
               </Button>
@@ -1005,7 +998,6 @@ export default function Dashboard() {
             <Button
               size="sm"
               variant={dataInicioEfetiva && dataFimEfetiva ? "default" : "outline"}
-              style={dataInicioEfetiva && dataFimEfetiva ? { backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" } : undefined}
               onClick={() => setMostrarPersonalizar(!mostrarPersonalizar)}
             >
               Personalizar {mostrarPersonalizar ? "▲" : "▼"}
@@ -1050,7 +1042,6 @@ export default function Dashboard() {
               <Button
                 size="sm"
                 variant="default"
-                style={{ backgroundColor: "#1A6B3A", borderColor: "#1A6B3A" }}
                 onClick={() => {
                   if (dataInicio && dataFim) {
                     setDataInicioEfetiva(dataInicio);
@@ -1228,7 +1219,7 @@ export default function Dashboard() {
                         key={marca}
                         cx="100" cy="100" r="70"
                         fill="none"
-                        stroke={MARCA_CORES[marca] ?? "#888780"}
+                        stroke={corMarca(marca)}
                         strokeWidth={selecionada ? "40" : "38"}
                         strokeDasharray={`${dash} ${donutCircumference - dash}`}
                         strokeDashoffset={offset}
@@ -1280,7 +1271,7 @@ export default function Dashboard() {
                         width: 10,
                         height: 10,
                         borderRadius: 2,
-                        backgroundColor: MARCA_CORES[marca] ?? "#888780",
+                        backgroundColor: corMarca(marca),
                       }}
                     />
                     <span className="flex-1 min-w-0 truncate">{marca}</span>
@@ -1322,7 +1313,7 @@ export default function Dashboard() {
                     className="w-full rounded-t transition-all"
                     style={{
                       height: `${(m.valor / maxFatMensal) * 100}%`,
-                      backgroundColor: idx === fatMensal.length - 1 ? "#1A6B3A" : "#A7C7B7",
+                      backgroundColor: idx === fatMensal.length - 1 ? "hsl(var(--primary))" : "#A7C7B7",
                       minHeight: m.valor > 0 ? "4px" : "0px",
                     }}
                   />

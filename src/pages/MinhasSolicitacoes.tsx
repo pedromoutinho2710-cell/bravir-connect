@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/select";
 import { Bot, CheckCircle2, ExternalLink, Loader2, Paperclip, PencilLine, PlusCircle, Send, Sparkles, Trash2 } from "lucide-react";
 
-const BRAND = "#0F6E56";
+const BRAND = "#006130";
 
 interface ChatMensagem {
   role: "user" | "assistant" | string;

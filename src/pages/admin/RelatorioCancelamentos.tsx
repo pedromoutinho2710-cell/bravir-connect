@@ -19,7 +19,7 @@ const MOTIVO_LABEL: Record<string, string> = {
   outro: "Outro",
 };
 
-const GREEN_FILL = "FF1A6B3A";
+const GREEN_FILL = "FF006130";
 const PAGE_SIZE = 20;
 
 type Cancelamento = {

@@ -44,7 +44,7 @@ export interface PedidoParaDocx {
   itens: ItemDocx[];
 }
 
-const VERDE = "1A6B3A";
+const VERDE = "006130";
 const BRANCO = "FFFFFF";
 
 function cell(text: string, bold = false, shade = false): TableCell {

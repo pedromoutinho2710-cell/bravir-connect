@@ -156,10 +156,8 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border px-4 py-5">
         <div className="flex flex-col gap-1">
-          <div className="bg-[#1A5C2A] rounded-md px-2 py-1 self-start">
-            <span className="text-white font-bold text-base tracking-widest">BRAVIR</span>
-          </div>
-          <span className="text-[9px] uppercase tracking-widest text-sidebar-foreground/45">
+          <span className="self-start text-lg font-extrabold tracking-[0.18em] text-white">BRAVIR</span>
+          <span className="text-[9px] uppercase tracking-widest text-sidebar-foreground/55">
             Cosmética e Farmacêutica
           </span>
           <span
@@ -230,7 +228,7 @@ export function AppSidebar() {
                             className={
                               "px-2 py-0.5 rounded text-[11px] font-medium border transition-colors " +
                               (impRole === r
-                                ? "bg-yellow-300 text-[#1A3A1F] border-yellow-300"
+                                ? "bg-yellow-300 text-foreground border-yellow-300"
                                 : "border-sidebar-border/40 text-sidebar-foreground/50 hover:bg-sidebar-accent/40 hover:text-sidebar-foreground")
                             }
                           >

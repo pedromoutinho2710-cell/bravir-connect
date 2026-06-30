@@ -505,7 +505,7 @@ export default function MeusPedidos() {
                               condPagamento: p.cond_pagamento,
                             });
                           }}
-                          className="p-1 rounded text-muted-foreground/60 hover:text-[#004d1a] hover:bg-[#004d1a]/10 transition-colors"
+                          className="p-1 rounded text-muted-foreground/60 hover:text-primary hover:bg-primary/10 transition-colors"
                           title="Gerar proposta"
                         >
                           <FileText className="h-3.5 w-3.5" />

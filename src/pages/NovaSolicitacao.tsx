@@ -16,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-const BRAND = "#0F6E56";
+const BRAND = "#006130";
 
 const GREETING =
   "Olá! Pode me contar sua dúvida, reportar um bug ou sugerir uma melhoria. Estou aqui para ajudar!";

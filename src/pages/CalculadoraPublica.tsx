@@ -56,7 +56,7 @@ export default function CalculadoraPublica() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
-        <Loader2 className="h-6 w-6 animate-spin text-[#004d1a]" />
+        <Loader2 className="h-6 w-6 animate-spin text-[#006130]" />
       </div>
     );
   }
@@ -72,7 +72,7 @@ export default function CalculadoraPublica() {
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="mx-auto bg-white min-h-screen" style={{ maxWidth: 480 }}>
-        <div style={{ backgroundColor: "#004d1a", padding: 16 }}>
+        <div style={{ backgroundColor: "#006130", padding: 16 }}>
           <div className="flex items-center gap-3">
             <div
               style={{
@@ -80,7 +80,7 @@ export default function CalculadoraPublica() {
                 borderRadius: 8,
                 padding: "6px 10px",
                 fontWeight: 700,
-                color: "#004d1a",
+                color: "#006130",
                 fontSize: 14,
                 letterSpacing: 0.5,
               }}
@@ -108,7 +108,7 @@ export default function CalculadoraPublica() {
               }}
             >
               <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>{it.nome}</div>
-              <div style={{ color: "#004d1a", fontSize: 11, fontWeight: 500 }}>
+              <div style={{ color: "#006130", fontSize: 11, fontWeight: 500 }}>
                 Seu custo: {formatBRL(it.custo)}/un
               </div>
               <div style={{ color: "#6b7280", fontSize: 11, marginBottom: 8 }}>
@@ -118,7 +118,7 @@ export default function CalculadoraPublica() {
                 <span
                   style={{
                     backgroundColor: "#f0f7f3",
-                    color: "#004d1a",
+                    color: "#006130",
                     border: "1px solid #c8e6d2",
                     borderRadius: 6,
                     padding: "2px 8px",

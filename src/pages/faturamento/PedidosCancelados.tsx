@@ -57,7 +57,7 @@ type Cancelamento = {
 type Vendedor = { id: string; full_name: string | null };
 type Cliente = { id: string; razao_social: string | null; nome_parceiro: string | null };
 
-const GREEN_FILL = "FF1A6B3A";
+const GREEN_FILL = "FF006130";
 
 async function exportarExcel(rows: Cancelamento[]) {
   const wb = new ExcelJS.Workbook();

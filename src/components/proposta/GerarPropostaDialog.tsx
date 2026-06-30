@@ -165,7 +165,6 @@ export function GerarPropostaDialog({
                     type="button"
                     variant={validadeHoras === h ? "default" : "outline"}
                     onClick={() => setValidadeHoras(h)}
-                    className={validadeHoras === h ? "bg-[#004d1a] hover:bg-[#003d14] text-white" : ""}
                   >
                     {h}h
                   </Button>
@@ -292,7 +291,7 @@ export function GerarPropostaDialog({
                 type="button"
                 onClick={gerar}
                 disabled={salvando}
-                className="bg-[#004d1a] hover:bg-[#003d14] text-white"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 {salvando ? <Loader2 className="h-4 w-4 animate-spin" /> : "Gerar proposta"}
               </Button>

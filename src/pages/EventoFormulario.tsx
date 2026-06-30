@@ -97,7 +97,7 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-const GREEN = "#1a6b3a";
+const GREEN = "#006130";
 
 export default function EventoFormulario() {
   const [areas, setAreas] = useState<string[]>([]);

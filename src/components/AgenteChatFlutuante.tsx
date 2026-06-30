@@ -3,8 +3,6 @@ import { Bot, CheckCircle2, Loader2, MessageCircle, Send, X } from "lucide-react
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
-const BRAND = "#0F6E56";
-
 const GREETING =
   "Olá! Pode me contar sua dúvida, reportar um bug ou sugerir uma melhoria. Estou aqui para ajudar!";
 
@@ -221,8 +219,8 @@ export default function AgenteChatFlutuante() {
         type="button"
         onClick={() => setOpen(true)}
         aria-label="Abrir assistente Bravir"
-        className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full text-white shadow-lg transition-transform hover:scale-105"
-        style={{ bottom: 24, right: 24, backgroundColor: BRAND }}
+        className="fixed z-50 flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105"
+        style={{ bottom: 24, right: 24 }}
       >
         <MessageCircle className="h-6 w-6" />
         {unread > 0 && (
@@ -241,7 +239,7 @@ export default function AgenteChatFlutuante() {
       style={{ bottom: 24, right: 24, width: 340, height: 480, maxWidth: "calc(100vw - 32px)" }}
     >
       {/* Header */}
-      <div className="flex items-center gap-3 px-4 py-3 text-white" style={{ backgroundColor: BRAND }}>
+      <div className="flex items-center gap-3 px-4 py-3 bg-primary text-primary-foreground">
         <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20">
           <Bot className="h-5 w-5" />
         </div>
@@ -285,7 +283,6 @@ export default function AgenteChatFlutuante() {
                     ? "rounded-br-sm bg-primary text-primary-foreground"
                     : "rounded-bl-sm border border-border bg-background text-foreground"
                 }`}
-                style={isUser ? { backgroundColor: BRAND, color: "#fff" } : undefined}
               >
                 {m.content}
               </div>
@@ -323,8 +320,7 @@ export default function AgenteChatFlutuante() {
           onClick={handleSend}
           disabled={loading || !input.trim()}
           aria-label="Enviar mensagem"
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-white transition-opacity disabled:opacity-40"
-          style={{ backgroundColor: BRAND }}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-opacity disabled:opacity-40"
         >
           <Send className="h-4 w-4" />
         </button>
