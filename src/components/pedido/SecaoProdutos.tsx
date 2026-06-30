@@ -89,7 +89,7 @@ type Props = {
 };
 
 // SKUs (codigo_jiva) que não podem ser usados em pedidos de bonificação
-const SKUS_BLOQUEADOS_BONIFICACAO = ["33", "6226", "35", "16", "4046", "17"];
+const SKUS_BLOQUEADOS_BONIFICACAO = ["6226", "35", "16", "4046", "17"];
 
 export function SecaoProdutos({
   produtos,
