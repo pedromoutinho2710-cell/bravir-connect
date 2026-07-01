@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { formatBRL, formatCNPJ } from "@/lib/format";
+import { formatBRL, formatCNPJ, hojeISO } from "@/lib/format";
 import { CLUSTERS, TABELAS_PRECO, UFS, MARCAS } from "@/lib/constants";
 import { Loader2, Search, Users, UserX, AlertTriangle, ShieldAlert, Pencil, UserPlus, CalendarClock, ShoppingCart, FileText, ExternalLink } from "lucide-react";
 import { StatusClienteBadge } from "@/components/cliente/StatusClienteBadge";
@@ -439,7 +439,7 @@ export default function ClientesAdminLista() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `clientes-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.download = `clientes-${hojeISO()}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
     } finally {

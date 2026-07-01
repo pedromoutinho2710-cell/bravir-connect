@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, hojeISO } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -93,7 +93,7 @@ export default function AprovacaoDesconto() {
     setProcessando(pedidoId);
     const { error } = await supabase
       .from("pedidos")
-      .update({ status: "aguardando_faturamento", data_pedido: new Date().toISOString().slice(0, 10) })
+      .update({ status: "aguardando_faturamento", data_pedido: hojeISO() })
       .eq("id", pedidoId);
     if (error) { toast.error("Erro ao aprovar: " + error.message); setProcessando(null); return; }
     toast.success(`Pedido #${numeroPedido} aprovado e enviado para faturamento!`);

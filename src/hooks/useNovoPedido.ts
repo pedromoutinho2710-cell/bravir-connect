@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { toast } from "sonner";
-import { onlyDigits, formatDate } from "@/lib/format";
+import { onlyDigits, formatDate, hojeISO } from "@/lib/format";
 import type { PdfItem } from "@/lib/pdf";
 import type { DadosCliente } from "@/components/pedido/SecaoCliente";
 import type { ItemPedido, Produto } from "@/components/pedido/SecaoProdutos";
@@ -312,7 +312,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
       };
       updatePayload.vendedor_id = pedidoVendedorId;
       if (status === "pendente_sankhya" || status === "aguardando_aprovacao_desconto") {
-        updatePayload.data_pedido = new Date().toISOString().slice(0, 10);
+        updatePayload.data_pedido = hojeISO();
       }
       const { error } = await supabase.from("pedidos").update(updatePayload).eq("id", id);
       if (error) {
@@ -340,7 +340,7 @@ export function useNovoPedido(options: UseNovoPedidoOptions) {
           vigencia_id: vigenciaId || null,
           status,
           ...((status === "pendente_sankhya" || status === "aguardando_aprovacao_desconto")
-            ? { data_pedido: new Date().toISOString().slice(0, 10) }
+            ? { data_pedido: hojeISO() }
             : {}),
         })
         .select("id")
