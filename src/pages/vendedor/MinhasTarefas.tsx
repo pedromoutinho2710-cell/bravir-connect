@@ -66,7 +66,8 @@ const TIPOS_TAREFA = ["tarefa", "ligação", "email", "visita", "proposta"] as c
 // Helpers
 // ───────────────────────────────────────────────────────────────────────
 
-const hojeISO = () => new Date().toISOString().slice(0, 10);
+// Fuso do Brasil (America/Sao_Paulo). Ver nota em src/lib/format.ts:hojeISO.
+const hojeISO = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 
 const fmtData = (iso: string | null) =>
   iso ? new Date(iso + "T00:00:00").toLocaleDateString("pt-BR") : "—";

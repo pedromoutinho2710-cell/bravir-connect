@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { formatBRL, formatDate, MESES_ABREV } from "@/lib/format";
+import { formatBRL, formatDate, MESES_ABREV, hojeISO } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "./MeusPedidos";
 import { exportarTabelaPrecosExcel, type ProdutoTabela } from "@/lib/excel";
 import { fetchRankingVendedores } from "@/lib/ranking";
@@ -447,7 +447,7 @@ export default function MeuPainel() {
     if (!effectiveUserId) return;
     let cancelado = false;
     (async () => {
-      const hoje = new Date().toISOString().slice(0, 10);
+      const hoje = hojeISO();
       const [campRes, ltvRes, tarRes, ultimosRes] = await Promise.all([
         supabase
           .from("campanhas")

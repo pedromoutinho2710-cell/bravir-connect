@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { formatBRL, formatCNPJ } from "@/lib/format";
+import { formatBRL, formatCNPJ, hojeISO } from "@/lib/format";
 import { calcularPrecoItem } from "@/lib/preco";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -240,7 +240,7 @@ export default function ImportarPedidoDialog({
     }
     setSalvando(true);
     try {
-      const hoje = new Date().toISOString().slice(0, 10);
+      const hoje = hojeISO();
       const { data: pedData, error: pedErr } = await supabase
         .from("pedidos")
         .insert({

@@ -33,6 +33,16 @@ export const formatDate = (d: Date | string) => {
   return date.toLocaleDateString("pt-BR");
 };
 
+// Data de "hoje" no fuso do Brasil (America/Sao_Paulo) em formato ISO YYYY-MM-DD.
+//
+// IMPORTANTE: use SEMPRE esta função para gravar/filtrar datas de negócio (ex.:
+// `data_pedido`, `data_bonificacao`). Nunca use `new Date().toISOString()` para
+// isso — o `toISOString()` devolve a data em UTC, e como o Brasil é UTC-3 um
+// pedido criado à noite (a partir das 21h de Brasília) receberia a data do dia
+// seguinte, contando o pedido no mês/dia errado no fechamento.
+export const hojeISO = (): string =>
+  new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+
 export const onlyDigits = (s: string) => s.replace(/\D/g, "");
 
 export const formatCNPJ = (raw: string) => {

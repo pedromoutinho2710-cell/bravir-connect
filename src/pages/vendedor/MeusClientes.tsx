@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { formatBRL, formatCNPJ, formatDate } from "@/lib/format";
+import { formatBRL, formatCNPJ, formatDate, hojeISO } from "@/lib/format";
 import { MARCAS } from "@/lib/constants";
 import { Loader2, Search, CalendarClock, CheckCircle2, Plus, UserMinus, ShoppingCart, FileText, Download } from "lucide-react";
 import { toast } from "sonner";
@@ -506,7 +506,7 @@ export default function MeusClientes() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `meus-clientes-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.download = `meus-clientes-${hojeISO()}.xlsx`;
     a.click();
     URL.revokeObjectURL(url);
   };

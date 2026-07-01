@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
-import { formatCNPJ, formatCEP, isValidCNPJ, onlyDigits, formatBRL, formatDate } from "@/lib/format";
+import { formatCNPJ, formatCEP, isValidCNPJ, onlyDigits, formatBRL, formatDate, hojeISO } from "@/lib/format";
 import { UFS } from "@/lib/constants";
 import { AlertCircle, AlertTriangle, CheckCircle2, Search, PlusCircle, Banknote } from "lucide-react";
 
@@ -223,7 +223,7 @@ export function SecaoCliente({ value, onChange, vendedorId, lockCNPJ = false }: 
             })),
           );
         }
-        const hoje = new Date().toISOString().slice(0, 10);
+        const hoje = hojeISO();
         const { data: hojePed } = await supabase
           .from("pedidos")
           .select("id")

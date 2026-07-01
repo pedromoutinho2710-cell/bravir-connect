@@ -190,7 +190,8 @@ const fmtBRL = (v: number | null | undefined) =>
     ? "—"
     : v.toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
-const hojeISO = () => new Date().toISOString().slice(0, 10);
+// Fuso do Brasil (America/Sao_Paulo). Ver nota em src/lib/format.ts:hojeISO.
+const hojeISO = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
 
 const diasEntre = (isoA: string, isoB: string) => {
   const a = new Date(isoA + (isoA.length === 10 ? "T00:00:00" : ""));

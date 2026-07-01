@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { formatBRL, formatDate, formatCNPJ } from "@/lib/format";
+import { formatBRL, formatDate, formatCNPJ, hojeISO } from "@/lib/format";
 import { Loader2, Eye, FileCheck, Clock, CheckCircle2, Timer, AlertTriangle, Trash2, Database, FileText, ExternalLink, ClipboardList, Upload, Copy, FileDown, Sheet } from "lucide-react";
 import ImportarPedidoDialog from "@/components/faturamento/ImportarPedidoDialog";
 import { MARCAS } from "@/lib/constants";
@@ -1696,7 +1696,7 @@ export default function Faturamento() {
     const ws = wb.addWorksheet("Sem Estoque");
 
     const hoje = new Date();
-    const hojeStr = hoje.toISOString().slice(0, 10);
+    const hojeStr = hojeISO();
     const hojeFormatado = hoje.toLocaleDateString("pt-BR");
 
     const cabecalho = [
@@ -1869,7 +1869,7 @@ export default function Faturamento() {
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Itens sem estoque");
 
-      const hojeStr = new Date().toISOString().slice(0, 10);
+      const hojeStr = hojeISO();
       const cabecalho = [
         "Cliente",
         "Pedido",
