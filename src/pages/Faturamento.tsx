@@ -1344,6 +1344,7 @@ export default function Faturamento() {
         vigencia_id: origemPedido.vigencia_id,
         status: "sem_estoque",
         pedido_origem_id: pedido.id,
+        data_pedido: pedido.data_pedido,
         status_atualizado_em: nowIso,
       } as any)
       .select("id")
