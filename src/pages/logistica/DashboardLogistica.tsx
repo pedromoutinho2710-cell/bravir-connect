@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { formatBRL, formatDate } from "@/lib/format";
+import { formatBRL, formatDate, hojeISO } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -35,8 +35,7 @@ export default function DashboardLogistica() {
   useEffect(() => {
     const load = async () => {
       setLoading(true);
-      const hoje = new Date();
-      const hojeStr = hoje.toISOString().slice(0, 10);
+      const hojeStr = hojeISO();
 
       const [agRes, transitoRes, fatHojeRes, recentesRes] = await Promise.all([
         // eslint-disable-next-line @typescript-eslint/no-explicit-any

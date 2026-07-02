@@ -6,7 +6,7 @@ import { z } from "zod";
 import ExcelJS from "exceljs";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { formatBRL, formatDate } from "@/lib/format";
+import { formatBRL, formatDate, hojeISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -149,7 +149,7 @@ export default function RelatorioBonificacoes() {
   const hoje = new Date();
 
   const [filtroIni, setFiltroIni] = useState(`${hoje.getFullYear()}-01-01`);
-  const [filtroFim, setFiltroFim] = useState(hoje.toISOString().slice(0, 10));
+  const [filtroFim, setFiltroFim] = useState(hojeISO());
   const [filtroVendedor, setFiltroVendedor] = useState("todos");
   const [filtroCliente, setFiltroCliente] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("todos");
@@ -248,7 +248,7 @@ export default function RelatorioBonificacoes() {
       cliente_nome: "",
       numero_pedido: "",
       valor: 0,
-      data_bonificacao: hoje.toISOString().slice(0, 10),
+      data_bonificacao: hojeISO(),
       status: "pendente",
       motivo: "",
       observacoes: "",
@@ -278,7 +278,7 @@ export default function RelatorioBonificacoes() {
         cliente_nome: "",
         numero_pedido: "",
         valor: 0,
-        data_bonificacao: hoje.toISOString().slice(0, 10),
+        data_bonificacao: hojeISO(),
         status: "pendente",
         motivo: "",
         observacoes: "",

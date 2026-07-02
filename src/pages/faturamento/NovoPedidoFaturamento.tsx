@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { formatBRL } from "@/lib/format";
+import { formatBRL, hojeISO } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -223,7 +223,7 @@ export default function NovoPedidoFaturamento() {
       // não em "Assumidos" (que exige responsavel_id preenchido).
       cond_pagamento: condPagamento,
       observacoes: obsCompleta,
-      data_pedido: new Date().toISOString().split("T")[0],
+      data_pedido: hojeISO(),
       perfil_cliente: clienteCluster || "",
       tabela_preco: clienteTabelaPreco || "",
       agendamento,

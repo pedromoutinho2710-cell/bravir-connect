@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
-import { formatBRL, formatDate, MESES_ABREV } from "@/lib/format";
+import { formatBRL, formatDate, MESES_ABREV, hojeISO } from "@/lib/format";
 import { STATUS_LABEL, STATUS_COLOR } from "@/lib/status";
 import { exportDashboardExcel } from "@/lib/exportDashboardExcel";
 import { exportarBaseDadosCompleta } from "@/lib/excel";
@@ -938,7 +938,7 @@ export default function Dashboard() {
   async function handleExportBaseDados() {
     setExportandoBase(true);
     try {
-      const hoje = new Date().toISOString().slice(0, 10);
+      const hoje = hojeISO();
       const linhas = await exportarBaseDadosCompleta(`base_dados_${hoje}.xlsx`);
       if (linhas === 0) {
         toast.error("Nenhum pedido encontrado para exportar.");

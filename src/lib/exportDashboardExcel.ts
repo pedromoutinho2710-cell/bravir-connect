@@ -1,5 +1,5 @@
 import ExcelJS from "exceljs";
-import { formatBRL } from "./format";
+import { formatBRL, hojeISO } from "./format";
 import { LOGO_B64 } from "./pdf";
 
 // ── Tipos dos dados recebidos do Dashboard ───────────────────────────────────
@@ -409,7 +409,7 @@ export async function exportDashboardExcel(data: DashboardExcelData) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `dashboard_bravir_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  a.download = `dashboard_bravir_${hojeISO()}.xlsx`;
   a.click();
   URL.revokeObjectURL(url);
 }
