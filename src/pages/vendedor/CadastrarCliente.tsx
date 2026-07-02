@@ -89,6 +89,7 @@ type Form = {
   nome_cliente: string;
   cnpj: string;
   razao_social: string;
+  grupo_cliente: string;
   contato_principal: string;
   email: string;
   telefone: string;
@@ -123,6 +124,7 @@ const EMPTY: Form = {
   nome_cliente: "",
   cnpj: "",
   razao_social: "",
+  grupo_cliente: "",
   contato_principal: "",
   email: "",
   telefone: "",
@@ -223,6 +225,7 @@ export default function CadastrarCliente() {
         nome_cliente: data.nome_cliente ?? "",
         cnpj: data.cnpj ? formatCNPJ(data.cnpj) : "",
         razao_social: data.razao_social ?? "",
+        grupo_cliente: data.grupo_cliente ?? "",
         contato_principal: data.contato_principal ?? "",
         email: data.email ?? "",
         telefone: data.telefone ?? "",
@@ -272,6 +275,14 @@ export default function CadastrarCliente() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.razao_social.trim()) {
+      toast.error("Razão social é obrigatória.");
+      return;
+    }
+    if (!form.grupo_cliente.trim()) {
+      toast.error("Grupo de Cliente é obrigatório.");
+      return;
+    }
     if (!form.declaracao) {
       toast.error("Confirme a declaração antes de enviar.");
       return;
@@ -290,6 +301,7 @@ export default function CadastrarCliente() {
         nome_cliente: form.nome_cliente || null,
         cnpj: onlyDigits(form.cnpj) || null,
         razao_social: form.razao_social || null,
+        grupo_cliente: form.grupo_cliente.trim() || null,
         contato_principal: form.contato_principal || null,
         email: form.email || null,
         telefone: form.telefone || null,
@@ -379,11 +391,21 @@ export default function CadastrarCliente() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label>Razão social</Label>
+                <Label>Razão social *</Label>
                 <Input
+                  required
                   value={form.razao_social}
                   onChange={(e) => set("razao_social", e.target.value)}
                   placeholder="Razão social completa"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Grupo de Cliente *</Label>
+                <Input
+                  required
+                  value={form.grupo_cliente}
+                  onChange={(e) => set("grupo_cliente", e.target.value)}
+                  placeholder="Ex.: Grupo Bravir"
                 />
               </div>
             </div>

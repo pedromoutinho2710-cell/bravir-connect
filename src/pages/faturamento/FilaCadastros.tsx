@@ -27,6 +27,7 @@ type Cadastro = {
   nome_cliente: string | null;
   cnpj: string | null;
   razao_social: string | null;
+  grupo_cliente: string | null;
   contato_principal: string | null;
   email: string | null;
   telefone: string | null;
@@ -136,6 +137,7 @@ export default function FilaCadastros() {
     const texto = [
       `Nome Fantasia: ${selected.nome_cliente ?? "—"}`,
       `Razão Social: ${selected.razao_social ?? "—"}`,
+      `Grupo de Cliente: ${selected.grupo_cliente ?? "—"}`,
       `CNPJ: ${selected.cnpj ? formatCNPJ(selected.cnpj) : "—"}`,
       `Contato: ${selected.contato_principal ?? "—"}`,
       `Email: ${selected.email ?? "—"}`,
@@ -192,6 +194,7 @@ export default function FilaCadastros() {
 
       const { error: insErr } = await (supabase.from("clientes") as any).insert({
         razao_social: cadastro.razao_social ?? cadastro.nome_cliente ?? "Sem nome",
+        grupo_cliente: cadastro.grupo_cliente ?? null,
         cnpj: cadastro.cnpj ?? null,
         email: cadastro.email ?? null,
         telefone: cadastro.telefone ?? null,
@@ -404,6 +407,7 @@ export default function FilaCadastros() {
                   <div className="space-y-1">
                     <InfoRow label="Nome fantasia" value={selected.nome_cliente} />
                     <InfoRow label="Razão social" value={selected.razao_social} />
+                    <InfoRow label="Grupo de Cliente" value={selected.grupo_cliente} />
                     <InfoRow label="CNPJ" value={selected.cnpj ? formatCNPJ(selected.cnpj) : null} />
                     <InfoRow label="Contato" value={selected.contato_principal} />
                     <InfoRow label="E-mail" value={selected.email} />

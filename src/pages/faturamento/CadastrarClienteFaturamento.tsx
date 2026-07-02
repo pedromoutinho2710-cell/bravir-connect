@@ -18,6 +18,7 @@ type Vendedor = { id: string; nome: string };
 type Form = {
   nome_fantasia: string;
   razao_social: string;
+  grupo_cliente: string;
   cnpj: string;
   email: string;
   telefone: string;
@@ -41,6 +42,7 @@ type Form = {
 const EMPTY: Form = {
   nome_fantasia: "",
   razao_social: "",
+  grupo_cliente: "",
   cnpj: "",
   email: "",
   telefone: "",
@@ -102,6 +104,10 @@ export default function CadastrarClienteFaturamento() {
       toast.error("Razão social é obrigatória.");
       return;
     }
+    if (!form.grupo_cliente.trim()) {
+      toast.error("Grupo de Cliente é obrigatório.");
+      return;
+    }
     if (!form.codigo_cliente.trim()) {
       toast.error("Código do cliente é obrigatório.");
       return;
@@ -128,6 +134,7 @@ export default function CadastrarClienteFaturamento() {
     const { error } = await (supabase.from("clientes") as any).insert({
       nome_fantasia: form.nome_fantasia.trim() || null,
       razao_social: form.razao_social.trim(),
+      grupo_cliente: form.grupo_cliente.trim() || null,
       cnpj: cnpjDigits,
       email: form.email || null,
       telefone: form.telefone || null,
@@ -221,6 +228,15 @@ export default function CadastrarClienteFaturamento() {
                     </Button>
                   )}
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>Grupo de Cliente *</Label>
+                <Input
+                  required
+                  value={form.grupo_cliente}
+                  onChange={(e) => set("grupo_cliente", e.target.value)}
+                  placeholder="Ex.: Grupo Bravir"
+                />
               </div>
             </div>
             <div className="grid gap-4 md:grid-cols-2">

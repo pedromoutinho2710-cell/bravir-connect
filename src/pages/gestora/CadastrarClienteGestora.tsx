@@ -17,6 +17,7 @@ type Vendedor = { id: string; nome: string };
 type Form = {
   nome_fantasia: string;
   razao_social: string;
+  grupo_cliente: string;
   cnpj: string;
   email: string;
   telefone: string;
@@ -40,6 +41,7 @@ type Form = {
 const EMPTY: Form = {
   nome_fantasia: "",
   razao_social: "",
+  grupo_cliente: "",
   cnpj: "",
   email: "",
   telefone: "",
@@ -101,6 +103,10 @@ export default function CadastrarClienteGestora() {
       toast.error("Razão social é obrigatória.");
       return;
     }
+    if (!form.grupo_cliente.trim()) {
+      toast.error("Grupo de Cliente é obrigatório.");
+      return;
+    }
 
     const cnpjDigits = onlyDigits(form.cnpj) || null;
 
@@ -123,6 +129,7 @@ export default function CadastrarClienteGestora() {
     const { error } = await (supabase.from("clientes") as any).insert({
       nome_fantasia: form.nome_fantasia.trim() || null,
       razao_social: form.razao_social.trim(),
+      grupo_cliente: form.grupo_cliente.trim() || null,
       cnpj: cnpjDigits,
       email: form.email || null,
       telefone: form.telefone || null,
@@ -207,6 +214,15 @@ export default function CadastrarClienteGestora() {
                   onChange={(e) => set("cnpj", formatCNPJ(e.target.value))}
                   placeholder="00.000.000/0000-00"
                   maxLength={18}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Grupo de Cliente *</Label>
+                <Input
+                  required
+                  value={form.grupo_cliente}
+                  onChange={(e) => set("grupo_cliente", e.target.value)}
+                  placeholder="Ex.: Grupo Bravir"
                 />
               </div>
             </div>
